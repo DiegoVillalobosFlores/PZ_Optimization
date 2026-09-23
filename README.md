@@ -609,7 +609,17 @@ so `upscaler=dlss` on a fresh install logs `upscaler: dlss unavailable (dlss: ..
 not found); using fsr1 at 50 %` and runs as FSR 1.0. DLSS needs two files under the game's `natives/`
 folder (next to `libLighting64.so`): the shim `libpzopt_ngx64.so`, built from `src/native/pzopt_ngx.cpp`
 against NVIDIA's DLSS SDK, and NVIDIA's DLSS library `libnvidia-ngx-dlss.so.<version>` from that SDK.
-You build both yourself, on top of any install method (Workshop, installer, zip); it takes a minute:
+
+The easy way: **Options > Optimizations > Install DLSS files**. The button checks what your machine has, downloads
+the shim from this project's `dlss-linux-*` release and NVIDIA's DLSS library straight from NVIDIA's DLSS repository
+(never re-hosted here), checks both against their pinned sha256 and puts them in `natives/`; then pick Upscaler: dlss
+and restart the game. It needs an RTX card: on Linux x86-64 the proprietary NVIDIA driver and the Vulkan loader, on
+Windows x86-64 the NVIDIA driver (the Windows shim is built with MSVC, `docs/dlss-windows-build.md`; until a
+`dlss-windows-*` release exists the button reports that no release carries it); on macOS it says there is no DLSS. The files survive the
+in-game updates; removing them by hand (`natives/libpzopt_ngx64.so`, `natives/libnvidia-ngx-dlss.so.*`,
+`natives/pzopt-dlss-installed.txt`) is safe.
+
+Or build both yourself, on top of any install method (Workshop, installer, zip); it takes a minute:
 
 1. Requirements: an RTX card on the proprietary NVIDIA driver (it ships `libnvidia-ngx.so.1`: Arch
    `nvidia-utils`, elsewhere the `nvidia-driver-<version>` packages; check with

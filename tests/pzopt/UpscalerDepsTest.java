@@ -15,13 +15,14 @@ import org.json.JSONObject;
 public class UpscalerDepsTest {
    public static void main(String[] args) throws Exception {
       Check.check(UpscalerDeps.unsupportedReason("Linux", "amd64") == null, "linux x86-64 supported");
-      Check.check(UpscalerDeps.unsupportedReason("Windows 11", "amd64") != null, "windows not (no shim build)");
+      Check.check(UpscalerDeps.unsupportedReason("Windows 11", "amd64") == null, "windows x86-64 supported (MSVC shim, docs/dlss-windows-build.md)");
       Check.check(UpscalerDeps.unsupportedReason("Mac OS X", "aarch64") != null, "macos not");
       Check.check(UpscalerDeps.unsupportedReason("Linux", "aarch64") != null, "arm64 linux not");
 
-      Check.check(UpscalerDeps.safeName("libpzopt_ngx64.so") && UpscalerDeps.safeName("libnvidia-ngx-dlss.so.310.9.1"), "the two names");
-      Check.check(!UpscalerDeps.safeName("../libpzopt_ngx64.so") && !UpscalerDeps.safeName("libLighting64.so")
-            && !UpscalerDeps.safeName("libnvidia-ngx-dlss.so.1/../x"), "anything else refused");
+      Check.check(UpscalerDeps.safeName(UpscalerDeps.LINUX, "libpzopt_ngx64.so") && UpscalerDeps.safeName(UpscalerDeps.LINUX, "libnvidia-ngx-dlss.so.310.9.1")
+            && UpscalerDeps.safeName(UpscalerDeps.WINDOWS, "pzopt_ngx64.dll") && UpscalerDeps.safeName(UpscalerDeps.WINDOWS, "nvngx_dlss.dll"), "the two names");
+      Check.check(!UpscalerDeps.safeName(UpscalerDeps.LINUX, "../libpzopt_ngx64.so") && !UpscalerDeps.safeName(UpscalerDeps.LINUX, "libLighting64.so")
+            && !UpscalerDeps.safeName(UpscalerDeps.LINUX, "libnvidia-ngx-dlss.so.1/../x") && !UpscalerDeps.safeName(UpscalerDeps.WINDOWS, "libpzopt_ngx64.so"), "anything else refused");
 
       // the newest release carrying the asset wins; drafts and other assets are ignored
       JSONArray rels = new JSONArray()
@@ -29,17 +30,18 @@ public class UpscalerDepsTest {
             .put(release("dlss-linux-old", "2026-09-20T00:00:00Z", false, UpscalerDeps.ASSET, "u1"))
             .put(release("dlss-linux-new", "2026-09-23T00:00:00Z", false, UpscalerDeps.ASSET, "u2"))
             .put(release("dlss-linux-draft", "2026-09-25T00:00:00Z", true, UpscalerDeps.ASSET, "u3"));
-      JSONObject a = UpscalerDeps.findAsset(rels);
+      JSONObject a = UpscalerDeps.findAsset(UpscalerDeps.LINUX, rels);
       Check.check(a != null && "u2".equals(a.getString("browser_download_url")) && "dlss-linux-new".equals(a.getString("pzoptTag")), "picked " + a);
-      Check.check(UpscalerDeps.findAsset(new JSONArray().put(release("win-x", "2026", false, "other.zip", "u"))) == null, "none carries it");
+      Check.check(UpscalerDeps.findAsset(UpscalerDeps.WINDOWS, rels) == null, "the windows asset is separate");
+      Check.check(UpscalerDeps.findAsset(UpscalerDeps.LINUX, new JSONArray().put(release("win-x", "2026", false, "other.zip", "u"))) == null, "none carries it");
 
       // unpack: files out of the zip checked against the list's sha256; a bad sum, a non-NVIDIA url, a missing file refuse
       Path dir = Files.createTempDirectory("pzopt-dlss-test");
       byte[] shim = "shim bytes".getBytes(StandardCharsets.UTF_8), dlss = "dlss bytes".getBytes(StandardCharsets.UTF_8);
       Path good = zip(dir, "good.zip", "libpzopt_ngx64.so " + sha(shim) + "\nlibnvidia-ngx-dlss.so.310.9.1 " + sha(dlss) + "\n", shim, dlss);
       Path out = Files.createDirectories(dir.resolve("natives"));
-      List<String> names = UpscalerDeps.unpack(good, out, p -> { });
-      Check.check(names.size() == 2 && UpscalerDeps.present(out) && Files.readAllBytes(out.resolve("libpzopt_ngx64.so")).length == shim.length,
+      List<String> names = UpscalerDeps.unpack(UpscalerDeps.LINUX, good, out, p -> { });
+      Check.check(names.size() == 2 && UpscalerDeps.present(out, UpscalerDeps.LINUX) && Files.readAllBytes(out.resolve("libpzopt_ngx64.so")).length == shim.length,
             "installed " + names);
       Check.check(fails(zip(dir, "badsum.zip", "libpzopt_ngx64.so " + sha(dlss) + "\nlibnvidia-ngx-dlss.so.310.9.1 " + sha(dlss) + "\n", shim, dlss), dir),
             "a wrong sha256 is refused");
@@ -56,7 +58,7 @@ public class UpscalerDepsTest {
 
    private static boolean fails(Path zip, Path dir) {
       try {
-         UpscalerDeps.unpack(zip, Files.createTempDirectory(dir, "n"), p -> { });
+         UpscalerDeps.unpack(UpscalerDeps.LINUX, zip, Files.createTempDirectory(dir, "n"), p -> { });
          return false;
       } catch (Exception e) {
          return true;

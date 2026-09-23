@@ -19,7 +19,7 @@ https://github.com/NVIDIA/DLSS and the Vulkan headers are installed):
 
 and `libnvidia-ngx-dlss.so.<ver>` from `$SDK/lib/Linux_x86_64/rel/` next to it under `natives/`.
 
-Windows (untested here, 2026-09-22): the source carries the Win32 handle paths
+Windows (step by step, including testing and publishing: `docs/dlss-windows-build.md`, 2026-09-24; the notes below are from 2026-09-22): the source carries the Win32 handle paths
 (`VK_KHR_external_memory_win32` / `GL_EXT_memory_object_win32`, `pzopt.Dlss` imports handles instead of fds
 and looks for `natives/pzopt_ngx64.dll`), but the SDK's `nvsdk_ngx_s.lib` is an MSVC static library that
 mingw cannot link (`__security_cookie`, `StringCch*`, MSVC-mangled internals), so the DLL needs Visual Studio:

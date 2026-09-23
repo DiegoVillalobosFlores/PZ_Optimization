@@ -258,3 +258,10 @@ against the matching `ups-off` recording of the same route (overlay panels off).
   tiles/s while the facing turns, overlay + profiler + JFR on every panel): stock 234.9 fps (p99 11.7 ms), optimized
   477.8 (6.3), optimized + DLSS quality preset E 500.6 (5.8, +4.8 % over optimized; the fog pass already took the
   per-pixel fog cost that DLSS saves most on).
+- 2026-09-24 01:00–01:30 — **Install DLSS files** button (Options > Optimizations, `pzopt.UpscalerDeps`): verified end to
+  end on the desktop with a natives-free (release-like) install: the harness opened the pause menu (`pause_menu` rig),
+  ui-drive clicked OPTIONS / Optimizations / Install DLSS files, the game downloaded the shim from `dlss-linux-6b00b37`
+  and NVIDIA's `libnvidia-ngx-dlss.so.310.9.1` from NVIDIA's repository, both sha256 matched, the button read "DLSS
+  files installed: restart the game"; the next launch logged `dlss: ready, 3413x1440 -> 3413x1440 (quality, preset e)`.
+  Windows: the button has its branch (`pzopt_ngx64.dll` from a `dlss-windows-*` release, `nvngx_dlss.dll` from NVIDIA);
+  the DLL itself is to be built with MSVC on the maintainer's Windows boot, `docs/dlss-windows-build.md`.

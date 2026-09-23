@@ -41,11 +41,19 @@ public final class UpscalerDeps {
    private UpscalerDeps() {
    }
 
-   public static final String ASSET = "pzopt-dlss-linux-x64.zip";
+   /** What one platform downloads: the release asset, the shim's file name, the prefix of NVIDIA's DLSS library. */
+   record Platform(String asset, String shim, String dlssPrefix) {
+   }
+
+   static final Platform LINUX = new Platform("pzopt-dlss-linux-x64.zip", "libpzopt_ngx64.so", "libnvidia-ngx-dlss.so.");
+   /** Windows: the shim DLL is built with MSVC (docs/dlss-windows-build.md), NVIDIA's DLL is nvngx_dlss.dll. */
+   static final Platform WINDOWS = new Platform("pzopt-dlss-windows-x64.zip", "pzopt_ngx64.dll", "nvngx_dlss");
+   static final Platform PLATFORM = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win") ? WINDOWS : LINUX;
+   public static final String ASSET = LINUX.asset();
    static final String FILE_LIST = "pzopt-dlss-files.txt";
    static final String MARKER = "pzopt-dlss-installed.txt";
-   static final String SHIM = "libpzopt_ngx64.so";
-   static final String DLSS_PREFIX = "libnvidia-ngx-dlss.so.";
+   static final String SHIM = LINUX.shim();
+   static final String DLSS_PREFIX = LINUX.dlssPrefix();
    /** The only place a listed URL may point to: NVIDIA's DLSS SDK repository (its raw files redirect to raw.githubusercontent.com). */
    static final String NVIDIA_SOURCE = "https://github.com/NVIDIA/DLSS/";
 
@@ -91,11 +99,20 @@ public final class UpscalerDeps {
             return;
          }
          List<String> system = new ArrayList<>();
-         if (!loadable("libnvidia-ngx.so.1")) {
-            system.add("the NVIDIA driver's NGX runtime (libnvidia-ngx.so.1: the proprietary NVIDIA driver on an RTX card)");
-         }
-         if (!loadable("libvulkan.so.1")) {
-            system.add("the Vulkan loader (libvulkan.so.1: package vulkan-icd-loader / libvulkan1)");
+         if (PLATFORM == WINDOWS) {
+            if (!loadable("nvapi64")) {
+               system.add("the NVIDIA driver (nvapi64.dll: an RTX card on NVIDIA's own driver)");
+            }
+            if (!loadable("vulkan-1")) {
+               system.add("the Vulkan runtime (vulkan-1.dll: comes with the NVIDIA driver)");
+            }
+         } else {
+            if (!loadable("libnvidia-ngx.so.1")) {
+               system.add("the NVIDIA driver's NGX runtime (libnvidia-ngx.so.1: the proprietary NVIDIA driver on an RTX card)");
+            }
+            if (!loadable("libvulkan.so.1")) {
+               system.add("the Vulkan loader (libvulkan.so.1: package vulkan-icd-loader / libvulkan1)");
+            }
          }
          if (!system.isEmpty()) {
             message = "DLSS needs " + String.join(" and ", system) + ", which the game cannot install";
@@ -103,7 +120,7 @@ public final class UpscalerDeps {
             return;
          }
          Path natives = Updater.gameDir().resolve("natives");
-         if (present(natives)) {
+         if (present(natives, PLATFORM)) {
             message = "the DLSS files are in " + natives;
             state = State.INSTALLED;
          } else {
@@ -118,11 +135,11 @@ public final class UpscalerDeps {
       }
    }
 
-   /** Why this platform has no DLSS build, or null (Linux x86-64). */
+   /** Why this platform has no DLSS build, or null (Linux or Windows on x86-64). */
    static String unsupportedReason(String os, String arch) {
       String o = os.toLowerCase(Locale.ROOT);
       if (o.contains("win")) {
-         return "DLSS on Windows needs a Windows build of the shim, which is not published yet (FSR 1.0 needs no files)";
+         return arch.equals("amd64") || arch.equals("x86_64") ? null : "no DLSS build for " + arch + " (x86-64 only)";
       }
       if (o.contains("mac") || o.contains("darwin")) {
          return "there is no DLSS on macOS (FSR 1.0 needs no files)";
@@ -146,12 +163,12 @@ public final class UpscalerDeps {
    }
 
    /** The shim and a DLSS library are in {@code natives} (put there by this button, a checkout build or by hand). */
-   static boolean present(Path natives) {
-      if (!Files.isRegularFile(natives.resolve(SHIM))) {
+   static boolean present(Path natives, Platform platform) {
+      if (!Files.isRegularFile(natives.resolve(platform.shim()))) {
          return false;
       }
       try (var files = Files.list(natives)) {
-         return files.anyMatch(p -> p.getFileName().toString().startsWith(DLSS_PREFIX));
+         return files.anyMatch(p -> p.getFileName().toString().startsWith(platform.dlssPrefix()));
       } catch (IOException e) {
          return false;
       }
@@ -176,13 +193,13 @@ public final class UpscalerDeps {
       Path zip = natives.resolve("pzopt-dlss.tmp.zip");
       try {
          Files.createDirectories(natives);
-         JSONObject asset = findAsset(new JSONArray(Updater.get("https://api.github.com/repos/" + Updater.REPO_SLUG + "/releases?per_page=50",
+         JSONObject asset = findAsset(PLATFORM, new JSONArray(Updater.get("https://api.github.com/repos/" + Updater.REPO_SLUG + "/releases?per_page=50",
                "application/vnd.github+json")));
          if (asset == null) {
-            throw new IOException("no release carries " + ASSET);
+            throw new IOException("no release carries " + PLATFORM.asset());
          }
          Updater.fetch(asset.optString("browser_download_url"), asset.optLong("size", -1), zip, p -> progress = p / 20);
-         List<String> names = unpack(zip, natives, p -> progress = 5 + p * 95 / 100); // NVIDIA's library is the bulk
+         List<String> names = unpack(PLATFORM, zip, natives, p -> progress = 5 + p * 95 / 100); // NVIDIA's library is the bulk
          state = State.INSTALLING;
          Files.writeString(natives.resolve(MARKER), "# written by the Optimizations tab's DLSS button (pzopt.UpscalerDeps)\n"
                + "release=" + asset.optString("pzoptTag") + "\n" + String.join("\n", names) + "\n", StandardCharsets.UTF_8);
@@ -198,7 +215,7 @@ public final class UpscalerDeps {
             Files.deleteIfExists(zip);
             try (var files = Files.list(natives)) { // a download cut short leaves its .tmp
                for (Path p : files.filter(p -> p.getFileName().toString().endsWith(".tmp")
-                     && (p.getFileName().toString().startsWith(SHIM) || p.getFileName().toString().startsWith(DLSS_PREFIX))).toList()) {
+                     && (p.getFileName().toString().startsWith(PLATFORM.shim()) || p.getFileName().toString().startsWith(PLATFORM.dlssPrefix()))).toList()) {
                   Files.deleteIfExists(p);
                }
             }
@@ -208,8 +225,8 @@ public final class UpscalerDeps {
       }
    }
 
-   /** The {@link #ASSET} of the newest (by publish date) non-draft release that has it, with the tag added as pzoptTag. */
-   static JSONObject findAsset(JSONArray releases) {
+   /** The platform's asset of the newest (by publish date) non-draft release that has it, with the tag added as pzoptTag. */
+   static JSONObject findAsset(Platform platform, JSONArray releases) {
       JSONObject best = null;
       String bestDate = "";
       for (int i = 0; i < releases.length(); i++) {
@@ -224,7 +241,7 @@ public final class UpscalerDeps {
          for (int j = 0; j < assets.length(); j++) {
             JSONObject a = assets.getJSONObject(j);
             String published = rel.optString("published_at", "");
-            if (ASSET.equals(a.optString("name")) && (best == null || published.compareTo(bestDate) > 0)) {
+            if (platform.asset().equals(a.optString("name")) && (best == null || published.compareTo(bestDate) > 0)) {
                best = new JSONObject(a.toString()).put("pzoptTag", rel.optString("tag_name", ""));
                bestDate = published;
             }
@@ -238,7 +255,7 @@ public final class UpscalerDeps {
     * listed file with a URL is downloaded from there (NVIDIA's repository only), the others come out of the zip. Only
     * plain file names of the two expected kinds are accepted.
     */
-   static List<String> unpack(Path zip, Path dir, java.util.function.IntConsumer downloadProgress) throws Exception {
+   static List<String> unpack(Platform platform, Path zip, Path dir, java.util.function.IntConsumer downloadProgress) throws Exception {
       Map<String, String> expected = new LinkedHashMap<>();
       Map<String, String> urls = new LinkedHashMap<>();
       List<String> names = new ArrayList<>();
@@ -253,7 +270,7 @@ public final class UpscalerDeps {
                if (f.length < 2 || f[0].startsWith("#")) {
                   continue;
                }
-               if (!safeName(f[0])) {
+               if (!safeName(platform, f[0])) {
                   throw new IOException("unexpected file in the list: " + f[0]);
                }
                expected.put(f[0], f[1].toLowerCase(Locale.ROOT));
@@ -265,7 +282,7 @@ public final class UpscalerDeps {
                }
             }
          }
-         if (!expected.containsKey(SHIM) || expected.keySet().stream().noneMatch(n -> n.startsWith(DLSS_PREFIX))) {
+         if (!expected.containsKey(platform.shim()) || expected.keySet().stream().noneMatch(n -> n.startsWith(platform.dlssPrefix()))) {
             throw new IOException("the list lacks the shim or the DLSS library");
          }
          for (Map.Entry<String, String> e : expected.entrySet()) {
@@ -294,7 +311,7 @@ public final class UpscalerDeps {
       return names;
    }
 
-   static boolean safeName(String name) {
-      return name.matches("[A-Za-z0-9._+-]+") && !name.contains("..") && (name.equals(SHIM) || name.startsWith(DLSS_PREFIX));
+   static boolean safeName(Platform platform, String name) {
+      return name.matches("[A-Za-z0-9._+-]+") && !name.contains("..") && (name.equals(platform.shim()) || name.startsWith(platform.dlssPrefix()));
    }
 }

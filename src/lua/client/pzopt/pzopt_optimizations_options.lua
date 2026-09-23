@@ -2053,7 +2053,7 @@ local DEPS_TITLES = {
     done = "DLSS files installed: restart the game", installed = "DLSS files installed", unsupported = "DLSS files: not available here",
 }
 local DEPS_TIP = "Downloads the two native files NVIDIA DLSS needs into the game's natives folder (the pzopt shim and NVIDIA's "
-    .. "DLSS library; releases do not carry them) and checks each one's checksum. Linux with an NVIDIA RTX card only; "
+    .. "DLSS library; releases do not carry them) and checks each one's checksum. Linux or Windows with an NVIDIA RTX card; "
     .. "FSR 1.0 needs no files. Then pick Upscaler: dlss above and restart the game."
 
 local function addUpscalerDepsButton(self, splitpoint, y)

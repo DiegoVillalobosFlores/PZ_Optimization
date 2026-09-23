@@ -114,6 +114,8 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -n "$label" ]] || die "--label is required"
 [[ -f "$ZOMBOID/options.ini" ]] || die "$ZOMBOID/options.ini not found (start the game once so ~/Zomboid exists)"
+# a backup left by a run that never got to restore is the player's file: refuse rather than overwrite it
+[[ -f "$ZOMBOID/options.ini.pzopt-orig" ]] && die "stale $ZOMBOID/options.ini.pzopt-orig from an unrestored run: restore it by hand first"
 [[ -d "$TEMPLATE" ]] || die "bench save template missing: $TEMPLATE (unpack harness/bench-save/pzopt-bench-template.tar.zst into $ZOMBOID/Saves/Sandbox/)"
 JAVA=$(java_bin)
 
@@ -152,6 +154,8 @@ mods_edit "$ZOMBOID/Saves/$BENCH_SAVE/mods.txt" enable "$MOD_ID"
 [[ -f "$ZOMBOID/latestSave.ini" ]] && cp "$ZOMBOID/latestSave.ini" "$ZOMBOID/latestSave.ini.pzopt-orig"
 [[ -f "$PZ_DIR/pzopt.properties" ]] && cp "$PZ_DIR/pzopt.properties" "$PZ_DIR/pzopt.properties.pzopt-orig"
 cp "$ZOMBOID/options.ini" "$ZOMBOID/options.ini.pzopt-orig"
+# the game writes no newline after the last option: an --option append would glue the key onto that line
+[[ -z "$(tail -c1 "$ZOMBOID/options.ini")" ]] || echo >> "$ZOMBOID/options.ini"
 game_pid=""; sampler_pid=""
 restore() {
   [[ -n "$sampler_pid" ]] && { kill "$sampler_pid" 2>/dev/null || true; }

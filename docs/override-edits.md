@@ -999,6 +999,13 @@ draw-command replay, which is the frame's GPU work (the swap is outside it). Aft
 `pzopt.Overlay.onSwap()` records the presented-frame time, the same instant MangoHud
 logs from. With the build guard off every hook is a static boolean test.
 
+Harness virtual pad (2026-09-24): in `renderLoop` the stock `GameWindow.GameInput.poll()` is
+`pzopt.VirtualPad.poll()`, which is that same call unless the harness flag file names a pad script (`--flag
+pad=<script>`). Then a fake lwjglx `Controller` (no GLFW device) sits in `Controllers` slot 15 and its buttons / hat
+are written into the polling `GamepadState` under the `ControllerStateCache` lock right after the stock poll, so the
+game's own input path (`Input`, `JoypadManager`, the Lua `JoypadControllerData`, the menus) runs as for a real pad.
+Menu profiling on machines without uinput (the Mac); players never set the flag.
+
 ## org.lwjglx.opengl.Display (second edit, 2026-09-20, performance overlay)
 
 First statement of `imguiEndFrame()`: `pzopt.Overlay.draw();`. `Core.EndFrameUI` calls
@@ -3015,3 +3022,15 @@ pause targets 25 / 50 ms measured inside the noise on all four machines, so the 
 install.ps1) undo it by the marker. Harness runs keep choosing their own collector (`run.sh --gc`). The macOS app keeps
 its collector in the signed bundle's Info.plist and is not changed. Checks: tests/pzopt/GcChoiceTest.java,
 harness/gcchoice-check.sh (a real launch switches a ZGC JSON, reset_gc restores it).
+
+### Optimizations tab: off-screen rows draw nothing (Lua, 2026-09-24)
+
+The UI draws every child of a scrolled panel each frame and lets the stencil drop what is outside it, so the
+Optimizations page (~100 rows, ~340 controls: 95 tick boxes, 67 combo boxes, 174 labels a frame) cost ~8 ms a frame
+on an M1 Pro against ~0.3 ms for the Display tab, and the D-pad took 17-24 ms to answer there (controller menu
+profile, Mac runs `mac-pad-luaprof` / `mac-pad-cull`). `pzopt_optimizations_options.lua` now culls in the page's
+prerender: a control more than 50 px outside the scrolled band gets no-op `prerender` / `render` (its own instance
+functions are kept and put back when it scrolls in), recomputed only when the scroll band or the layout (search, fold,
+sort) changed. The controls stay visible: `ISPanelJoypad` walks visible children only, so hiding them would take the
+rows out of the controller navigation and `ensureVisible` could no longer scroll to them. Page frame 11.4 -> 4.1 ms,
+D-pad response 18.5 -> 6.5 ms (p50); the D-pad visits the same rows in the same order before and after.

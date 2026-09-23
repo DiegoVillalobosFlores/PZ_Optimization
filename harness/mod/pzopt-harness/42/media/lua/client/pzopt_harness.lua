@@ -57,7 +57,8 @@ local function onMainMenuEnter()
         getCore():quit()
         return
     end
-    if flags.consumed then return end -- Continue already triggered by this process (Lua was reset)
+    if flags.consumed and not flags.pad then return end -- Continue already triggered by this process (Lua was reset)
+    if flags.pad and pad == false then return end -- pad script done, quitting
     print("[pzopt-harness] mode=" .. tostring(flags.mode) .. " quit_after=" .. tostring(flags.quit_after))
     if flags.menu_check and flags.menu_check ~= "" and MainScreen.instance then
         -- menu_check=1 (2026-09-23): show and hide the main menu's server settings, sandbox, character creation,
@@ -82,9 +83,63 @@ local function onMainMenuEnter()
     pending = flags
 end
 
+
+-- pad=1 (run.sh --pad, 2026-09-23): menu profiling with a virtual pad. The harness stays on the main menu,
+-- writes Lua/pzopt-pad-ready.txt once the menu accepts input (run.sh then feeds the pad script), logs every pad
+-- handler call ("[pzopt-pad] <handler> t=<epoch ms> ms=<handler ms> <focus before> -> <focus after>"), every menu
+-- frame (OnFETick gap) of 25 ms or more, and quits once run.sh appends pad_done=1 to the flag file.
+local pad = nil
+local function padFocus(jd)
+    local f = jd and jd.focus
+    if not f then return "none" end
+    local s = tostring(f.Type or "?")
+    if f.joypadIndexY then s = s .. ":" .. tostring(f.joypadIndexY) end
+    if f.joypadIndex then s = s .. "," .. tostring(f.joypadIndex) end
+    return s
+end
+local function padWrap(name)
+    local orig = JoypadControllerData[name]
+    if type(orig) ~= "function" then return end
+    JoypadControllerData[name] = function(self, a, b)
+        local before = padFocus(self.joypad)
+        local t0 = getTimestampMs()
+        orig(self, a, b)
+        local t1 = getTimestampMs()
+        print("[pzopt-pad] " .. name .. (a ~= nil and ("(" .. tostring(a) .. ")") or "") .. " id=" .. tostring(self.id)
+            .. " t=" .. tostring(t0) .. " ms=" .. tostring(t1 - t0) .. " " .. before .. " -> " .. padFocus(self.joypad))
+    end
+end
+local function startPad()
+    for _, n in ipairs({ "onPressUp", "onPressDown", "onPressLeft", "onPressRight", "onPressButton", "onReleaseButton",
+                         "onPressButtonNoFocus" }) do
+        padWrap(n)
+    end
+    pad = { last = getTimestampMs(), n = 0, check = 0 }
+    local w = getFileWriter("pzopt-pad-ready.txt", true, false)
+    if w then w:write("ready_epoch_ms=" .. tostring(pad.last) .. "\n"); w:close() end
+    print("[pzopt-pad] menu ready t=" .. tostring(pad.last))
+end
+local function padTick()
+    local now = getTimestampMs()
+    local gap = now - pad.last
+    pad.last = now
+    pad.n = pad.n + 1
+    if gap >= 25 then print("[pzopt-pad] slow frame t=" .. tostring(now) .. " gap=" .. tostring(gap)) end
+    if now >= pad.check then
+        pad.check = now + 500
+        local flags = readFlags()
+        if flags and flags.pad_done then
+            print("[pzopt-pad] script done, " .. pad.n .. " menu frames; quitting to desktop")
+            pad = false
+            getCore():quit()
+        end
+    end
+end
+
 -- OnFETick is the only per-frame event the main menu fires (OnTickEvenPaused is in-world only,
 -- which is why earlier versions of this file never pressed Continue by themselves)
 local function onFETick()
+    if pad then padTick() end
     if pending then
         local ms = MainScreen.instance
         -- MainScreen ignores menu actions while its own start-up delay runs; wait for that, nothing more
@@ -96,6 +151,10 @@ local function onFETick()
         if flags.quit_after then
             local secs = tonumber(flags.quit_after)
             if secs then quitAtMs = getTimestampMs() + secs * 1000 end
+        end
+        if flags.pad then
+            startPad()
+            return
         end
         if getPlayer() or ms.inGame then
             print("[pzopt-harness] a world is already loading; not continuing")
@@ -284,6 +343,70 @@ local function installLuaWrap()
     end
 end
 Events.OnGameBoot.Add(installLuaWrap)
+
+-- lua_prof=<table>[,<table>] (2026-09-23, menu profiling): the per-frame methods (prerender, render, update, draw*,
+-- onJoypad*, pick, select, layout*) of those global tables timed and summed; every 2 s one console line per busy
+-- method: "[pzopt-luaprof] t=<epoch ms> frames=<n> <Table.method> <ms per frame> <calls per frame>". Millisecond
+-- stamps, but summed over thousands of calls the rounding averages out. Inclusive: a method that calls another
+-- wrapped one counts both. Instance-level functions (o.prerender = ...) are not seen.
+local luaProf = nil
+local PROF_NAMES = { prerender = true, render = true, update = true, pick = true, select = true }
+local function profName(fname)
+    return PROF_NAMES[fname] or fname:match("^draw") or fname:match("^onJoypad") or fname:match("^layout")
+        or fname:match("^relayout")
+end
+local function installLuaProf()
+    local flags = readFlags()
+    if not flags or not flags.lua_prof or flags.lua_prof == "" then return end
+    luaProf = { acc = {}, frames = 0, next = getTimestampMs() + 2000 }
+    local n = 0
+    for name in string.gmatch(flags.lua_prof, "[^,]+") do
+        local t = _G[name]
+        if type(t) == "table" then
+            local fns = {}
+            for fname, fn in pairs(t) do
+                if type(fn) == "function" and type(fname) == "string" and profName(fname) then fns[fname] = fn end
+            end
+            for fname, fn in pairs(fns) do
+                local key = name .. "." .. fname
+                local a = { 0, 0 }
+                luaProf.acc[key] = a
+                t[fname] = function(...)
+                    local t0 = getTimestampMs()
+                    local r1, r2, r3 = fn(...)
+                    a[1] = a[1] + (getTimestampMs() - t0)
+                    a[2] = a[2] + 1
+                    return r1, r2, r3
+                end
+                n = n + 1
+            end
+        else
+            print("[pzopt-luaprof] no global table " .. name)
+        end
+    end
+    print("[pzopt-luaprof] " .. n .. " methods wrapped")
+end
+local function luaProfTick()
+    if not luaProf then return end
+    luaProf.frames = luaProf.frames + 1
+    local now = getTimestampMs()
+    if now < luaProf.next then return end
+    luaProf.next = now + 2000
+    local f = luaProf.frames
+    luaProf.frames = 0
+    local rows = {}
+    for k, a in pairs(luaProf.acc) do
+        if a[1] > 0 or a[2] > 0 then table.insert(rows, { k, a[1], a[2] }) end
+        a[1] = 0; a[2] = 0
+    end
+    table.sort(rows, function(x, y) return x[2] > y[2] end)
+    for i = 1, math.min(#rows, 25) do
+        local r = rows[i]
+        print(string.format("[pzopt-luaprof] t=%d frames=%d %s %.3f %.1f", now, f, r[1], r[2] / math.max(f, 1), r[3] / math.max(f, 1)))
+    end
+end
+Events.OnGameBoot.Add(installLuaProf)
+Events.OnFETick.Add(luaProfTick)
 
 Events.OnMainMenuEnter.Add(onMainMenuEnter)
 Events.OnFETick.Add(onFETick)

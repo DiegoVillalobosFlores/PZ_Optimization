@@ -89,7 +89,7 @@ NATIVE_FLAG_FILE="${NATIVE_ZOMBOID:-$HOME/Zomboid}/Lua/pzopt-harness.txt"
 shot_at=""; label=""; quit_after=""; mode="verify"; source_save=""; extra_flags=(); props=(); mangohud_secs=""; mangohud_config=""
 record=0; jfr=0; jfr_period=""; jfr_settings=(); game_profiler=0; gc=""; no_dashboard=0; refresh_template=0; retries=2; renderer="nvidia"; game_env=(); lead=""; route_seconds=""; launcher="auto"; game_options=(); extra_mods=(); vmargs=()
 schedmon=""; asprof=""
-preset=""; mode_set=0
+preset=""; mode_set=0; pad_script=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --label) label="$2"; shift 2 ;;
@@ -120,6 +120,7 @@ while [[ $# -gt 0 ]]; do
     --vmarg) vmargs+=("$2"); shift 2 ;;
     --schedmon) schedmon="$2"; shift 2 ;;                # per-thread run / run-queue wait / page faults + PSI every N s -> <run>/schedmon.txt (harness/schedmon.py)
     --asprof) asprof="$2"; shift 2 ;;                    # async-profiler agent (harness/asprof/libasyncProfiler.so) with these options, e.g. event=cpu,interval=5ms,threads -> <run>/asprof.jfr
+    --pad) pad_script="$2"; shift 2 ;;               # drive the menus with a virtual pad (see below)
     --record) record=1; shift ;;
     --launcher) launcher="$2"; shift 2 ;;                # auto|steam|direct (see the header)
     --option) game_options+=("$2"); shift 2 ;;           # key=value written into ~/Zomboid/options.ini for the run (restored on exit)                     # screen recording of the run (gpu-screen-recorder, first monitor, native res, AV1 HDR) -> <run>/recording.mp4
@@ -144,6 +145,27 @@ if [[ -n "$preset" ]]; then
 fi
 if [[ -z "$route_seconds" ]]; then
   if [[ "$mode" == drive ]]; then route_seconds=90; else route_seconds=100; fi
+fi
+# --pad <script>: menu profiling with a virtual Xbox 360 pad (harness/pad.py, uinput; needs python-evdev and write
+# access to /dev/uinput). The pad exists before the launch and is the run's only active controller (options.ini
+# controller=<its GUID>, restored on exit); mode menu: the harness Lua never continues a save, it writes
+# Lua/pzopt-pad-ready.txt once the main menu accepts input, logs every pad handler it sees ("[pzopt-pad]" console
+# lines: epoch ms, handler ms, the focused element) and every slow menu frame, and quits when the script is done.
+# The script's lines go to pad.py 2 s after the menu is ready (commands: a b x y start back lb rb up down left right,
+# hold <button> <s>, sleep <s>, mark <name>; see harness/pad/*.txt); <run>/pad.log has every press with its epoch
+# ms. The frame log comes from the overlay (pzopt-overlay.out, add --prop overlaySampling=true --prop overlayLog=true);
+# harness/padlat.py <run> lines them up.
+PAD_GUID=030000005e0400008e02000010010000
+if [[ -n "$pad_script" ]]; then
+  [[ -f "$pad_script" ]] || pad_script="$REPO/$pad_script"
+  [[ -f "$pad_script" ]] || { echo "pad script not found: $pad_script" >&2; exit 2; }
+  pad_script="$(cd "$(dirname "$pad_script")" && pwd)/$(basename "$pad_script")"
+  python3 -c 'import evdev' 2>/dev/null || { echo "--pad needs python-evdev" >&2; exit 1; }
+  [[ -w /dev/uinput ]] || { echo "--pad needs write access to /dev/uinput" >&2; exit 1; }
+  [[ $mode_set -eq 1 ]] || mode=menu
+  extra_flags+=("pad=1")
+  game_options+=("controller=$PAD_GUID")
+  no_mangohud=1
 fi
 [[ -n "$label" ]] || { echo "usage: $0 --label <name> [--quit-after secs] [--mode m] [--source-save Mode/Name] [--flag k=v]..." >&2; exit 2; }
 [[ -d "$ZOMBOID" ]] || { echo "Zomboid user dir not found: $ZOMBOID" >&2; exit 1; }
@@ -281,6 +303,14 @@ restore_mangohud() {
 restore_launcher() { [[ -f "$PZ_DIR/ProjectZomboid64.json.pzopt-orig" ]] && mv -f "$PZ_DIR/ProjectZomboid64.json.pzopt-orig" "$PZ_DIR/ProjectZomboid64.json"; return 0; }
 restore_game_profiler() { [[ -f "$ZOMBOID/debug-options.ini.pzopt-orig" ]] && mv -f "$ZOMBOID/debug-options.ini.pzopt-orig" "$ZOMBOID/debug-options.ini"; return 0; }
 restore_game_options() { [[ -f "$ZOMBOID/options.ini.pzopt-orig" ]] && mv -f "$ZOMBOID/options.ini.pzopt-orig" "$ZOMBOID/options.ini"; return 0; }
+restore_pad() {
+  [[ -n "${pad_feed_pid:-}" ]] && kill "$pad_feed_pid" 2>/dev/null
+  [[ -n "${pad_pid:-}" ]] && kill "$pad_pid" 2>/dev/null
+  [[ -n "${PAD_FIFO:-}" ]] && rm -f "$PAD_FIFO"
+  [[ -n "$pad_script" && "${pad_joypad_cfg_existed:-1}" == 0 ]] && rm -f "$ZOMBOID/joypads/$PAD_GUID.config"
+  rm -f "$ZOMBOID/Lua/pzopt-pad-ready.txt"
+  return 0
+}
 restore() {
   # runs under set -e from the EXIT trap: every step must succeed or be guarded, or the rest is skipped.
   # Defined (with every helper it calls) before the trap is armed, so an early exit restores everything.
@@ -295,7 +325,13 @@ restore() {
   if [[ -f "$PZ_DIR/pzopt.properties.pzopt-orig" ]]; then mv -f "$PZ_DIR/pzopt.properties.pzopt-orig" "$PZ_DIR/pzopt.properties"; else rm -f "$PZ_DIR/pzopt.properties"; fi
   restore_game_profiler
   restore_game_options
+  restore_pad
 }
+# a backup left by a run that never got to restore (machine dropped mid-run): the backup is the player's file and this
+# run would overwrite it with the modified one; refuse until someone has looked
+if [[ -f "$ZOMBOID/options.ini.pzopt-orig" ]]; then
+  echo "stale $ZOMBOID/options.ini.pzopt-orig from an unrestored run: restore it by hand first" >&2; exit 1
+fi
 trap 'restore' EXIT
 printf '%s\r\n%s\r\n' "$(basename "$BENCH_SAVE")" "$(dirname "$BENCH_SAVE")" > "$ZOMBOID/latestSave.ini"
 write_flags() {
@@ -322,6 +358,8 @@ cp "$PZ_DIR/pzopt.properties" "$RUNS/.last-props" 2>/dev/null || true
 if (( ${#game_options[@]} )); then
   [[ -f "$ZOMBOID/options.ini" ]] || { echo "options.ini not found in $ZOMBOID" >&2; exit 1; }
   cp "$ZOMBOID/options.ini" "$ZOMBOID/options.ini.pzopt-orig"
+  # the game writes no newline after the last option: an append would glue the key onto that line
+  [[ -z "$(tail -c1 "$ZOMBOID/options.ini")" ]] || echo >> "$ZOMBOID/options.ini"
   for kv in "${game_options[@]}"; do
     k="${kv%%=*}"; v="${kv#*=}"
     if grep -q "^$k=" "$ZOMBOID/options.ini"; then sed -i "s|^$k=.*|$k=$v|" "$ZOMBOID/options.ini"; else printf '%s=%s\n' "$k" "$v" >> "$ZOMBOID/options.ini"; fi
@@ -425,8 +463,21 @@ out="$RUNS/$label-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$out"
 attempt=0
 crashed=0
+pad_pid=""; pad_feed_pid=""
+if [[ -n "$pad_script" ]]; then
+  # the pad first, so GLFW's start-up scan sees it
+  [[ -f "$ZOMBOID/joypads/$PAD_GUID.config" ]] && pad_joypad_cfg_existed=1 || pad_joypad_cfg_existed=0
+  PAD_FIFO="$out/.pad.fifo"; rm -f "$PAD_FIFO"; mkfifo "$PAD_FIFO"
+  python3 "$REPO/harness/pad.py" serve "$PAD_FIFO" > "$out/pad.log" 2>&1 &
+  pad_pid=$!
+  for _ in $(seq 1 20); do grep -q "pad ready" "$out/pad.log" && break; sleep 0.2; done
+  grep -q "pad ready" "$out/pad.log" || { echo "pad failed: $(cat "$out/pad.log")" >&2; exit 1; }
+  cp "$pad_script" "$out/pad-script.txt"
+  echo "virtual pad up ($(sed -n 's/^pad ready: //p' "$out/pad.log")), script $pad_script"
+fi
 while :; do
   attempt=$((attempt+1))
+  rm -f "$ZOMBOID/Lua/pzopt-pad-ready.txt"
   rm -f "$ZOMBOID"/pzopt-*.out "$ZOMBOID/console.txt" "$ZOMBOID/pzopt-shot.now" "$ZOMBOID/pzopt-shot2.now" "$ZOMBOID/Screenshots/pzopt-shot.png" "$ZOMBOID/Screenshots/pzopt-shot2.png"
   restore_harness_flag; write_flags; write_launch_env
   launch_epoch=$(date +%s)
@@ -516,6 +567,18 @@ while :; do
       fi ) &
     shot_pid=$!
   fi
+  if [[ -n "$pad_script" ]]; then
+    ( ready="$ZOMBOID/Lua/pzopt-pad-ready.txt"; slog="$out/schedule.log"
+      for _ in $(seq 1 900); do [[ -f "$ready" ]] && break; kill -0 "$game_pid" 2>/dev/null || exit 0; sleep 0.2; done
+      [[ -f "$ready" ]] || { echo "pad: the main menu never became ready" | tee -a "$slog" >&2; exit 0; }
+      echo "pad: menu ready at +$(( $(date +%s) - launch_epoch )) s; script starts in 2 s" | tee -a "$slog"
+      sleep 2
+      grep -v '^[[:space:]]*$' "$pad_script" > "$PAD_FIFO"
+      for _ in $(seq 1 6000); do grep -q '^done' "$out/pad.log" && break; kill -0 "$game_pid" 2>/dev/null || exit 0; sleep 0.2; done
+      echo "pad_done=1" >> "$FLAG_FILE"
+      echo "pad: script done at +$(( $(date +%s) - launch_epoch )) s, the harness quits the game" | tee -a "$slog" ) &
+    pad_feed_pid=$!
+  fi
   sched_pid=""
   if [[ -n "$mangohud_secs" ]]; then
     ( sched="$ZOMBOID/pzopt-schedule.out"; start_ms=""; slog="$out/schedule.log"
@@ -603,6 +666,7 @@ PYC
   kill "$watchdog_pid" 2>/dev/null || true; wait "$watchdog_pid" 2>/dev/null || true
   [[ -n "$sched_pid" ]] && { kill "$sched_pid" 2>/dev/null || true; wait "$sched_pid" 2>/dev/null || true; }
   [[ -n "$shot_pid" ]] && { kill "$shot_pid" 2>/dev/null || true; wait "$shot_pid" 2>/dev/null || true; }
+  [[ -n "$pad_feed_pid" ]] && { kill "$pad_feed_pid" 2>/dev/null || true; wait "$pad_feed_pid" 2>/dev/null || true; pad_feed_pid=""; }
   kill "$sysmon_pid" 2>/dev/null; wait "$sysmon_pid" 2>/dev/null || true
   [[ -n "$schedmon_pid" ]] && { kill "$schedmon_pid" 2>/dev/null || true; wait "$schedmon_pid" 2>/dev/null || true; }
   if [[ -n "$rec_pid" ]]; then kill -INT "$rec_pid" 2>/dev/null; wait "$rec_pid" 2>/dev/null || true; echo "recording: $out/recording.mp4 ($(du -h "$out/recording.mp4" 2>/dev/null | cut -f1))"; fi

@@ -1316,6 +1316,48 @@ local function hideRow(row)
     row.hidden = true
 end
 
+-- Off-screen rows draw nothing. The UI renders every child of a scrolled panel each frame and lets the stencil drop
+-- what is outside, so this page (~100 rows, ~340 controls) cost ~8 ms a frame on an M1 Pro against ~0.5 ms for the
+-- ~25 rows on screen (controller menu profile, 2026-09-23). A control more than CULL_MARGIN px outside the scrolled
+-- band gets no-op prerender / render instead of hiding it: hidden controls would drop out of the controller rows
+-- (ISPanelJoypad walks visible children only) and ensureVisible could no longer scroll to them. Recomputed only when
+-- the scroll band or the layout (search, fold, sort) changed; the instance's own prerender / render come back as
+-- they were.
+local CULL_MARGIN = 50
+local NOOP = function() end
+
+local function cullElement(el, off)
+    if off == (el.pzoptCulled == true) then return end
+    if off then
+        el.pzoptCulled = true
+        el.pzoptOwnPrerender, el.pzoptOwnRender = rawget(el, "prerender"), rawget(el, "render")
+        el.prerender, el.render = NOOP, NOOP
+    else
+        el.pzoptCulled = nil
+        el.prerender, el.render = el.pzoptOwnPrerender, el.pzoptOwnRender
+        el.pzoptOwnPrerender, el.pzoptOwnRender = nil, nil
+    end
+end
+
+local function cullRow(row, top, bottom)
+    for _, e in ipairs(row.elems) do
+        local el = e.el
+        local y = el:getY()
+        cullElement(el, y + el:getHeight() < top - CULL_MARGIN or y > bottom + CULL_MARGIN)
+    end
+end
+
+local function cullRows(S)
+    local panel = S.panel
+    local top = -panel:getYScroll()
+    local bottom = top + panel:getHeight()
+    if S.cullTop == top and S.cullBottom == bottom and S.cullGen == S.layoutGen then return end
+    S.cullTop, S.cullBottom, S.cullGen = top, bottom, S.layoutGen
+    for _, row in ipairs(S.managed) do cullRow(row, top, bottom) end
+    for _, sec in ipairs(S.allSections) do cullRow(sec.header, top, bottom) end
+    cullRow(S.footer, top, bottom)
+end
+
 local function relayout(S)
     local panel = S.panel
     local y = S.top
@@ -1373,6 +1415,7 @@ local function relayout(S)
         panel.joypadIndexY = #panel.joypadButtonsY
         panel.joypadIndex = 1
     end
+    S.layoutGen = (S.layoutGen or 0) + 1 -- cullRows looks again
 end
 
 local function runSearch(S, text)
@@ -2137,6 +2180,12 @@ function MainOptions:pzoptBuildOptimizationsPanel()
     S.index = buildIndex(managed, sectionOf)
     S.lastText, S.typed, S.typedAt = "", "", 0
     runSearch(S, "")
+    -- the page's prerender runs before its children draw: cull the rows for this frame's scroll first
+    local pagePrerender = panel.prerender
+    panel.prerender = function(o, ...)
+        cullRows(S)
+        return pagePrerender(o, ...)
+    end
     -- The preview panel: a child of the page that does not scroll with it, full page height, the master
     -- switch shown until the mouse points at another row.
     local preview = PzoptPreview:new(L.previewX, L.margin, L.previewW, panel:getHeight() - 2 * L.margin, panel, rows)

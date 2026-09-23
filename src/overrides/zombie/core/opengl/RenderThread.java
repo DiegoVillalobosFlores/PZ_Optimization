@@ -144,7 +144,7 @@ public class RenderThread {
             if (!renderingEnabled) {
                isCloseRequested = false;
             } else {
-               GameWindow.GameInput.poll();
+               pzopt.VirtualPad.poll(); // pzopt: harness virtual pad (--flag pad=<script>); GameWindow.GameInput.poll() otherwise
                Mouse.poll();
                GameKeyboard.poll();
                isCloseRequested = isCloseRequested || Display.isCloseRequested();

@@ -1,0 +1,177 @@
+# Menu tour for run.sh --pad (menu profiling): main menu steps, Options > Display, Optimizations tab (preview), other tabs.
+# Never left/right or A on a settings page (they change values); B leaves the options screen.
+mark activate
+a
+sleep 1.5
+mark main-steps
+down
+sleep 0.5
+down
+sleep 0.5
+down
+sleep 0.5
+down
+sleep 0.5
+down
+sleep 0.5
+down
+sleep 0.5
+up
+sleep 0.5
+up
+sleep 0.5
+up
+sleep 0.5
+up
+sleep 0.5
+up
+sleep 0.5
+up
+sleep 0.5
+mark main-to-options
+down
+sleep 0.5
+down
+sleep 0.5
+down
+sleep 0.5
+mark options-open
+a
+sleep 3
+mark display-steps
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+up
+sleep 0.4
+up
+sleep 0.4
+up
+sleep 0.4
+up
+sleep 0.4
+up
+sleep 0.4
+up
+sleep 0.4
+up
+sleep 0.4
+up
+sleep 0.4
+up
+sleep 0.4
+up
+sleep 0.4
+mark display-hold
+hold down 3
+sleep 0.8
+hold up 3
+sleep 1
+mark tab-optimizations
+rb
+sleep 3
+mark opt-steps
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+down
+sleep 0.4
+mark opt-hold
+hold down 4
+sleep 1
+hold up 4
+sleep 1
+mark tabs-right
+rb
+sleep 1.2
+rb
+sleep 1.2
+rb
+sleep 1.2
+rb
+sleep 1.2
+mark tabs-left
+lb
+sleep 1.2
+lb
+sleep 1.2
+lb
+sleep 1.2
+lb
+sleep 1.2
+lb
+sleep 1.2
+mark options-close
+b
+sleep 2.5
+mark main-steps-after
+down
+sleep 0.5
+down
+sleep 0.5
+down
+sleep 0.5
+down
+sleep 0.5
+up
+sleep 0.5
+up
+sleep 0.5
+up
+sleep 0.5
+up
+sleep 0.5
+sleep 1
+done

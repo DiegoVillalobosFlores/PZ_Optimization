@@ -3,8 +3,10 @@
 
   harness/pad.py serve <fifo>   # creates the pad, runs the commands written to the fifo until "quit"
 
-Commands, one per line: a b x y start back up down left right (a press: down, 0.12 s, up; the game samples
-the pad once per frame), "sleep <s>", "quit". The device is the xpad layout (vendor 045e product 028e,
+Commands, one per line: a b x y start back lb rb up down left right (a press: down, 0.12 s, up; the game samples
+the pad once per frame), "hold <button> <s>", "sleep <s>", "mark <name>", "done", "quit". Every press, hold, mark and
+"done" is printed with its epoch ms ("press down t=<ms> up=<ms>") so harness/padlat.py can line the presses up with
+the game's own log (run.sh --pad). The device is the xpad layout (vendor 045e product 028e,
 buttons BTN_A..BTN_THUMBR, sticks/triggers on ABS_X..ABS_RZ, D-pad on HAT0), so GLFW's GUID is
 030000005e0400008e02000010010000 and media/gamecontrollerdb.txt maps it (dpad = h0.x, a = b0, b = b1).
 """
@@ -31,22 +33,31 @@ def make_pad():
     return UInput(cap, name="Microsoft X-Box 360 pad", vendor=0x045E, product=0x028E, version=0x0110, bustype=e.BUS_USB)
 
 
+def now_ms():
+    return int(time.time() * 1000)
+
+
 def press(ui, name, hold=0.12):
+    """Presses name for hold seconds; returns the epoch ms of the down and the up event (None for an unknown name)."""
     if name in BUTTONS:
         ui.write(e.EV_KEY, BUTTONS[name], 1)
         ui.syn()
+        t0 = now_ms()
         time.sleep(hold)
         ui.write(e.EV_KEY, BUTTONS[name], 0)
         ui.syn()
+        return t0, now_ms()
     elif name in HATS:
         axis, value = HATS[name]
         ui.write(e.EV_ABS, axis, value)
         ui.syn()
+        t0 = now_ms()
         time.sleep(hold)
         ui.write(e.EV_ABS, axis, 0)
         ui.syn()
-    else:
-        print("unknown command:", name, flush=True)
+        return t0, now_ms()
+    print("unknown command:", name, flush=True)
+    return None
 
 
 def serve(fifo):
@@ -62,15 +73,22 @@ def serve(fifo):
                     if parts[0] == "quit":
                         print("pad quit", flush=True)
                         return
+                    if parts[0].startswith("#"):
+                        continue
                     if parts[0] == "sleep":
                         time.sleep(float(parts[1]))
                         continue
-                    if parts[0] == "hold":              # hold <button> <seconds>
-                        print("hold", parts[1], parts[2], flush=True)
-                        press(ui, parts[1], float(parts[2]))
+                    if parts[0] in ("mark", "done"):
+                        print(parts[0], " ".join(parts[1:]), "t=%d" % now_ms(), flush=True)
                         continue
-                    print("press", parts[0], flush=True)
-                    press(ui, parts[0])
+                    if parts[0] == "hold":              # hold <button> <seconds>
+                        t = press(ui, parts[1], float(parts[2]))
+                        if t:
+                            print("hold", parts[1], "t=%d up=%d" % t, flush=True)
+                        continue
+                    t = press(ui, parts[0])
+                    if t:
+                        print("press", parts[0], "t=%d up=%d" % t, flush=True)
     finally:
         ui.close()
 

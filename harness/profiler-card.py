@@ -34,7 +34,7 @@ LINES = [
     (BODY, INK2, "The F9 overlay now says what the game thread is doing, not only how busy it is: a tree of phases and"),
     (BODY, INK2, "sub-phases (chunk bakes, zombies, UI draw, the wait for the render thread...) with the hottest methods, a flame"),
     (BODY, INK2, "graph of the last 5 seconds, and a frame-time graph with axes. The verdict line names the two biggest items."),
-    (NOTE, MUTED, "Every element is a dropdown under Options > Optimizations (off, or its own options); the profile is also logged per"),
+    (NOTE, MUTED, "Every element is a dropdown under Options > Profiler (off, or its own options); the profile is also logged per"),
     (NOTE, MUTED, "run for the analysis scripts. Uncapped Rosewood spin at 5120x2160 on an RTX 4090; the whole panel at the Large font."),
 ]
 TOP = 170

@@ -682,8 +682,9 @@ screen-pixel work, so the gain is the world pass's share. Plan and seam: `docs/p
 
 ### Performance overlay (F9)
 
-Tick **"Sample frame times and utilization"** in the Performance overlay group of the tab,
-restart, then press **F9** (key binding "Toggle performance overlay", after "Display FPS").
+Tick **"Sample frame times and utilization"** in **Options > Profiler** (a tab of its own right
+after Optimizations, with the same preview panel and search; **Reset to defaults** puts its
+settings back), restart, then press **F9** (key binding "Toggle performance overlay", after "Display FPS").
 Sampling is off by default (F9 then only shows a notice pointing at the tick box): it is the
 build's own profiler, drawn by the game itself, so it reads the same on Windows and Linux,
 in the menus, on the loading screen and in the world, with no MangoHud or RivaTuner.
@@ -694,7 +695,7 @@ in the menus, on the loading screen and in the world, with no MangoHud or RivaTu
   5 s; 1 %-low fps, frame-to-frame jitter and the number of spikes above twice the median.
   The fps number is coloured against the cap (blue at the cap, green within 10 %, yellow
   within 50 %, red below; uncapped: blue above 300, green 150–300, yellow 100–150, red under
-  100); the "fps colour" group in the tab changes the thresholds and colours or turns it off.
+  100); the "fps colour" group in the Profiler tab changes the thresholds and colours or turns it off.
 - **Utilization**: GPU busy share (a GL timer query around the frame's draw commands),
   game-thread and render-thread load as a share of one core, the process's and the machine's
   share of all cores, the heap.

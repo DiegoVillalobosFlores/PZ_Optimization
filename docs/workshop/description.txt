@@ -52,7 +52,7 @@ macOS (Terminal; the files go into Project Zomboid.app/Contents/Java):
 Same flags: --status, --uninstall, --dir <game folder>.
 
 [h1]Performance overlay (F9)[/h1]
-Off by default: tick "Sample frame times and utilization" in Options > Optimizations > Performance overlay and restart, then F9 toggles it. Frame time and its tail (p99 / p99.9 / max, 1 %-low, jitter, spikes), GPU busy, game- and render-thread load, a verdict line, the game-thread tree and flame graph below, the frame graph; every element is a dropdown there. Same numbers on every platform, no MangoHud or RivaTuner.
+Off by default: tick "Sample frame times and utilization" in Options > Profiler > Performance overlay and restart, then F9 toggles it. Frame time and its tail (p99 / p99.9 / max, 1 %-low, jitter, spikes), GPU busy, game- and render-thread load, a verdict line, the game-thread tree and flame graph below, the frame graph; every element is a dropdown there. Same numbers on every platform, no MangoHud or RivaTuner.
 [img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/13-profiler.jpg[/img]
 
 [h1]Settings[/h1]

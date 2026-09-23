@@ -186,6 +186,7 @@ done
 # 4. launch and sample
 out="$RUNS/$label-$(date +%Y%m%d-%H%M%S)"; mkdir -p "$out"
 rm -f "$ZOMBOID"/pzopt-*.out "$ZOMBOID/console.txt" "$ZOMBOID/pzopt-schedule.out" "$ZOMBOID/pzopt-logdone"
+rm -f "$ZOMBOID"/Screenshots/pzopt-*.png
 rm -f "$PZ_DIR"/hs_err_pid*.log "$ZOMBOID"/hs_err_pid*.log
 jvm_opts=()
 while IFS= read -r a; do
@@ -258,6 +259,7 @@ crashed=0
 for h in "$PZ_DIR"/hs_err_pid*.log "$ZOMBOID"/hs_err_pid*.log; do [[ -f "$h" ]] || continue; cp "$h" "$out/"; crashed=1; done
 [[ -f "$ZOMBOID/console.txt" ]] && cp "$ZOMBOID/console.txt" "$out/console.txt" || echo "no console.txt written" >&2
 cp "$ZOMBOID"/pzopt-*.out "$out/" 2>/dev/null || true
+cp "$ZOMBOID"/Screenshots/pzopt-*.png "$out/" 2>/dev/null || true   # harness screenshots (options_tab rig)
 cp "$PZ_DIR/pzopt.properties" "$out/pzopt.properties"
 cp "$FLAG_FILE" "$out/pzopt-harness.txt"
 { echo "layout=mac"; echo "mode=$mode"; echo "crashed=$crashed"; echo "attempts=1"; echo "jfr=0"; echo "game_profiler=0"; echo "gc=default"

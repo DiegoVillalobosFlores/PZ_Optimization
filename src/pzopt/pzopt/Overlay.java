@@ -53,7 +53,7 @@ import zombie.ui.UIFont;
  * itself is the bottleneck, in which case it tracks the render thread's CPU share (shown next
  * to it) instead. Reading it against that column tells the two apart.
  *
- * Config: {@code overlaySampling=true} (Optimizations tab, off by default) turns the measurement on
+ * Config: {@code overlaySampling=true} (Profiler tab, off by default) turns the measurement on
  * at all; without it the toggle key shows a notice pointing at the tick box and the restart.
  * {@code overlay=true} shows it from boot (and implies sampling); the key bound to "Toggle performance overlay"
  * (Options > Key Bindings, default F9; {@code overlayKey=<lwjgl code>} is the fallback when the
@@ -77,7 +77,7 @@ public final class Overlay {
    private static final boolean ACTIVE = Overrides.enabled();
    /**
     * Whether the overlay measures anything: the presented-frame ring, the GL timer queries and the
-    * utilization sampler thread. Off unless {@code overlaySampling=true} (the Optimizations tab),
+    * utilization sampler thread. Off unless {@code overlaySampling=true} (the Profiler tab),
     * something that needs the numbers ({@code overlay}, {@code overlayLog}) or a harness run; with
     * it off the toggle key only shows {@link #NOTICE}. Decided at boot, like every Config key.
     */
@@ -86,7 +86,7 @@ public final class Overlay {
    private static final long NOTICE_NS = 8_000_000_000L;
    private static final String[] NOTICE = {
       "Performance overlay: sampling is off.",
-      "Tick \"Sample frame times and utilization\" under Options > Optimizations > Performance overlay,",
+      "Tick \"Sample frame times and utilization\" under Options > Profiler > Performance overlay,",
       "then restart the game for it to take effect."
    };
    private static long noticeUntilNs;

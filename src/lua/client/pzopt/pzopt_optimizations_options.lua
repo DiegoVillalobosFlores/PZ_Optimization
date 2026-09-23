@@ -17,10 +17,13 @@
 --  one bar per resource (game thread, render thread, other cores, GPU, VRAM, RAM, disk, load time, chunk
 --  arrival) from the EFFECTS table below: left = less work / sooner, right = more. Which clip a setting
 --  shows is its section's `clip`, overridden per key in KEY_CLIP.
+--  The performance overlay and its game-thread profiler (PROFILER_SECTIONS) have their own "Profiler" tab right after
+--  it, built the same way (buildSettingsPage) without the master switch and the profile buttons.
 -- Installed by scripts/pzopt.sh into <game dir>/media/lua/client/pzopt/ (loose game-dir Lua is
 -- loaded like any other, no mod to enable).
 
 local TAB = "Optimizations"
+local PROFILER_TAB = "Profiler"
 local RESTART_NOTE = "Takes effect on the next launch."
 
 -- The master switch, drawn before the sections with the two buttons.
@@ -313,94 +316,15 @@ local SECTIONS = {
         },
     },
     {
-        title = "Performance overlay (F9, or the \"Toggle performance overlay\" key binding)", clip = "spin",
+        title = "Render distance", clip = "grid",
         entries = {
-            { key = "overlaySampling", label = "Sample frame times and utilization (needed for F9)",
-              tip = "Records every presented frame, times the GPU with GL timer queries and samples the CPU load twice a second on a background thread. Off by default: without it F9 only shows a notice. \"Show the overlay from boot\" and \"Log every presented frame\" turn it on too. Applies on the next launch." },
-            { key = "overlay", label = "Show the overlay from boot",
-              tip = "Frame rate, frame-time tail (p99, p99.9, max, 1%-low, jitter, spikes), GPU busy share, game and render thread load, and a frame-time graph. The key toggles it any time." },
-            { key = "overlayLog", label = "Log every presented frame",
-              tip = "Writes Zomboid/pzopt-overlay.out, one CSV row per frame in MangoHud's column names, for harness/analyze.py. Harness runs log regardless." },
-            { key = "overlayStats", label = "Frame statistics",
-              choices = { "off", "fps", "tails", "full" },
-              note = { fps = "the fps line", tails = "+ p99 / p99.9 / max, 1%-low, jitter, spikes", full = "+ GPU, thread, process and machine load, heap" },
-              tip = "The lines at the top of the overlay." },
-            { key = "overlayTree", label = "Game-thread tree",
-              choices = { "off", "0", "3", "5", "8" },
-              note = { ["0"] = "phases only", ["3"] = "3 sub-phases per phase", ["5"] = "5 sub-phases per phase", ["8"] = "8 sub-phases per phase" },
-              tip = "What the game thread is doing, from its call stack sampled on a background thread: the phases (update / render / lighting) with their share of the time, under each the biggest sub-phases (chunk bakes, zombies, UI draw, frame hand-off...) with a bar, the wait share in red and the hottest methods. Also logged per second to Zomboid/pzopt-gamethread.out for harness/analyze.py. Applies on the next launch." },
-            { key = "overlayVerdict", label = "Verdict line",
-              choices = { "off", "short", "detailed" },
-              note = { short = "\"at the cap\" / \"GPU bound\" / \"nothing saturated\"", detailed = "+ the two biggest game-thread sub-phases when it is the game thread" },
-              tip = "What is holding the frame rate below the cap." },
-            { key = "overlayGraph", label = "Frame-time graph",
-              choices = { "off", "240", "480", "960" },
-              note = { ["240"] = "last 240 frames (480 px)", ["480"] = "last 480 frames (960 px)", ["960"] = "last 960 frames (1920 px)" },
-              tip = "A bar per presented frame (green under 1.1x the cap budget, amber under 2x, red above; GPU time in blue) with ms ticks and the budget line." },
-            { key = "overlayGraphHz", label = "Frame-time graph redraws per second",
-              choices = { "0", "15", "30", "60" },
-              note = { ["0"] = "every frame (one sprite per bar)", ["15"] = "15 times a second", ["30"] = "30 times a second", ["60"] = "60 times a second" },
-              tip = "With \"Draw the overlay as one texture\" on, the frame-time bars are redrawn into that texture this often instead of drawn as ~480 sprites every frame. 0 draws them every frame." },
-            { key = "overlayFlame", label = "Game-thread flame graph",
-              choices = { "off", "right", "right-wide", "below" },
-              note = { right = "column beside the statistics, 900 px", ["right-wide"] = "column beside the statistics, 1400 px", below = "under the frame graph, panel width" },
-              tip = "The last 5 s of stack samples as a flame graph: root (GameWindow.frameStep) at the bottom, callees above, width = share of the time, biggest first from the left; update green, render blue, lighting amber, pzopt frames magenta. Off by default: with \"Draw the overlay as one texture\" off it is the heaviest element (one sprite per box and label every frame). harness/flamegraph.py draws a whole run as an SVG." },
-            { key = "overlayFlameDepth", label = "Game-thread flame graph rows",
-              choices = { "12", "16", "24", "32", "48" },
-              tip = "How many call levels above GameWindow.frameStep the flame graph shows." },
-            { key = "gameThreadProfileHz", label = "Game-thread stack samples per second",
-              choices = { "10", "25", "50", "100", "200", "500" },
-              tip = "Higher resolves short phases sooner; each sample briefly stops the game thread (tens of microseconds). 25 (the default) gives 125 samples over the overlay's 5 s window; each sample costs the game thread about 0.15 ms on a MacBook, so 100 a second takes 1.5 % of its time. Sampling only runs while the overlay is shown or its log is on, and only when the tree, the flame graph, the detailed verdict or the log needs it." },
-            { key = "overlayTexture", label = "Draw the overlay as one texture",
-              tip = "The overlay's text, tree and flame graph only change four times a second, so they are drawn into an offscreen texture then and each frame shows that texture plus the live frame-time bars. Off draws every letter and box as its own sprite every frame (thousands of quads), which costs frame rate on slower PCs." },
-            { key = "overlayRefreshMs", label = "Overlay refresh interval (ms)",
-              choices = { "100", "250", "500", "1000" },
-              tip = "How often the overlay's numbers, game-thread tree and verdict are recomputed and its texture redrawn. Longer is cheaper; the frame-time graph has its own rate." },
-            { key = "overlayCorner", label = "Overlay corner",
-              choices = { "tl", "tr", "bl", "br" },
-              tip = "Where the overlay sits: top-left, top-right, bottom-left, bottom-right." },
-            { key = "overlayFont", label = "Overlay font",
-              choices = { "auto", "CodeMedium", "CodeSmall", "CodeLarge", "Small", "Medium", "Large" },
-              tip = "The UI font the overlay text uses. auto follows the screen height: CodeSmall under 1000 px, CodeMedium under 1800, CodeLarge above. Whatever the font, the panel fits the screen: the frame graph shows fewer frames, the flame graph keeps up to a third of the width (hints and legend are cut to the rest) or moves under the frame graph and long lines are cut when it would not." },
-        },
-    },
-    {
-        title = "Performance overlay: fps colour", clip = "spin",
-        entries = {
-            { key = "overlayFpsColor", label = "Colour the fps number",
-              tip = "The fps number takes one of four colours by how close it is to the target; off = white like the rest of the line." },
-            { key = "overlayFpsFollowCap", label = "Colour thresholds follow the framerate cap",
-              tip = "On: with a framerate cap the thresholds are percentages of it (the three \"% of the cap\" values). Off, or uncapped: the three fixed fps thresholds apply." },
-            { key = "overlayFpsCapBluePct", label = "Threshold, capped: blue, at the cap (% of the cap)",
-              choices = { "100", "99", "98", "95", "90" },
-              tip = "At or above this share of the cap counts as at the cap. The limiter rarely lands exactly on it, so 100 is stricter than it looks." },
-            { key = "overlayFpsCapGreenPct", label = "Threshold, capped: green, at or above (% of the cap)",
-              choices = { "95", "90", "85", "80", "75" },
-              tip = "Green from this share of the cap up to the blue threshold." },
-            { key = "overlayFpsCapYellowPct", label = "Threshold, capped: yellow, at or above (% of the cap)",
-              choices = { "75", "66", "50", "33", "25" },
-              tip = "Yellow from this share of the cap up to the green threshold; red below it." },
-            { key = "overlayFpsBlueAbove", label = "Threshold, uncapped: blue, above (fps)",
-              choices = { "500", "400", "300", "240", "200", "165", "144", "120", "60" },
-              tip = "Uncapped, or with follow-cap off: blue above this many fps." },
-            { key = "overlayFpsGreenAbove", label = "Threshold, uncapped: green, at or above (fps)",
-              choices = { "300", "240", "200", "150", "120", "100", "60", "45" },
-              tip = "Uncapped, or with follow-cap off: green from this many fps up to the blue threshold." },
-            { key = "overlayFpsYellowAbove", label = "Threshold, uncapped: yellow, at or above (fps)",
-              choices = { "200", "150", "120", "100", "75", "60", "45", "30" },
-              tip = "Uncapped, or with follow-cap off: yellow from this many fps up to the green threshold; red below it." },
-            { key = "overlayFpsColorBlue", label = "Tier colour 1: \"at the cap\"",
-              choices = FPS_COLOURS,
-              tip = "Named colour, or a RRGGBB hex value typed into Zomboid/pzopt/options.ini." },
-            { key = "overlayFpsColorGreen", label = "Tier colour 2: \"near the cap\"",
-              choices = FPS_COLOURS,
-              tip = "Named colour, or a RRGGBB hex value typed into Zomboid/pzopt/options.ini." },
-            { key = "overlayFpsColorYellow", label = "Tier colour 3: \"well below\"",
-              choices = FPS_COLOURS,
-              tip = "Named colour, or a RRGGBB hex value typed into Zomboid/pzopt/options.ini." },
-            { key = "overlayFpsColorRed", label = "Tier colour 4: \"far below\"",
-              choices = FPS_COLOURS,
-              tip = "Named colour, or a RRGGBB hex value typed into Zomboid/pzopt/options.ini." },
+            { key = "chunkGridWidth", label = "Render distance (chunk grid width)",
+              choices = { "0", "auto", "7", "9", "11", "13", "15", "19", "21", "23", "25", "27", "31" },
+              note = { ["0"] = "vanilla", ["auto"] = "fill the screen at the widest zoom", ["7"] = "56 tiles", ["9"] = "72 tiles",
+                       ["11"] = "88 tiles", ["13"] = "104 tiles", ["15"] = "120 tiles", ["19"] = "152 tiles, vanilla at 1080p and above",
+                       ["21"] = "168 tiles, fills 4K", ["23"] = "184 tiles", ["25"] = "200 tiles, fills 5120x2160", ["27"] = "216 tiles",
+                       ["31"] = "248 tiles" },
+              tip = "How many chunks (8 tiles each) per side are loaded, simulated, lit and drawn around you. Vanilla picks it from the screen size but stops at 19 (152 tiles), sized for 1080p: on a 4K or ultrawide screen the world ends before the screen corners at the widest zooms. Auto picks the smallest grid that fills your screen at the widest zoom, never less than vanilla (21 at 3840x2160, 25 at 5120x2160, vanilla at 1080p). Smaller than vanilla = less world to update every frame, which helps CPU-limited setups (heavy mod lists, NPC mods), with the world ending nearer the screen edge. Larger = more CPU, RAM and VRAM and longer loads; zombies, vehicles and sounds are simulated further out. Only the grid size changes; zombie AI, streaming and culling are untouched." },
         },
     },
     {
@@ -416,13 +340,6 @@ local SECTIONS = {
               tip = "The initial 361-chunk recalc uses this many threads, then the pool shrinks back." },
             { key = "wake", label = "Wake the streamer on demand",
               tip = "The streamer thread wakes when a chunk is queued instead of polling every 140 ms." },
-            { key = "chunkGridWidth", label = "Render distance (chunk grid width)",
-              choices = { "0", "auto", "7", "9", "11", "13", "15", "19", "21", "23", "25", "27", "31" },
-              note = { ["0"] = "vanilla", ["auto"] = "fill the screen at the widest zoom", ["7"] = "56 tiles", ["9"] = "72 tiles",
-                       ["11"] = "88 tiles", ["13"] = "104 tiles", ["15"] = "120 tiles", ["19"] = "152 tiles, vanilla at 1080p and above",
-                       ["21"] = "168 tiles, fills 4K", ["23"] = "184 tiles", ["25"] = "200 tiles, fills 5120x2160", ["27"] = "216 tiles",
-                       ["31"] = "248 tiles" },
-              tip = "How many chunks (8 tiles each) per side are loaded, simulated, lit and drawn around you. Vanilla picks it from the screen size but stops at 19 (152 tiles), sized for 1080p: on a 4K or ultrawide screen the world ends before the screen corners at the widest zooms. Auto picks the smallest grid that fills your screen at the widest zoom, never less than vanilla (21 at 3840x2160, 25 at 5120x2160, vanilla at 1080p). Smaller than vanilla = less world to update every frame, which helps CPU-limited setups (heavy mod lists, NPC mods), with the world ending nearer the screen edge. Larger = more CPU, RAM and VRAM and longer loads; zombies, vehicles and sounds are simulated further out. Only the grid size changes; zombie AI, streaming and culling are untouched." },
             { key = "chunkHandoffDivisor", label = "Chunk hand-off budget (queue divisor)",
               choices = { "0", "4", "8", "16" }, note = { ["0"] = "stock: up to 4 chunks a frame" },
               tip = "At most 1 + queued/divisor freshly loaded chunks are handed to the game thread per frame, so a chunk row arriving at once is spread over a few frames instead of one long one." },
@@ -515,7 +432,103 @@ local SECTIONS = {
     },
 }
 
--- The "Sort by" combo shows SECTIONS in this source order ("natural"), alphabetically (sections by title, settings
+-- The Profiler tab (2026-09-24): the performance overlay and the game-thread profiler it draws, on a page of their
+-- own; same controls, preview and search as the Optimizations tab.
+local PROFILER_SECTIONS = {
+    {
+        title = "Performance overlay (F9, or the \"Toggle performance overlay\" key binding)", clip = "spin",
+        entries = {
+            { key = "overlaySampling", label = "Sample frame times and utilization (needed for F9)",
+              tip = "Records every presented frame, times the GPU with GL timer queries and samples the CPU load twice a second on a background thread. Off by default: without it F9 only shows a notice. \"Show the overlay from boot\" and \"Log every presented frame\" turn it on too. Applies on the next launch." },
+            { key = "overlay", label = "Show the overlay from boot",
+              tip = "Frame rate, frame-time tail (p99, p99.9, max, 1%-low, jitter, spikes), GPU busy share, game and render thread load, and a frame-time graph. The key toggles it any time." },
+            { key = "overlayLog", label = "Log every presented frame",
+              tip = "Writes Zomboid/pzopt-overlay.out, one CSV row per frame in MangoHud's column names, for harness/analyze.py. Harness runs log regardless." },
+            { key = "overlayStats", label = "Frame statistics",
+              choices = { "off", "fps", "tails", "full" },
+              note = { fps = "the fps line", tails = "+ p99 / p99.9 / max, 1%-low, jitter, spikes", full = "+ GPU, thread, process and machine load, heap" },
+              tip = "The lines at the top of the overlay." },
+            { key = "overlayTree", label = "Game-thread tree",
+              choices = { "off", "0", "3", "5", "8" },
+              note = { ["0"] = "phases only", ["3"] = "3 sub-phases per phase", ["5"] = "5 sub-phases per phase", ["8"] = "8 sub-phases per phase" },
+              tip = "What the game thread is doing, from its call stack sampled on a background thread: the phases (update / render / lighting) with their share of the time, under each the biggest sub-phases (chunk bakes, zombies, UI draw, frame hand-off...) with a bar, the wait share in red and the hottest methods. Also logged per second to Zomboid/pzopt-gamethread.out for harness/analyze.py. Applies on the next launch." },
+            { key = "overlayVerdict", label = "Verdict line",
+              choices = { "off", "short", "detailed" },
+              note = { short = "\"at the cap\" / \"GPU bound\" / \"nothing saturated\"", detailed = "+ the two biggest game-thread sub-phases when it is the game thread" },
+              tip = "What is holding the frame rate below the cap." },
+            { key = "overlayGraph", label = "Frame-time graph",
+              choices = { "off", "240", "480", "960" },
+              note = { ["240"] = "last 240 frames (480 px)", ["480"] = "last 480 frames (960 px)", ["960"] = "last 960 frames (1920 px)" },
+              tip = "A bar per presented frame (green under 1.1x the cap budget, amber under 2x, red above; GPU time in blue) with ms ticks and the budget line." },
+            { key = "overlayGraphHz", label = "Frame-time graph redraws per second",
+              choices = { "0", "15", "30", "60" },
+              note = { ["0"] = "every frame (one sprite per bar)", ["15"] = "15 times a second", ["30"] = "30 times a second", ["60"] = "60 times a second" },
+              tip = "With \"Draw the overlay as one texture\" on, the frame-time bars are redrawn into that texture this often instead of drawn as ~480 sprites every frame. 0 draws them every frame." },
+            { key = "overlayFlame", label = "Game-thread flame graph",
+              choices = { "off", "right", "right-wide", "below" },
+              note = { right = "column beside the statistics, 900 px", ["right-wide"] = "column beside the statistics, 1400 px", below = "under the frame graph, panel width" },
+              tip = "The last 5 s of stack samples as a flame graph: root (GameWindow.frameStep) at the bottom, callees above, width = share of the time, biggest first from the left; update green, render blue, lighting amber, pzopt frames magenta. Off by default: with \"Draw the overlay as one texture\" off it is the heaviest element (one sprite per box and label every frame). harness/flamegraph.py draws a whole run as an SVG." },
+            { key = "overlayFlameDepth", label = "Game-thread flame graph rows",
+              choices = { "12", "16", "24", "32", "48" },
+              tip = "How many call levels above GameWindow.frameStep the flame graph shows." },
+            { key = "gameThreadProfileHz", label = "Game-thread stack samples per second",
+              choices = { "10", "25", "50", "100", "200", "500" },
+              tip = "Higher resolves short phases sooner; each sample briefly stops the game thread (tens of microseconds). 25 (the default) gives 125 samples over the overlay's 5 s window; each sample costs the game thread about 0.15 ms on a MacBook, so 100 a second takes 1.5 % of its time. Sampling only runs while the overlay is shown or its log is on, and only when the tree, the flame graph, the detailed verdict or the log needs it." },
+            { key = "overlayTexture", label = "Draw the overlay as one texture",
+              tip = "The overlay's text, tree and flame graph only change four times a second, so they are drawn into an offscreen texture then and each frame shows that texture plus the live frame-time bars. Off draws every letter and box as its own sprite every frame (thousands of quads), which costs frame rate on slower PCs." },
+            { key = "overlayRefreshMs", label = "Overlay refresh interval (ms)",
+              choices = { "100", "250", "500", "1000" },
+              tip = "How often the overlay's numbers, game-thread tree and verdict are recomputed and its texture redrawn. Longer is cheaper; the frame-time graph has its own rate." },
+            { key = "overlayCorner", label = "Overlay corner",
+              choices = { "tl", "tr", "bl", "br" },
+              tip = "Where the overlay sits: top-left, top-right, bottom-left, bottom-right." },
+            { key = "overlayFont", label = "Overlay font",
+              choices = { "auto", "CodeMedium", "CodeSmall", "CodeLarge", "Small", "Medium", "Large" },
+              tip = "The UI font the overlay text uses. auto follows the screen height: CodeSmall under 1000 px, CodeMedium under 1800, CodeLarge above. Whatever the font, the panel fits the screen: the frame graph shows fewer frames, the flame graph keeps up to a third of the width (hints and legend are cut to the rest) or moves under the frame graph and long lines are cut when it would not." },
+        },
+    },
+    {
+        title = "Performance overlay: fps colour", clip = "spin",
+        entries = {
+            { key = "overlayFpsColor", label = "Colour the fps number",
+              tip = "The fps number takes one of four colours by how close it is to the target; off = white like the rest of the line." },
+            { key = "overlayFpsFollowCap", label = "Colour thresholds follow the framerate cap",
+              tip = "On: with a framerate cap the thresholds are percentages of it (the three \"% of the cap\" values). Off, or uncapped: the three fixed fps thresholds apply." },
+            { key = "overlayFpsCapBluePct", label = "Threshold, capped: blue, at the cap (% of the cap)",
+              choices = { "100", "99", "98", "95", "90" },
+              tip = "At or above this share of the cap counts as at the cap. The limiter rarely lands exactly on it, so 100 is stricter than it looks." },
+            { key = "overlayFpsCapGreenPct", label = "Threshold, capped: green, at or above (% of the cap)",
+              choices = { "95", "90", "85", "80", "75" },
+              tip = "Green from this share of the cap up to the blue threshold." },
+            { key = "overlayFpsCapYellowPct", label = "Threshold, capped: yellow, at or above (% of the cap)",
+              choices = { "75", "66", "50", "33", "25" },
+              tip = "Yellow from this share of the cap up to the green threshold; red below it." },
+            { key = "overlayFpsBlueAbove", label = "Threshold, uncapped: blue, above (fps)",
+              choices = { "500", "400", "300", "240", "200", "165", "144", "120", "60" },
+              tip = "Uncapped, or with follow-cap off: blue above this many fps." },
+            { key = "overlayFpsGreenAbove", label = "Threshold, uncapped: green, at or above (fps)",
+              choices = { "300", "240", "200", "150", "120", "100", "60", "45" },
+              tip = "Uncapped, or with follow-cap off: green from this many fps up to the blue threshold." },
+            { key = "overlayFpsYellowAbove", label = "Threshold, uncapped: yellow, at or above (fps)",
+              choices = { "200", "150", "120", "100", "75", "60", "45", "30" },
+              tip = "Uncapped, or with follow-cap off: yellow from this many fps up to the green threshold; red below it." },
+            { key = "overlayFpsColorBlue", label = "Tier colour 1: \"at the cap\"",
+              choices = FPS_COLOURS,
+              tip = "Named colour, or a RRGGBB hex value typed into Zomboid/pzopt/options.ini." },
+            { key = "overlayFpsColorGreen", label = "Tier colour 2: \"near the cap\"",
+              choices = FPS_COLOURS,
+              tip = "Named colour, or a RRGGBB hex value typed into Zomboid/pzopt/options.ini." },
+            { key = "overlayFpsColorYellow", label = "Tier colour 3: \"well below\"",
+              choices = FPS_COLOURS,
+              tip = "Named colour, or a RRGGBB hex value typed into Zomboid/pzopt/options.ini." },
+            { key = "overlayFpsColorRed", label = "Tier colour 4: \"far below\"",
+              choices = FPS_COLOURS,
+              tip = "Named colour, or a RRGGBB hex value typed into Zomboid/pzopt/options.ini." },
+        },
+    },
+}
+
+-- The "Sort by" combo shows the sections in this source order ("natural"), alphabetically (sections by title, settings
 -- by label) or by their effect on one resource. Settings that only make sense next to another one (a setting and its
 -- sub-settings, the fps colour tiers) carry labels that sort into the same order both ways, and a tip names another
 -- setting by its label rather than saying "above" / "below".
@@ -875,10 +888,7 @@ function PzoptPreview:layoutSlots()
         for _ in string.gmatch(getTextManager():WrapText(self.fontS, tip, cw), "[^\n]+") do n = n + 1 end
         if n > lines then lines = n end
     end
-    count(MASTER.tip)
-    for _, section in ipairs(SECTIONS) do
-        for _, entry in ipairs(section.entries) do count(entry.tip) end
-    end
+    for _, row in ipairs(self.rows) do count(row.entry.tip) end
     self.descLines = lines
     local fixed = pad + self.hM + 2 + self.hS + 2 + self.hS + 8 -- title, values, Java classes
         + self.hS + 2 + 4 + self.hS + 8                    -- clip captions, clip title line
@@ -1266,7 +1276,7 @@ end
 
 local COLLAPSED = {}
 -- The "Sort by" choice, kept for the session like the folds: "natural", "alpha" or an AXES id.
-local SORT = "alpha"
+local SORT = { [TAB] = "alpha", [PROFILER_TAB] = "natural" }
 -- What the three headings of a resource sort say, per axis id (default: load).
 local LESS_WORDS = { load = "shorter", chunks = "sooner" }
 local MORE_WORDS = { load = "longer", chunks = "later", cores = "more work for idle cores" }
@@ -1275,14 +1285,14 @@ local MORE_WORDS = { load = "longer", chunks = "later", cores = "more work for i
 -- A resource sort regroups every setting under three headings of its own (S.virtual): the ones that lower that
 -- resource's load (biggest change first), the ones that raise it, and the rest alphabetically.
 local function sortedGroups(S)
-    if SORT == "natural" then
+    if SORT[S.tab] == "natural" then
         local out = {}
         for _, sec in ipairs(S.sections) do table.insert(out, { sec = sec, rows = sec.rows }) end
         return out
     end
     local axis
     for _, a in ipairs(AXES) do
-        if a.id == SORT then axis = a end
+        if a.id == SORT[S.tab] then axis = a end
     end
     if not axis then return S.alphaGroups end
     local less, more, none = {}, {}, {}
@@ -1560,14 +1570,14 @@ local function addSearchRows(self, S, splitpoint, y, width)
     sortLabel:initialise()
     self.mainPanel:addChild(sortLabel)
     local sort = ISComboBox:new(splitpoint + 20, y + self.addY, width, BUTTON_HGT, S, function(target, box)
-        SORT = keys[box.selected] or "alpha"
+        SORT[target.tab] = keys[box.selected] or "alpha"
         target.panel:setYScroll(0)
         relayout(target)
     end)
     sort:initialise()
     for i, name in ipairs(names) do
         sort:addOption(name)
-        if keys[i] == SORT then sort.selected = i end
+        if keys[i] == SORT[S.tab] then sort.selected = i end
     end
     sort.tooltip = "Natural: the settings grouped by topic, in the order they were added. Alphabetical: the topics and "
         .. "the settings in each by name. Effect on a resource: every setting that lowers that part's load first, "
@@ -2019,6 +2029,21 @@ local function addAllButtons(self, splitpoint, y)
     end
 end
 
+-- The Profiler tab's one button: its own settings back to the build's defaults (the Optimizations tab's buttons
+-- leave this tab alone).
+local PROFILER_RESET = "Reset to defaults"
+local function addProfilerButtons(self, splitpoint, y)
+    local b = self:addButton(splitpoint, y, PROFILER_RESET)
+    b.tooltip = "Puts every setting on this tab back to the build's default. " .. RESTART_NOTE
+    b.target = self
+    b.onclick = function(target)
+        for _, option in ipairs(target.pzoptProfilerOptions or {}) do
+            option:pzoptReset()
+            option:invokeOnChangeEvent()
+        end
+    end
+end
+
 -- A section heading: a rule that stops short of the preview panel and the title above the label column.
 local function addSectionLine(self, y, text, x0, width)
     local spacing = MainOptions.style.borderSpacing
@@ -2036,19 +2061,21 @@ local function addSectionLine(self, y, text, x0, width)
 end
 
 -- Layout: the label column (right-aligned labels) and the controls at the left margin, the fixed preview panel
--- filling the rest of the page's width and height.
+-- filling the rest of the page's width and height. Measured over both tabs, so the preview does not move between them.
 local function layout(self, comboWidth)
     local W = self:getWidth()
     local gap, margin, sbar = 40, 16, 13
     local labelW = getTextManager():MeasureStringX(UIFont.Small, MASTER.label)
-    for _, section in ipairs(SECTIONS) do
-        for _, entry in ipairs(section.entries) do
-            labelW = math.max(labelW, getTextManager():MeasureStringX(UIFont.Small, entry.label))
+    for _, sections in ipairs({ SECTIONS, PROFILER_SECTIONS }) do
+        for _, section in ipairs(sections) do
+            for _, entry in ipairs(section.entries) do
+                labelW = math.max(labelW, getTextManager():MeasureStringX(UIFont.Small, entry.label))
+            end
         end
     end
     labelW = labelW + 8
     local controlW = comboWidth
-    for _, title in ipairs({ "Enable all (recommended defaults)", "Disable all (stock game)" }) do
+    for _, title in ipairs({ "Enable all (recommended defaults)", "Disable all (stock game)", PROFILER_RESET }) do
         controlW = math.max(controlW, getTextManager():MeasureStringX(UIFont.Small, title) + 24)
     end
     for _, profile in ipairs(PROFILES) do
@@ -2063,16 +2090,39 @@ local function layout(self, comboWidth)
              lineW = controlsW + gap / 2, margin = margin, controlW = controlW }
 end
 
--- The page is added with the others (so the tab sits after Display) but its controls are built the first
--- time it is shown: the in-game menu builds the whole options screen while the world is entered, and this
--- tab was 101 of that screen's 124 ms on the flip (flip-opttime), on every Continue.
+-- The two pages: the Optimizations tab (master switch, profiles) and the Profiler tab (the overlay's settings).
+-- `panel` / `options` / `search` / `preview` name the MainOptions fields that hold the page's parts.
+local PAGES = {
+    {
+        tab = TAB, sections = SECTIONS, master = MASTER, buttons = addAllButtons,
+        panel = "pzoptPanel", options = "pzoptOptions", search = "pzoptSearch", preview = "pzoptPreview",
+        headline = function(p)
+            return "All optimizations (since this boot: " .. (p:isPzoptEnabled() and "on" or "OFF: the game is running stock") .. ")"
+        end,
+    },
+    {
+        tab = PROFILER_TAB, sections = PROFILER_SECTIONS, buttons = addProfilerButtons,
+        panel = "pzoptProfilerPanel", options = "pzoptProfilerOptions", search = "pzoptProfilerSearch",
+        preview = "pzoptProfilerPreview",
+        headline = function(p)
+            if p:isPzoptEnabled() then return "Performance overlay and game-thread profiler" end
+            return "Performance overlay: unavailable (the optimizations are off since this boot)"
+        end,
+    },
+}
+
+-- The pages are added with the others (so the tabs sit after Display) but their controls are built the first
+-- time each is shown: the in-game menu builds the whole options screen while the world is entered, and the
+-- Optimizations tab was 101 of that screen's 124 ms on the flip (flip-opttime), on every Continue.
 function MainOptions:pzoptAddOptimizationsPanel()
-    self:addPage(TAB)
-    self.pzoptPanel = self.mainPanel
-    self.pzoptBuilt = false
+    self.pzoptBuilt = {}
+    for _, page in ipairs(PAGES) do
+        self:addPage(page.tab)
+        self[page.panel] = self.mainPanel
+    end
 end
 
-function MainOptions:pzoptBuildOptimizationsPanel()
+local function buildSettingsPage(self, page)
     local pzoptT0 = getTimestampMs()
     local savedPanel, savedAddY = self.mainPanel, self.addY
     local firstOption = #self.gameOptions.options + 1
@@ -2085,29 +2135,31 @@ function MainOptions:pzoptBuildOptimizationsPanel()
     local L = layout(self, comboWidth)
     local splitpoint = L.splitpoint
 
-    self.mainPanel = self.pzoptPanel
+    self.mainPanel = self[page.panel]
     local panel = self.mainPanel
     local p = perf()
     local added, pinned = 0, 0
-    self.pzoptOptions = {}
-    self.pzoptMaster = nil
+    local options = {}
+    self[page.options] = options
     local rows = {}
     local function addRow(entry, option, clip)
         table.insert(rows, { entry = entry, option = option, clip = clip,
                              y = option.control:getY(), h = math.max(option.control:getHeight(), BUTTON_HGT) })
     end
-    local state = p:isPzoptEnabled() and "on" or "OFF: the game is running stock"
-    addSectionLine(self, y, "All optimizations (since this boot: " .. state .. ")", L.x0, L.lineW)
-    if p:isPzoptOptionKnown(MASTER.key) then
-        self.pzoptMaster = addBoolOption(self, MASTER, splitpoint, y, BUTTON_HGT)
-        addRow(MASTER, self.pzoptMaster, "drive")
-        if p:getPzoptOptionPinnedBy(MASTER.key) ~= "" then pinned = pinned + 1 end
+    addSectionLine(self, y, page.headline(p), L.x0, L.lineW)
+    if page.master then
+        self.pzoptMaster = nil
+        if p:isPzoptOptionKnown(page.master.key) then
+            self.pzoptMaster = addBoolOption(self, page.master, splitpoint, y, BUTTON_HGT)
+            addRow(page.master, self.pzoptMaster, "drive")
+            if p:getPzoptOptionPinnedBy(page.master.key) ~= "" then pinned = pinned + 1 end
+        end
     end
-    addAllButtons(self, splitpoint, y)
+    page.buttons(self, splitpoint, y)
     -- Everything below the search rows is placed by relayout: each row records the elements the stock add*
     -- helpers create (caught by wrapping the page's addChild) and their offsets from the row's top.
-    local S = { panel = panel, sections = {}, total = 0 }
-    self.pzoptSearch = S
+    local S = { panel = panel, tab = page.tab, sections = {}, total = 0 }
+    self[page.search] = S
     addSearchRows(self, S, splitpoint, y, math.max(comboWidth, L.controlW))
     S.top = y + self.addY
     S.joyTop = #panel.joypadButtonsY
@@ -2127,7 +2179,7 @@ function MainOptions:pzoptBuildOptimizationsPanel()
     end
     local sectionOf = {}
     local managed = {}
-    for si, section in ipairs(SECTIONS) do
+    for si, section in ipairs(page.sections) do
         local sec = { title = section.title, index = si, rows = {}, hitRows = {}, best = 0 }
         local header, button = capture(function() return addSectionHeader(self, S, sec, y, L.x0, L.lineW) end)
         header.button = button
@@ -2143,7 +2195,7 @@ function MainOptions:pzoptBuildOptimizationsPanel()
                     end
                     return addBoolOption(self, entry, splitpoint, y, BUTTON_HGT)
                 end)
-                table.insert(self.pzoptOptions, option)
+                table.insert(options, option)
                 addRow(entry, option, KEY_CLIP[entry.key] or section.clip or "drive")
                 local r = rows[#rows]
                 r.elems, r.step, r.controlDy, r.index = row.elems, row.step, option.control:getY() - top, #managed + 1
@@ -2163,7 +2215,7 @@ function MainOptions:pzoptBuildOptimizationsPanel()
     -- the three headings of a resource sort (titles and rows set by sortedGroups)
     S.virtual = {}
     for i = 1, 3 do
-        local vsec = { title = "", index = #SECTIONS + i, rows = {}, hitRows = {}, best = 0 }
+        local vsec = { title = "", index = #page.sections + i, rows = {}, hitRows = {}, best = 0 }
         local header, button = capture(function() return addSectionHeader(self, S, vsec, y, L.x0, L.lineW) end)
         header.button = button
         vsec.header = header
@@ -2206,7 +2258,7 @@ function MainOptions:pzoptBuildOptimizationsPanel()
     preview:setAnchorBottom(true)
     panel:addChild(preview)
     if rows[1] then preview:select(rows[1]) end
-    self.pzoptPreview = preview
+    self[page.preview] = preview
     -- the screen's toUI ran before this tab existed: show the saved values and remember them as the current ones
     for i = firstOption, #self.gameOptions.options do
         local option = self.gameOptions.options[i]
@@ -2215,7 +2267,7 @@ function MainOptions:pzoptBuildOptimizationsPanel()
     end
     self.gameOptions.changed = wasChanged
     self.mainPanel, self.addY = savedPanel, savedAddY
-    print("[pzopt] options tab: " .. added .. " controls, " .. pinned .. " pinned by pzopt.properties or -D, "
+    print("[pzopt] options tab " .. page.tab .. ": " .. added .. " controls, " .. pinned .. " pinned by pzopt.properties or -D, "
         .. #rows .. " preview rows, preview " .. L.previewW .. " px at x=" .. L.previewX
         .. ", built in " .. (getTimestampMs() - pzoptT0) .. " ms")
 end
@@ -2228,7 +2280,8 @@ local function install()
         return
     end
     MainOptions.pzoptOptimizationsTab = true
-    -- The tab goes right after Display: create() adds the pages in order, so hook the Display page.
+    -- The tabs go right after Display (Optimizations, then Profiler): create() adds the pages in order, so hook
+    -- the Display page.
     -- the whole options screen's build time, for the load trace (the in-game menu builds it while the world is entered)
     local stockCreate = MainOptions.create
     -- The full build: stock create (timed for the load trace), then the Optimizations tab's lazy hook.
@@ -2238,16 +2291,19 @@ local function install()
         local t0 = getTimestampMs()
         local r = stockCreate(self, ...)
         print("[pzopt] options screen: MainOptions:create took " .. (getTimestampMs() - t0) .. " ms")
-        -- build the Optimizations tab when it is first shown (pzoptAddOptimizationsPanel added it empty)
+        -- build the Optimizations / Profiler tab when it is first shown (pzoptAddOptimizationsPanel added them empty)
         local tabs = self.tabs
         if tabs and self.pzoptPanel then
             local stockOnActivate = tabs.onActivateView
             tabs.onActivateView = function(target, tabPanel)
-                if target and target.pzoptPanel and not target.pzoptBuilt and tabPanel:getActiveView() == target.pzoptPanel then
-                    target.pzoptBuilt = true
-                    local ok, err = pcall(MainOptions.pzoptBuildOptimizationsPanel, target)
-                    if not ok then
-                        print("[pzopt] options tab: build failed: " .. tostring(err))
+                for _, page in ipairs(PAGES) do
+                    local pagePanel = target and target[page.panel]
+                    if pagePanel and not target.pzoptBuilt[page.tab] and tabPanel:getActiveView() == pagePanel then
+                        target.pzoptBuilt[page.tab] = true
+                        local ok, err = pcall(buildSettingsPage, target, page)
+                        if not ok then
+                            print("[pzopt] options tab " .. page.tab .. ": build failed: " .. tostring(err))
+                        end
                     end
                 end
                 if stockOnActivate then

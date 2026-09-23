@@ -548,7 +548,7 @@ public final class Config {
    public static final boolean OVERLAY_SAMPLING = bool("overlaySampling", false); // measure at all (ring, GL timer queries, sampler thread); off by default since 2026-09-21
    public static final boolean OVERLAY = bool("overlay", false);
    public static final boolean OVERLAY_LOG = bool("overlayLog", false);
-   // The overlay's elements, each a dropdown on the Optimizations tab: "off" or the element's own options.
+   // The overlay's elements, each a dropdown on the Profiler options tab: "off" or the element's own options.
    public static final String OVERLAY_STATS = string("overlayStats", "tails"); // off | fps (the fps line) | tails (+ p99 / jitter lines) | full (+ utilization); tails by default since 2026-09-23 (overlay cost pass)
    public static final String OVERLAY_TREE = string("overlayTree", "5"); // the game-thread tree: off | 0 (phases only) | 3 | 5 | 8 sub-phases per phase
    public static final String OVERLAY_VERDICT = string("overlayVerdict", "detailed"); // off | short ("GPU bound") | detailed (+ the two biggest game-thread sub-phases)

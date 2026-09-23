@@ -48,6 +48,34 @@ end
 
 local pending = nil
 local quitAtMs = nil
+-- options_tab=<tab name> (2026-09-24, menu checks without xdotool, e.g. on the Mac): stay on the main menu, open
+-- Options on that tab, log the tab names, 3 s later write Zomboid/Screenshots/pzopt-options.png, quit 2 s after.
+local optionsCheck = nil
+
+local function optionsTick()
+    local c = optionsCheck
+    local ms = MainScreen.instance
+    if not ms or (ms.delay and ms.delay > 0) then return end
+    local now = getTimestampMs()
+    if not c.openedMs then
+        local mo = ms.mainOptions
+        mo:toUI()
+        mo:setVisible(true)
+        local names = {}
+        for _, v in ipairs(mo.tabs.viewList) do table.insert(names, v.name) end
+        local found = mo.tabs:activateView(c.tab)
+        print("[pzopt-harness] options: tabs " .. table.concat(names, " | ") .. "; " .. c.tab .. (found and " shown" or " NOT FOUND"))
+        c.openedMs = now
+    elseif not c.shotMs and now - c.openedMs >= 3000 then
+        getCore():TakeFullScreenshot("pzopt-options.png")
+        print("[pzopt-harness] options: screenshot requested")
+        c.shotMs = now
+    elseif c.shotMs and now - c.shotMs >= 2000 then
+        optionsCheck = false
+        print("[pzopt-harness] options: done, quitting")
+        getCore():quit()
+    end
+end
 
 local function onMainMenuEnter()
     local flags = readFlags()
@@ -59,6 +87,13 @@ local function onMainMenuEnter()
     end
     if flags.consumed and not flags.pad then return end -- Continue already triggered by this process (Lua was reset)
     if flags.pad and pad == false then return end -- pad script done, quitting
+    if flags.options_tab and flags.options_tab ~= "" then
+        if optionsCheck == nil then
+            appendFlag("consumed=1")
+            optionsCheck = { tab = flags.options_tab }
+        end
+        return
+    end
     print("[pzopt-harness] mode=" .. tostring(flags.mode) .. " quit_after=" .. tostring(flags.quit_after))
     if flags.menu_check and flags.menu_check ~= "" and MainScreen.instance then
         -- menu_check=1 (2026-09-23): show and hide the main menu's server settings, sandbox, character creation,
@@ -139,6 +174,11 @@ end
 -- OnFETick is the only per-frame event the main menu fires (OnTickEvenPaused is in-world only,
 -- which is why earlier versions of this file never pressed Continue by themselves)
 local function onFETick()
+    if optionsCheck then
+        local ok, err = pcall(optionsTick)
+        if not ok then print("[pzopt-harness] options: rig error " .. tostring(err)); optionsCheck = false; getCore():quit() end
+        return
+    end
     if pad then padTick() end
     if pending then
         local ms = MainScreen.instance

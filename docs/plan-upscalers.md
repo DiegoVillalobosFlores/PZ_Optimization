@@ -250,3 +250,11 @@ against the matching `ups-off` recording of the same route (overlay panels off).
     `~/Zomboid/pzopt/options.ini` has the maintainer's saved `dlssPreset=default`, which a saved choice keeps): static
     storm + stock fog, alternating runs `fin2-*`: off 415.9 / 416.5 fps (p99 5.0 / 4.8 ms), DLSS 523.6 / 518.7 fps
     (p99 4.4 / 4.4 ms): **+25.2 %** with a lower p99.
+- 2026-09-24 00:10 — **DLAA** (`upscalerQuality=native`, DLSS at the render size = the screen size) after this pass,
+  static storm + stock fog (`dlaa-*`): off 383.3 fps, DLAA preset E 279.7 (−27 %), DLAA K 226.2 (−41 %); E makes DLAA
+  24 % faster than the old default. DLAA is an image-quality mode and costs the network on top of a full-size frame.
+  **Showcase** `docs/media/storm-fog-stock-vs-optimized-vs-dlss.mp4` (5120x2560 AV1 HDR, 31 s, not committed: 227 MB;
+  `harness/stitch-tri.sh stormfog` over runs `tri-stormfog-{stock,opt,dlss}`: storm + heavy fog, zoom 1, walking 2
+  tiles/s while the facing turns, overlay + profiler + JFR on every panel): stock 234.9 fps (p99 11.7 ms), optimized
+  477.8 (6.3), optimized + DLSS quality preset E 500.6 (5.8, +4.8 % over optimized; the fog pass already took the
+  per-pixel fog cost that DLSS saves most on).

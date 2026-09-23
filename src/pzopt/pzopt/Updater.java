@@ -307,29 +307,34 @@ public final class Updater {
       if (r.zipUrl.isEmpty()) {
          throw new IOException("the release has no download url");
       }
-      HttpRequest req = HttpRequest.newBuilder(URI.create(r.zipUrl)).timeout(Duration.ofMinutes(10))
+      fetch(r.zipUrl, r.zipSize, zip, p -> progress = p);
+   }
+
+   /** Downloads {@code url} to {@code out}, reporting 0..100 (99 until the last byte is in); checks the length. */
+   static void fetch(String url, long expectedSize, Path out, java.util.function.IntConsumer progressOut) throws Exception {
+      HttpRequest req = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofMinutes(10))
             .header("User-Agent", "PZ_Optimization-updater").header("Accept", "application/octet-stream").GET().build();
       HttpResponse<InputStream> resp = client().send(req, HttpResponse.BodyHandlers.ofInputStream());
       if (resp.statusCode() != 200) {
          throw new IOException("download returned HTTP " + resp.statusCode());
       }
-      long total = resp.headers().firstValueAsLong("Content-Length").orElse(r.zipSize);
+      long total = resp.headers().firstValueAsLong("Content-Length").orElse(expectedSize);
       long done = 0;
       byte[] buf = new byte[1 << 16];
-      try (InputStream in = resp.body(); var out = Files.newOutputStream(zip)) {
+      try (InputStream in = resp.body(); var o = Files.newOutputStream(out)) {
          int n;
          while ((n = in.read(buf)) > 0) {
-            out.write(buf, 0, n);
+            o.write(buf, 0, n);
             done += n;
             if (total > 0) {
-               progress = (int) Math.min(99, done * 100 / total);
+               progressOut.accept((int) Math.min(99, done * 100 / total));
             }
          }
       }
       if (total > 0 && done != total) {
          throw new IOException("download truncated at " + done + " of " + total + " bytes");
       }
-      progress = 100;
+      progressOut.accept(100);
    }
 
    /**
@@ -496,7 +501,7 @@ public final class Updater {
       return HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).connectTimeout(Duration.ofSeconds(15)).build();
    }
 
-   private static String get(String url, String accept) throws Exception {
+   static String get(String url, String accept) throws Exception {
       HttpRequest req = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30))
             .header("User-Agent", "PZ_Optimization-updater").header("Accept", accept).GET().build();
       HttpResponse<String> resp = client().send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));

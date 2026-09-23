@@ -2044,6 +2044,48 @@ local function addProfilerButtons(self, splitpoint, y)
     end
 end
 
+-- "Install DLSS files": the natives DLSS needs that a release does not carry (pzopt.UpscalerDeps, Linux x86-64 with
+-- an RTX card). The button's title follows the Java side's state; every title is listed so the layout reserves
+-- the widest one.
+local DEPS_TITLES = {
+    missing = "Install DLSS files", error = "Retry the DLSS files download", checking = "Checking the DLSS files...",
+    idle = "Checking the DLSS files...", downloading = "Downloading the DLSS files 100 %", installing = "Installing the DLSS files...",
+    done = "DLSS files installed: restart the game", installed = "DLSS files installed", unsupported = "DLSS files: not available here",
+}
+local DEPS_TIP = "Downloads the two native files NVIDIA DLSS needs into the game's natives folder (the pzopt shim and NVIDIA's "
+    .. "DLSS library; releases do not carry them) and checks each one's checksum. Linux with an NVIDIA RTX card only; "
+    .. "FSR 1.0 needs no files. Then pick Upscaler: dlss above and restart the game."
+
+local function addUpscalerDepsButton(self, splitpoint, y)
+    local b = self:addButton(splitpoint, y, DEPS_TITLES.checking)
+    b.target = self
+    b.onclick = function()
+        local s = perf():getPzoptUpscalerDepsState()
+        if s == "missing" or s == "error" then perf():pzoptUpscalerDepsInstall() end
+    end
+    b:setEnable(false)
+    pcall(function() perf():pzoptUpscalerDepsCheck() end)
+    local stockUpdate = b.update
+    b.update = function(o)
+        stockUpdate(o)
+        local ok, s = pcall(function() return perf():getPzoptUpscalerDepsState() end)
+        if not ok then return end
+        local title = DEPS_TITLES[s] or DEPS_TITLES.checking
+        if s == "downloading" then
+            title = "Downloading the DLSS files " .. tostring(perf():getPzoptUpscalerDepsProgress()) .. " %"
+        end
+        if o.title ~= title then
+            o:setTitle(title)
+            o:setWidthToTitle()
+        end
+        local enable = s == "missing" or s == "error"
+        if o.enable ~= enable then o:setEnable(enable) end
+        local msg = perf():getPzoptUpscalerDepsMessage()
+        o.tooltip = msg ~= "" and (DEPS_TIP .. " Now: " .. msg .. ".") or DEPS_TIP
+    end
+    return b
+end
+
 -- A section heading: a rule that stops short of the preview panel and the title above the label column.
 local function addSectionLine(self, y, text, x0, width)
     local spacing = MainOptions.style.borderSpacing
@@ -2078,6 +2120,9 @@ local function layout(self, comboWidth)
     for _, title in ipairs({ "Enable all (recommended defaults)", "Disable all (stock game)", PROFILER_RESET }) do
         controlW = math.max(controlW, getTextManager():MeasureStringX(UIFont.Small, title) + 24)
     end
+    for _, title in pairs(DEPS_TITLES) do
+        controlW = math.max(controlW, getTextManager():MeasureStringX(UIFont.Small, title) + 24)
+    end
     for _, profile in ipairs(PROFILES) do
         controlW = math.max(controlW, getTextManager():MeasureStringX(UIFont.Small, profile.button) + 24)
     end
@@ -2094,7 +2139,7 @@ end
 -- `panel` / `options` / `search` / `preview` name the MainOptions fields that hold the page's parts.
 local PAGES = {
     {
-        tab = TAB, sections = SECTIONS, master = MASTER, buttons = addAllButtons,
+        tab = TAB, sections = SECTIONS, master = MASTER, buttons = function(o, splitpoint, y) addAllButtons(o, splitpoint, y); addUpscalerDepsButton(o, splitpoint, y) end,
         panel = "pzoptPanel", options = "pzoptOptions", search = "pzoptSearch", preview = "pzoptPreview",
         headline = function(p)
             return "All optimizations (since this boot: " .. (p:isPzoptEnabled() and "on" or "OFF: the game is running stock") .. ")"

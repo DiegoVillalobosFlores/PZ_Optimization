@@ -196,6 +196,29 @@ public final class PerformanceSettings {
       return pzopt.Updater.install();
    }
 
+   // pzopt: the Optimizations tab's "Install DLSS files" button polls pzopt.UpscalerDeps through these: one check
+   // of what this machine needs, then the download into natives/ on a daemon thread; states in UpscalerDeps.State.
+   public void pzoptUpscalerDepsCheck() {
+      pzopt.UpscalerDeps.check();
+   }
+
+   /** "idle", "checking", "unsupported", "missing", "installed", "downloading", "installing", "done" or "error". */
+   public String getPzoptUpscalerDepsState() {
+      return pzopt.UpscalerDeps.state();
+   }
+
+   public String getPzoptUpscalerDepsMessage() {
+      return pzopt.UpscalerDeps.message();
+   }
+
+   public int getPzoptUpscalerDepsProgress() {
+      return pzopt.UpscalerDeps.progress();
+   }
+
+   public boolean pzoptUpscalerDepsInstall() {
+      return pzopt.UpscalerDeps.install();
+   }
+
    // pzopt: the "Performance overlay" item of the main and pause menus (media/lua/client/pzopt/pzopt_mainscreen_overlay.lua),
    // the same toggle as the key binding; with overlaySampling off the toggle shows the restart notice instead.
    public void togglePzoptOverlay() {

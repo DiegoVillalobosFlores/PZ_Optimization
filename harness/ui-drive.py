@@ -45,12 +45,30 @@ def screenshot(path=SHOT):
     return path
 
 
+def quiet_notifications(reason):
+    """Plasma's Do Not Disturb for as long as this process lives (the inhibition belongs to our D-Bus
+    connection). A popup over the native confirm dialog put its lines into the OCR and Jev judged the
+    screen 0.34 (job 1776, 2026-09-24: the queue's own "job started" toast for a Mac job). Critical
+    notifications still show (the queue's repeated overrun); the step re-check covers those."""
+    try:
+        import dbus
+        bus = dbus.SessionBus()
+        dbus.Interface(bus.get_object("org.freedesktop.Notifications", "/org/freedesktop/Notifications"),
+                       "org.freedesktop.Notifications").Inhibit("pzopt-ui-drive", reason, {})
+        return bus
+    except Exception as e:  # no session bus / no dbus-python: run anyway, the re-check still applies
+        print(f"notifications not inhibited ({e})")
+        return None
+
+
 def active_window():
     try:
         return subprocess.run(["xdotool", "getactivewindow", "getwindowname"], capture_output=True, text=True, timeout=5).stdout.strip()
     except subprocess.SubprocessError:
         return ""
 
+
+STEP_RECHECK = 12  # s; Plasma shows a normal notification ~5 s, longer while the pointer is over it
 
 OCR_UP = 2  # the game's UI text is ~20 px tall at 5120x2160: inverted (dark on light) and doubled it reads cleanly
 
@@ -276,6 +294,7 @@ def main(argv):
         if not notes:
             sys.exit("workshop needs --notes")
         failed = []
+        dnd = None if screens is not None else quiet_notifications("Steam Workshop upload driven by OCR")  # noqa: F841 (held)
         log_start = len(log_lines())
         steps = workshop_steps(notes, log_start)
         for n, step in enumerate(steps):
@@ -286,7 +305,9 @@ def main(argv):
                     continue
             if step.get("wait_before") and not screen:
                 time.sleep(step["wait_before"])
-            deadline = time.time() + step.get("poll", 0)
+            # every failed check returns before its click, so looking again is safe: a popup or a
+            # slow redraw gets STEP_RECHECK seconds to clear before the sequence stops
+            deadline = time.time() + step.get("poll", STEP_RECHECK)
             while True:
                 ok, detail = run_step(step, opts, screen)
                 print(detail)

@@ -10,7 +10,10 @@ OUT="$REPO/build/tests"
 rm -rf "$OUT"; mkdir -p "$OUT"
 javac --release 25 -nowarn -cp "$REPO/build/classes:$JAR" -d "$OUT" $(find "$REPO/tests" -name '*.java')
 fail=0
+# never the player's Zomboid/pzopt/options.ini: a saved menu choice (dlssPreset=e on this machine, 2026-09-24) made
+# UpscalerTest read a non-default Config value and fail the release; tests that need the file set their own path
+NO_USER_OPTIONS="$OUT/no-user-options.ini"
 for t in $(cd "$OUT" && find . -name '*Test.class' | sed 's|^\./||;s|\.class$||;s|/|.|g' | sort); do
-  if ! java -Dpzopt.dev=true -cp "$OUT:$REPO/build/classes:$JAR" "$t"; then echo "FAILED: $t" >&2; fail=1; fi
+  if ! java -Dpzopt.dev=true -Dpzopt.userOptionsFile="$NO_USER_OPTIONS" -cp "$OUT:$REPO/build/classes:$JAR" "$t"; then echo "FAILED: $t" >&2; fail=1; fi
 done
 exit $fail

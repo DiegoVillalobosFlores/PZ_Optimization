@@ -158,6 +158,7 @@ public final class Harness {
    private static int leg = 0;
    private static float legDone = 0f;
    private static float x, y;
+   private static int routeZ; // the level the bench route walks on (upstairs=Z moves it)
    private static float startX, startY;
    private static int chunksAtStart;
    private static long runStartNs;
@@ -565,7 +566,7 @@ public final class Harness {
             boolean holding = leg >= legs.size() && holdSecs > 0f;
             if (!holding && ((int)x != p.getXi() || (int)y != p.getYi())) {
                // no teleports during the hold: the player may walk away from the end square (manual tests)
-               p.teleportTo((int)x, (int)y, 0);
+               p.teleportTo((int)x, (int)y, routeZ);
             }
             if (turnDegPerSec != 0f) {
                // spin the facing so the vision cone, lighting cone and buildings-in-front scans keep changing
@@ -953,6 +954,7 @@ public final class Harness {
     */
    // road following: heading from the vehicle's own motion, road centre sampled ahead of it
    private static float hdgX = 1f, hdgY = 0f;
+   private static final float LINE_PREVIEW_S = 0.6f; // wide-street lane keeping: seconds of lateral drift the target leads by
    private static float lastRoadOffset;
    private static float roadOffsetFiltered, roadOffsetRate;
    private static int noRoadFrames;
@@ -1048,8 +1050,14 @@ public final class Harness {
       if (max - min >= 13) {
          // street all across the scan (a wide junction): steer back to the route line instead of holding course. Holding
          // kept the heading error of the last curve: on the Dell (~30 fps) the car drifted 8 tiles off the line through the
-         // wide stretch after the start, overcorrected at 100 km/h and ended in a yard (2026-09-22, three drive timeouts)
-         return Math.max(-3f, Math.min(3f, -lateralError()));
+         // wide stretch after the start, overcorrected at 100 km/h and ended in a yard (2026-09-22, three drive timeouts).
+         // Aim at where the car will be LINE_PREVIEW_S from now (the lateral velocity from its heading), not where it is:
+         // on position alone a start yaw of a few degrees went uncorrected until the car was tiles off the line, and past
+         // the +-3 clamp the target stopped moving, which removed the damping; the car swung +10 / -8 tiles across the
+         // road at 100 km/h and hit the north side at x~8120 (2026-09-23, half the upscaler drives of the evening).
+         float kmh = Math.max(0f, vehicle.getCurrentSpeedKmHour());
+         float lateralVelocity = kmh / 3.6f * (headingX != 0 ? headingX * hdgY : -headingY * hdgX); // tiles/s, + = drifting right
+         return Math.max(-3f, Math.min(3f, -(lateralError() + LINE_PREVIEW_S * lateralVelocity)));
       }
       return (min + max) / 2f;
    }
@@ -1179,6 +1187,9 @@ public final class Harness {
                zombie.iso.IsoGridSquare sq = cell.getGridSquare(x, y, z);
                if (sq == null || sq.getFloor() == null || !sq.isFree(false) || sq.getRoom() == null) continue;
                p.teleportTo(x + 0.5F, y + 0.5F, z);
+               Harness.x = x + 0.5F; // the route continues from here, on this level (its teleports would put the player back)
+               Harness.y = y + 0.5F;
+               routeZ = z;
                Log.info("harness: upstairs: moved the player to " + x + "," + y + "," + z + " (room " + sq.getRoom().getName() + ", " + r + " tiles from " + px + "," + py + ")");
                return;
             }

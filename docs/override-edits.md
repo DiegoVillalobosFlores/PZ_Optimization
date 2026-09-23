@@ -2420,6 +2420,15 @@ float viewport back (DLSS), as after a model draw. Screenshots: runs `vcone2-*` 
 fix vs no upscaler; the stock value's diff against no upscaler shows the straight-edged cone wedges, the fix's diff
 only cloud-shadow noise). With the upscaler off both hooks are no-ops.
 
+### zombie.iso.sprite.IsoCursor (new override, 2026-09-23, upscaling)
+
+The aiming cursor (`IsoCursorShader`, shader `isocursor`) colours itself with the inverse of the world under it:
+`accept` maps the cursor's screen rectangle into the offscreen world texture as `x / width, y / height` of that
+texture. Under an upscaler the world image fills only the scaled rectangle of the texture (every mode keeps it
+there; fsr1 / dlss draw a separate resolved texture), so the cursor read the world from a point the render scale
+away and took the wrong colour. The two sizes it divides by are divided by `RenderScale.scale()` (1 when the
+upscaler is off, i.e. stock). `IsoReticle` has the same mapping but its shader never samples the world texture.
+
 ## zombie.characters.IsoZombie (fifth edit, 2026-09-22, the flat draw of the horde's zombies)
 
 New `pzoptRenderFlat(x, y, z, col)` (`zombieAtlasFast`), called by `FBORenderCell.renderMovingObject` in place of

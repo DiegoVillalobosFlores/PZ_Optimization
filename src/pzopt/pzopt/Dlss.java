@@ -94,6 +94,9 @@ final class Dlss {
    private static int inputsProgram;
    private static int[] inputsUniforms;
    private static int sceneDepthFbo = -1, sceneDepthTex; // the world framebuffer the depth attachment was last queried for
+   private static int directFbo; // dlssDirectColor: the world framebuffer whose colour attachment is a DLSS colour image now
+   private static int directTex; // ... which image
+   private static boolean directThisFrame; // the frame being resolved was drawn straight into its colour image
    private static int mvDepthStencilTex; // the world depth-stencil texture attached to mvFbo for the stencil-masked object rects
 
    private static void select(int k) {
@@ -391,12 +394,15 @@ final class Dlss {
       GL11.glDepthMask(false);
       GL11.glColorMask(true, true, true, true);
 
-      // 1. colour: the low-res region straight into the shared colour image
-      GpuSections.markNow("dlss.color", false);
-      GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, worldFbo);
-      GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, colorFbo);
-      GL30.glBlitFramebuffer(r[0], r[1], r[0] + inW, r[1] + inH, 0, 0, inW, inH, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
-      GpuSections.markNow("dlss.color", true);
+      // 1. colour: the low-res region straight into the shared colour image (drawn there already with dlssDirectColor)
+      boolean direct = detachDirectColor();
+      if (!direct) {
+         GpuSections.markNow("dlss.color", false);
+         GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, worldFbo);
+         GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, colorFbo);
+         GL30.glBlitFramebuffer(r[0], r[1], r[0] + inW, r[1] + inH, 0, 0, inW, inH, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
+         GpuSections.markNow("dlss.color", true);
+      }
 
       // 2. depth and camera motion vectors: one full-rect pass into both images
       GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, quadVbo);
@@ -549,9 +555,10 @@ final class Dlss {
    }
 
    /**
-    * GL waits for DLSS. The commands after the wait (the composite, the UI) sit in the driver's command buffer until
-    * its next flush, so the GPU idled ~0.2 ms after every evaluation (devDlssGaps, 2026-09-23); dlssFlushAfterWait
-    * submits the wait at once so the GL work queued behind it starts as soon as the semaphore signals.
+    * GL waits for DLSS. GL resumes 0.15-0.2 ms after the evaluation's last Vulkan timestamp (devDlssGaps, 2026-09-23);
+    * flushing right after the wait (dlssFlushAfterWait) or after the composite, or naming only the output image in
+    * the wait, changed neither that gap nor the frame rate: the GL work behind the wait is not what is late. The
+    * likeliest reader is the GPU serving other channels (the compositor) once GL blocks, work off mode does too.
     */
    private static void waitDone(int semaphore, int[] images) {
       if (Config.DLSS_WAIT_OUTPUT_ONLY) {
@@ -632,6 +639,44 @@ final class Dlss {
       return objectRects;
    }
 
+   /**
+    * dlssDirectColor, render thread, at every scaled start of the world frame (the world framebuffer bound): its
+    * colour attachment becomes this frame's DLSS colour image, which has exactly the scaled viewport's size (player
+    * 0 only), so the resolve needs no copy. The stock texture is attached back before the resolve
+    * ({@link #detachDirectColor}); until then nothing samples the world colour (the cursor reads the resolved output,
+    * Upscaler.cursorBackground).
+    */
+   static void attachDirectColor(int worldFbo) {
+      if (!Config.DLSS_DIRECT_COLOR || !ready || !"dlss".equals(RenderScale.mode()) || RenderScale.worldPassPlayer() != 0 || IsoPlayer.numPlayers > 1) {
+         return;
+      }
+      int image = setTex[current][0];
+      if (image == 0 || directFbo == worldFbo && directTex == image) {
+         return; // already (the world frame restarts after every chunk bake)
+      }
+      GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, image, 0);
+      directFbo = worldFbo;
+      directTex = image;
+   }
+
+   /** Puts the world framebuffer's own colour texture back; true when this frame was drawn into the DLSS image. */
+   static boolean detachDirectColor() {
+      if (directFbo == 0) {
+         return false;
+      }
+      TextureFBO world = Core.getInstance().getOffscreenBuffer();
+      boolean drewHere = world != null && world.getBufferId() == directFbo && directTex == setTex[current][0];
+      int previous = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+      GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, directFbo);
+      if (world != null && world.getBufferId() == directFbo) {
+         GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, ((Texture)world.getTexture()).getID(), 0);
+      }
+      GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, previous);
+      directFbo = 0;
+      directTex = 0;
+      return drewHere;
+   }
+
    /** The world framebuffer's depth attachment when it is a texture (FogPass.sceneDepthAsTexture), else 0. */
    private static int sceneDepthTexture(int worldFbo) {
       if (worldFbo == sceneDepthFbo) {
@@ -652,6 +697,7 @@ final class Dlss {
    }
 
    private static void releaseGl() {
+      detachDirectColor();
       for (int k = 0; k < 2; k++) {
          select(k);
          for (int i = 0; i < 4; i++) {

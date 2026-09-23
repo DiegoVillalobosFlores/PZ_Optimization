@@ -181,6 +181,7 @@ public final class RenderScale {
       frameJitterX = jitterX;
       frameJitterY = jitterY;
       applyWorldViewport(player);
+      Dlss.attachDirectColor(worldFboId); // dlssDirectColor: the world draws straight into the DLSS colour image
    }
 
    /**

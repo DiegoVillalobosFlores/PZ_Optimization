@@ -175,9 +175,9 @@ against the matching `ups-off` recording of the same route (overlay panels off).
     whole-log 774 fps is mostly a parked car; with it every upscaler looked slower than off. `dg-off-2` (route
     complete) is the drive reference, and bicubic at 99 % (`dg-bicubic-99`, 464 fps) equals it: the scaled pass
     costs nothing by itself.
-  - **Where the frame goes.** Drive (E:1200, 120 km/h, zoom 2.5): off 468 fps, bicubic 67 % 530 (+13 %), fsr1 486
-    (+4 %), bicubic 50 % 646; dlss E 327, dlss default (K) 249. Storm + fog spinning route: off 266, bicubic 321
-    (+21 %), fsr1 290, dlss E 226, dlss K 186. So in the moving scenes even a free upscaler gains 13–21 % at
+  - **Where the frame goes.** Drive (E:1200, 120 km/h, zoom 2.5): off 468 fps, fsr1 486 (+4 %), bicubic 50 % 646;
+    dlss E 327, dlss default (K) 249 (bicubic 67 %, `dl1-bicubic-q`, crashed at t=32 s: re-run below). Storm + fog spinning route: off 266, bicubic 321
+    (+21 %), fsr1 290, dlss E 226, dlss K 186. So in the moving scenes even a free upscaler gains ~20 % at
     quality: most of the world pass does not follow the render resolution. Per frame (GPU sections): chunk bakes
     (world pixels whatever the zoom or scale; lightning / light re-bakes are paced per second, so their per-frame
     share grows as fps falls) and the chunk composite, which shrinks only 710 → 605 us for 44 % of the pixels
@@ -191,9 +191,13 @@ against the matching `ups-off` recording of the same route (overlay panels off).
     blit, depth pass, motion pass; the depth and motion passes are now one two-target pass); hand-over GL → Vulkan
     12 us; **Vulkan → GL 0.19–0.21 ms of idle GPU after every evaluation**. The render thread returns from
     `glWaitSemaphoreEXT` in 8 us, so the wait is on the GPU side: the GL commands behind it (the composite, the UI)
-    stay in the driver's command buffer until its next flush. `dlssFlushAfterWait` (default on) flushes right after
-    the wait; A/B runs `sw3-*` pending (the desktop was locked and Steam showed a blocking cloud-sync dialog from
-    09:53; resubmitted with `--launcher direct`).
+    stay in the driver's command buffer until its next flush. A/B at 22:00 (`sw3-*`, E at 67 % output):
+    flush right after the wait 512 fps (gap 174 us), also after the composite 506 (204), the wait naming only the
+    output image 506 (143), no flush 499 (148) — all one noise band, the gap unmoved. So the GL work behind the wait
+    is not what is late; the GPU serves other channels once GL blocks (Xwayland's window copy shows up in `nvidia-smi
+    pmon` at ~12 % now and then), which is not recoverable from inside the game. `dlssFlushAfterWait` stays an A/B
+    key, default off. (The desktop was locked and Steam showed a blocking cloud-sync dialog 09:53–22:00; these and
+    later runs use `--launcher direct`.)
   - **Tried and rejected, measured**: one-frame pipelining (`dlssPipeline`, two image sets, the composite shows the
     previous evaluation): 241 vs 244 fps on the drive — GL and Vulkan are separate GPU channels that time-slice,
     the evaluation's wall time stretched to 2.7 ms, no overlap is gained. Auto-exposure off (`dlssAutoExposure`,

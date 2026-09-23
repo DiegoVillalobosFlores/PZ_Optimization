@@ -52,6 +52,7 @@ PzoptOptionClasses = {
     devWorldSoundTiming = { "WorldSoundManager", "pzopt.Scene" },
     dlssAutoExposure = { "pzopt.Dlss" },
     dlssDepthInverted = { "pzopt.Dlss" },
+    dlssDirectColor = { "pzopt.Dlss" },
     dlssFlushAfterComposite = { "pzopt.Upscaler" },
     dlssFlushAfterWait = { "pzopt.Dlss" },
     dlssJitter = { "pzopt.Dlss" },

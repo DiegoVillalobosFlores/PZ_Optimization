@@ -85,6 +85,22 @@ public final class Upscaler {
       out[0] = Math.round(sx * fx); out[1] = Math.round(sy * fy); out[2] = Math.round(sw * fx); out[3] = Math.round(sh * fy);
    }
 
+   /**
+    * The texture the aiming cursor reads the world under it from (IsoCursor), and the factor from screen pixels to
+    * that texture's pixels: the resolved output when there is one (fsr1 / dlss: the image on screen, and with
+    * dlssDirectColor the only one), else the offscreen texture whose scaled rectangle holds the world.
+    */
+   public static Texture cursorBackground(Texture offscreen) {
+      return RenderScale.active() && drawsOutput() && OUTPUT.hasTexture() ? OUTPUT : offscreen;
+   }
+
+   public static float cursorBackgroundScale(Texture background) {
+      if (background == OUTPUT) {
+         return (float)OUTPUT.getWidthHW() / Core.width;
+      }
+      return RenderScale.scale();
+   }
+
    /** The size the screen shader's TextureSize must report for the composite texture, or null for the stock one. */
    public static int[] compositeTextureSize() {
       if (!RenderScale.active() || !drawsOutput() || !OUTPUT.hasTexture()) {
@@ -156,6 +172,7 @@ public final class Upscaler {
             return;
          }
       }
+      Dlss.detachDirectColor(); // a DLSS that fell back this session must not leave the world drawing into its image
       if (!"fsr1".equals(m)) {
          return;
       }

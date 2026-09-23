@@ -56,6 +56,7 @@ import zombie.vehicles.BaseVehicle;
  *                      touch Zomboid/pzopt-shot.now so run.sh can take a desktop capture too (artifact checks)
  *   find     curtains  dev: at route start list the curtains within 100 tiles (type, open state, attached window,
  *                      room) so a screenshot run can be started inside such a room with start=X,Y (issue #4)
+ *   upstairs Z         dev: at route start move the player to the nearest loaded indoor square at level Z (issue #12)
  *   close_curtains true dev: at route start close every open curtain in that range through IsoCurtain.ToggleDoor
  *                      (map curtains always load open; the bench save is a copy, nothing persists)
  *   route_start_epoch  unix seconds: do not start the route before this instant (puts the route on the
@@ -472,6 +473,10 @@ public final class Harness {
                boolean closeCurtains = "true".equals(HarnessFlags.get("close_curtains", "false"));
                if (closeCurtains || "curtains".equals(HarnessFlags.get("find", ""))) {
                   findCurtains(p, closeCurtains); // dev: curtain screenshot rig (issue #4)
+               }
+               int upstairs = Integer.parseInt(HarnessFlags.get("upstairs", "0").trim());
+               if (upstairs > 0) {
+                  goUpstairs(p, upstairs); // dev: upper-floor rig (issue #12, FSR black squares upstairs)
                }
                Scene.routeStart(nowNs);
                chunksAtStart = Stats.chunkCount();
@@ -1156,6 +1161,30 @@ public final class Harness {
       float distance = 0f;
       for (float[] leg : legs) distance += leg[2];
       return distance;
+   }
+
+   /**
+    * Dev flag upstairs=Z (issue #12: black squares with FSR once the player is on an upper floor): at route start
+    * move the player to the loaded square nearest to it at level Z that has a floor and room to stand, so the
+    * route / hold / shot that follows is seen from that floor (the cutaways, the upper-level chunk textures and
+    * the view cone of an upper floor). Logs where it went, or that no such square was loaded.
+    */
+   private static void goUpstairs(IsoPlayer p, int z) {
+      zombie.iso.IsoCell cell = zombie.iso.IsoWorld.instance.currentCell;
+      int px = p.getXi(), py = p.getYi();
+      for (int r = 0; r <= 60; r++) {
+         for (int y = py - r; y <= py + r; y++) {
+            for (int x = px - r; x <= px + r; x++) {
+               if (Math.max(Math.abs(x - px), Math.abs(y - py)) != r) continue; // the ring at distance r
+               zombie.iso.IsoGridSquare sq = cell.getGridSquare(x, y, z);
+               if (sq == null || sq.getFloor() == null || !sq.isFree(false) || sq.getRoom() == null) continue;
+               p.teleportTo(x + 0.5F, y + 0.5F, z);
+               Log.info("harness: upstairs: moved the player to " + x + "," + y + "," + z + " (room " + sq.getRoom().getName() + ", " + r + " tiles from " + px + "," + py + ")");
+               return;
+            }
+         }
+      }
+      Log.warn("harness: upstairs: no loaded square with a floor at level " + z + " within 60 tiles of " + px + "," + py);
    }
 
    /**

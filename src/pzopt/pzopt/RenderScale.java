@@ -128,6 +128,11 @@ public final class RenderScale {
       return scaledView() ? screenPixels * scale() : screenPixels;
    }
 
+   /** The view-cone blur's displaySize (VisibilityPolygon2): scaled like its screenSize / displayOrigin inside the scaled world pass. */
+   public static float visBlurPx(float screenPixels) {
+      return Config.DEV_UPSCALER_STOCK_VIS_BLUR ? screenPixels : viewPx(screenPixels);
+   }
+
    static int pxFloor(int screenPixels) {
       return (int)(screenPixels * scale());
    }

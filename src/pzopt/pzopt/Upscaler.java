@@ -70,6 +70,21 @@ public final class Upscaler {
       return OUTPUT;
    }
 
+   /**
+    * The source rectangle the composite quad samples from {@link #output()} for a player's screen rectangle: the
+    * rectangle itself when the output is screen-sized, scaled to the output when it is smaller (dlssOutputPct with
+    * the bicubic filter: the stock screen shader's bicubic does the last step).
+    */
+   public static void outputSourceRect(int sx, int sy, int sw, int sh, int[] out) {
+      int ow = OUTPUT.getWidthHW(), oh = OUTPUT.getHeightHW();
+      if (ow == Core.width && oh == Core.height || ow <= 0 || oh <= 0) {
+         out[0] = sx; out[1] = sy; out[2] = sw; out[3] = sh;
+         return;
+      }
+      float fx = (float)ow / Core.width, fy = (float)oh / Core.height;
+      out[0] = Math.round(sx * fx); out[1] = Math.round(sy * fy); out[2] = Math.round(sw * fx); out[3] = Math.round(sh * fy);
+   }
+
    /** The size the screen shader's TextureSize must report for the composite texture, or null for the stock one. */
    public static int[] compositeTextureSize() {
       if (!RenderScale.active() || !drawsOutput() || !OUTPUT.hasTexture()) {
@@ -86,6 +101,20 @@ public final class Upscaler {
          SpriteRenderer.instance.drawGeneric(r);
       }
    }
+
+   /** Game thread, from MultiTextureFBO2.render() after the composite quads: dlssFlushAfterComposite submits them at once. */
+   public static void queueCompositeFlush() {
+      if (Config.DLSS_FLUSH_AFTER_COMPOSITE && RenderScale.active() && "dlss".equals(mode())) {
+         SpriteRenderer.instance.drawGeneric(FLUSH);
+      }
+   }
+
+   private static final TextureDraw.GenericDrawer FLUSH = new TextureDraw.GenericDrawer() {
+      @Override
+      public void render() {
+         GL11.glFlush();
+      }
+   };
 
    public static long resolves() {
       return resolves;
@@ -121,6 +150,9 @@ public final class Upscaler {
          if (!"dlss".equals(mode())) {
             m = mode(); // fell back this frame: resolve it as fsr1 below
          } else {
+            if (Dlss.outputBelowScreen() && "fsr1".equals(Config.DLSS_OUTPUT_FILTER)) {
+               fsr(Dlss.outputTexture(), Dlss.outputRect()); // dlssOutputPct: DLSS wrote a smaller image, EASU + RCAS take it the rest of the way
+            } // else the composite quad's bicubic samples the smaller output directly (outputSourceRect)
             return;
          }
       }
@@ -131,15 +163,17 @@ public final class Upscaler {
       if (world == null || world.getTexture() == null) {
          return;
       }
-      Texture worldTex = (Texture)world.getTexture();
-      int inTexW = worldTex.getWidthHW();
-      int inTexH = worldTex.getHeightHW();
+      fsr(((Texture)world.getTexture()).getID(), null);
+   }
+
+   /** EASU + RCAS from a source texture's rectangle (null = each player's low-res world rectangle) to the screen-size output. */
+   private static void fsr(int sourceTex, int[] sourceRect) {
       int screenW = Core.width;
       int screenH = Core.height;
       if (!ensureTargets(screenW, screenH) || !ensurePrograms()) {
          return;
       }
-      GpuSections.markNow("upscale", false);
+      GpuSections.markNow(sourceRect == null ? "upscale" : "upscale.fsr", false);
       // save what the sprite renderer cares about
       GL11.glGetIntegerv(GL11.GL_VIEWPORT, SAVED_VIEWPORT);
       int previousFbo = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
@@ -164,14 +198,14 @@ public final class Upscaler {
          if (IsoPlayer.players[p] == null && players > 1) {
             continue;
          }
-         int[] in = RenderScale.scaledRect(p);
+         int[] in = sourceRect != null ? sourceRect : RenderScale.scaledRect(p);
          int ox = RenderScale.fullLeft(p), oy = RenderScale.fullTop(p), ow = RenderScale.fullWidth(p), oh = RenderScale.fullHeight(p);
 
          // 1. EASU: world (low-res region) -> texA (full rect)
          GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, fboA);
          GL11.glViewport(ox, oy, ow, oh);
          GL20.glUseProgram(easuProgram);
-         GL11.glBindTexture(GL11.GL_TEXTURE_2D, worldTex.getID());
+         GL11.glBindTexture(GL11.GL_TEXTURE_2D, sourceTex);
          GL20.glUniform1i(easuUniforms[0], 0);
          GL20.glUniform4f(easuUniforms[1], (float)in[2] / ow, (float)in[3] / oh, 0.5F * in[2] / ow - 0.5F, 0.5F * in[3] / oh - 0.5F); // con0
          GL20.glUniform4i(easuUniforms[2], in[0], in[1], in[2], in[3]); // input rect (texels)
@@ -207,7 +241,7 @@ public final class Upscaler {
       GLStateRenderThread.restore();
       SpriteRenderer.ringBuffer.restoreVbos = true;
       SpriteRenderer.ringBuffer.restoreBoundTextures = true;
-      GpuSections.markNow("upscale", true);
+      GpuSections.markNow(sourceRect == null ? "upscale" : "upscale.fsr", true);
    }
 
    private static boolean ensureTargets(int w, int h) {

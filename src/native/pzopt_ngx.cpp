@@ -156,17 +156,29 @@ struct State {
    int ring = 0;
    VkCommandBuffer cmd = VK_NULL_HANDLE; // the one being recorded
    VkFence fence = VK_NULL_HANDLE;
-   VkSemaphore glDone = VK_NULL_HANDLE;   // GL signals, Vulkan waits
-   VkSemaphore dlssDone = VK_NULL_HANDLE; // Vulkan signals, GL waits
-   pzngx_handle glDoneFd = (pzngx_handle)-1, dlssDoneFd = (pzngx_handle)-1;
+   // one or two sets of images + semaphores: two when GL pipelines one frame (it composites the previous frame's
+   // output while this frame's evaluation runs, so it never waits for the evaluation it just submitted)
+   static const int MAX_SETS = 2;
+   int sets = 1;
+   VkSemaphore glDone[MAX_SETS] = {};   // GL signals, Vulkan waits
+   VkSemaphore dlssDone[MAX_SETS] = {}; // Vulkan signals, GL waits
+   pzngx_handle glDoneFd[MAX_SETS] = {(pzngx_handle)-1, (pzngx_handle)-1}, dlssDoneFd[MAX_SETS] = {(pzngx_handle)-1, (pzngx_handle)-1};
    NVSDK_NGX_Parameter* params = nullptr;
    NVSDK_NGX_Handle* feature = nullptr;
-   Image images[4]; // 0 colour, 1 depth, 2 motion vectors, 3 output
+   Image images[4 * MAX_SETS]; // per set: 0 colour, 1 depth, 2 motion vectors, 3 output
    uint32_t inW = 0, inH = 0, outW = 0, outH = 0;
    bool ngxInit = false;
    bool created = false;
    bool firstFrame = true;
    long evaluations = 0;
+   VkQueryPool timestamps = VK_NULL_HANDLE; // two per ring slot around the evaluation (GPU time of DLSS alone)
+   bool slotTimed[RING] = {};
+   float timestampPeriod = 1.0f; // ns per tick
+   double gpuNs = 0.0; // summed evaluation GPU time since the last pzngx_stats
+   long gpuCount = 0;
+   long long slotSeq[RING] = {}; // the evaluation number each ring slot was recorded for
+   static const int TIMES = 64; // raw start / end (ns on the GPU clock) of the last evaluations, by number
+   long long timesSeq[TIMES] = {}, timesStart[TIMES] = {}, timesEnd[TIMES] = {};
    std::wstring dataPath;
    std::wstring dlssDir;
    std::vector<const wchar_t*> pathList;
@@ -192,6 +204,7 @@ struct Fn {
 #endif
    VKF(vkCreateSemaphore); VKF(vkDestroySemaphore);
    VKF(vkCmdPipelineBarrier); VKF(vkResetCommandBuffer); VKF(vkQueueWaitIdle); VKF(vkGetDeviceProcAddr);
+   VKF(vkCreateQueryPool); VKF(vkDestroyQueryPool); VKF(vkCmdResetQueryPool); VKF(vkCmdWriteTimestamp); VKF(vkGetQueryPoolResults);
 } F;
 #undef VKF
 
@@ -420,6 +433,7 @@ int createDevice() {
 #endif
    LOAD_D(vkCreateSemaphore); LOAD_D(vkDestroySemaphore);
    LOAD_D(vkCmdPipelineBarrier); LOAD_D(vkResetCommandBuffer); LOAD_D(vkQueueWaitIdle);
+   LOAD_D(vkCreateQueryPool); LOAD_D(vkDestroyQueryPool); LOAD_D(vkCmdResetQueryPool); LOAD_D(vkCmdWriteTimestamp); LOAD_D(vkGetQueryPoolResults);
    F.vkGetDeviceQueue(S.device, S.queueFamily, 0, &S.queue);
 
    VkCommandPoolCreateInfo pi{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
@@ -441,7 +455,32 @@ int createDevice() {
    }
    S.cmd = S.cmds[0];
    S.fence = S.fences[0];
+   // timestamps (optional: a queue family without timestamp bits just reports no GPU time)
+   if (qs[S.queueFamily].timestampValidBits > 0) {
+      VkPhysicalDeviceProperties2 p2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+      F.vkGetPhysicalDeviceProperties2(S.physical, &p2);
+      S.timestampPeriod = p2.properties.limits.timestampPeriod;
+      VkQueryPoolCreateInfo qp{VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO};
+      qp.queryType = VK_QUERY_TYPE_TIMESTAMP;
+      qp.queryCount = 2 * State::RING;
+      if (F.vkCreateQueryPool(S.device, &qp, nullptr, &S.timestamps) != VK_SUCCESS) S.timestamps = VK_NULL_HANDLE;
+   }
    return 0;
+}
+
+// the evaluation GPU time of a ring slot whose fence has signalled
+void collectTimestamps(int slot) {
+   if (!S.timestamps || !S.slotTimed[slot]) return;
+   uint64_t t[2] = {0, 0};
+   if (F.vkGetQueryPoolResults(S.device, S.timestamps, 2 * slot, 2, sizeof t, t, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT) == VK_SUCCESS && t[1] > t[0]) {
+      S.gpuNs += (double)(t[1] - t[0]) * S.timestampPeriod;
+      S.gpuCount++;
+      int k = (int)(S.slotSeq[slot] % State::TIMES);
+      S.timesSeq[k] = S.slotSeq[slot];
+      S.timesStart[k] = (long long)((double)t[0] * S.timestampPeriod);
+      S.timesEnd[k] = (long long)((double)t[1] * S.timestampPeriod);
+   }
+   S.slotTimed[slot] = false;
 }
 
 uint32_t memoryType(uint32_t bits, VkMemoryPropertyFlags flags) {
@@ -580,8 +619,10 @@ void releaseFeature() {
       S.feature = nullptr;
    }
    for (auto& img : S.images) destroyImage(img);
-   if (S.glDone) { F.vkDestroySemaphore(S.device, S.glDone, nullptr); S.glDone = VK_NULL_HANDLE; }
-   if (S.dlssDone) { F.vkDestroySemaphore(S.device, S.dlssDone, nullptr); S.dlssDone = VK_NULL_HANDLE; }
+   for (int k = 0; k < State::MAX_SETS; k++) {
+      if (S.glDone[k]) { F.vkDestroySemaphore(S.device, S.glDone[k], nullptr); S.glDone[k] = VK_NULL_HANDLE; }
+      if (S.dlssDone[k]) { F.vkDestroySemaphore(S.device, S.dlssDone[k], nullptr); S.dlssDone[k] = VK_NULL_HANDLE; }
+   }
    S.created = false;
 }
 
@@ -669,7 +710,7 @@ static int pzngx_optimal_impl(int q, int outW, int outH, int* inW, int* inH, flo
 /**
  * Creates the shared images (inW x inH colour RGBA8, depth R32F, motion vectors RG16F; outW x outH output RGBA8),
  * the two semaphores and the DLSS feature. flags: bit 0 depth inverted (larger = nearer), bit 1 sharpening,
- * bit 2 auto exposure off (an exposure of 1 is assumed), bit 3 HDR.
+ * bit 2 auto exposure off (an exposure of 1 is assumed), bit 3 HDR, bits 8..15 the render preset, bit 16 two image sets.
  */
 PZNGX_API int pzngx_optimal(int q, int outW, int outH, int* inW, int* inH, float* sharpness) {
    return worker.run([=] { return pzngx_optimal_impl(q, outW, outH, inW, inH, sharpness); });
@@ -687,18 +728,23 @@ static int pzngx_create_impl(int inW, int inH, int outW, int outH, int q, int fl
    S.error.clear();
    if (S.created) releaseFeature();
    S.inW = inW; S.inH = inH; S.outW = outW; S.outH = outH;
-   int rc = createImage(S.images[0], inW, inH, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, false);
+   S.sets = (flags & (1 << 16)) ? 2 : 1;
+   int rc = 0;
+   for (int k = 0; k < S.sets; k++) {
+   Image* im = &S.images[4 * k];
+   rc = createImage(im[0], inW, inH, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, false);
    if (rc) return rc;
-   rc = createImage(S.images[1], inW, inH, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, false);
+   rc = createImage(im[1], inW, inH, VK_FORMAT_R32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, false);
    if (rc) return rc;
-   rc = createImage(S.images[2], inW, inH, VK_FORMAT_R16G16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, false);
+   rc = createImage(im[2], inW, inH, VK_FORMAT_R16G16_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, false);
    if (rc) return rc;
-   rc = createImage(S.images[3], outW, outH, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, true);
+   rc = createImage(im[3], outW, outH, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, true);
    if (rc) return rc;
-   rc = createSemaphore(S.glDone, S.glDoneFd);
+   rc = createSemaphore(S.glDone[k], S.glDoneFd[k]);
    if (rc) return rc;
-   rc = createSemaphore(S.dlssDone, S.dlssDoneFd);
+   rc = createSemaphore(S.dlssDone[k], S.dlssDoneFd[k]);
    if (rc) return rc;
+   }
 
    // the feature: its creation records work into the command buffer
    NVSDK_NGX_DLSS_Create_Params cp{};
@@ -727,10 +773,13 @@ static int pzngx_create_impl(int inW, int inH, int outW, int outH, int q, int fl
    F.vkResetCommandBuffer(S.cmd, 0);
    F.vkBeginCommandBuffer(S.cmd, &bi);
    // the images start UNDEFINED; move them to the layouts GL will be told about at the first signal
-   barrier(S.images[0].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, VK_ACCESS_SHADER_READ_BIT);
-   barrier(S.images[1].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, VK_ACCESS_SHADER_READ_BIT);
-   barrier(S.images[2].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, VK_ACCESS_SHADER_READ_BIT);
-   barrier(S.images[3].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 0, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT);
+   for (int k = 0; k < S.sets; k++) {
+      Image* im = &S.images[4 * k];
+      barrier(im[0].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, VK_ACCESS_SHADER_READ_BIT);
+      barrier(im[1].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, VK_ACCESS_SHADER_READ_BIT);
+      barrier(im[2].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, VK_ACCESS_SHADER_READ_BIT);
+      barrier(im[3].image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL, 0, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT);
+   }
    NVSDK_NGX_Result r = NGX_VULKAN_CREATE_DLSS_EXT1(S.device, S.cmd, 1, 1, &S.feature, S.params, &cp);
    F.vkEndCommandBuffer(S.cmd);
    if (NVSDK_NGX_FAILED(r)) return failNgx("CreateFeature", r);
@@ -753,22 +802,24 @@ PZNGX_API int pzngx_create(int inW, int inH, int outW, int outH, int q, int flag
 
 /** The exported memory handle of an image (0 colour, 1 depth, 2 motion vectors, 3 output): an fd on Linux, a Win32 HANDLE on Windows; GL's import consumes it. */
 PZNGX_API long long pzngx_image_fd(int which) {
-   if (which < 0 || which > 3 || !S.created) return -1;
+   if (which < 0 || which >= 4 * S.sets || !S.created) return -1;
    pzngx_handle fd = S.images[which].fd;
    S.images[which].fd = (pzngx_handle)-1;
    return (long long)(intptr_t)fd;
 }
 
 PZNGX_API long long pzngx_image_bytes(int which) {
-   if (which < 0 || which > 3 || !S.created) return 0;
+   if (which < 0 || which >= 4 * S.sets || !S.created) return 0;
    return (long long)S.images[which].bytes;
 }
 
-/** 0 = the "GL done" semaphore GL signals, 1 = the "DLSS done" semaphore GL waits on; GL's import consumes the handle. */
+/** 2k = set k's "GL done" semaphore GL signals, 2k + 1 = its "DLSS done" semaphore GL waits on; GL's import consumes the handle. */
 PZNGX_API long long pzngx_semaphore_fd(int which) {
-   if (!S.created) return -1;
-   pzngx_handle fd = which == 0 ? S.glDoneFd : S.dlssDoneFd;
-   if (which == 0) S.glDoneFd = (pzngx_handle)-1; else S.dlssDoneFd = (pzngx_handle)-1;
+   int k = which / 2;
+   if (!S.created || which < 0 || k >= S.sets) return -1;
+   pzngx_handle& h = (which & 1) == 0 ? S.glDoneFd[k] : S.dlssDoneFd[k];
+   pzngx_handle fd = h;
+   h = (pzngx_handle)-1;
    return (long long)(intptr_t)fd;
 }
 
@@ -777,8 +828,10 @@ PZNGX_API long long pzngx_semaphore_fd(int which) {
  * scaled by mvScale (1 = already in input pixels, from the current to the previous position), reset = 1 on a cut,
  * sharpness 0..1 (only with the sharpening flag), frameMs the frame time.
  */
-static int pzngx_evaluate_impl(float jitterX, float jitterY, float mvScaleX, float mvScaleY, int reset, float sharpness, float frameMs) {
+static int pzngx_evaluate_impl(float jitterX, float jitterY, float mvScaleX, float mvScaleY, int reset, float sharpness, float frameMs, int set) {
    if (!S.created) return fail("no feature");
+   if (set < 0 || set >= S.sets) return fail("no such image set");
+   Image* im = &S.images[4 * set];
    S.error.clear();
    // the command buffer three frames back must be done before it is re-recorded (the GPU keeps up to three
    // evaluations queued behind the GL work; the CPU never waits for the one it just submitted)
@@ -789,21 +842,26 @@ static int pzngx_evaluate_impl(float jitterX, float jitterY, float mvScaleX, flo
       F.vkWaitForFences(S.device, 1, &S.fence, VK_TRUE, UINT64_MAX);
       S.fencePending[S.ring] = false;
    }
+   collectTimestamps(S.ring);
    F.vkResetFences(S.device, 1, &S.fence);
    F.vkResetCommandBuffer(S.cmd, 0);
    VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
    F.vkBeginCommandBuffer(S.cmd, &bi);
+   if (S.timestamps) {
+      F.vkCmdResetQueryPool(S.cmd, S.timestamps, 2 * S.ring, 2);
+      F.vkCmdWriteTimestamp(S.cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, S.timestamps, 2 * S.ring);
+   }
    // GL left the inputs in SHADER_READ_ONLY and the output in GENERAL (the layouts of its signal); make the writes visible
-   for (int i = 0; i < 3; i++) barrier(S.images[i].image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_MEMORY_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
-   barrier(S.images[3].image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_MEMORY_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT);
+   for (int i = 0; i < 3; i++) barrier(im[i].image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_MEMORY_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT);
+   barrier(im[3].image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_MEMORY_READ_BIT, VK_ACCESS_SHADER_WRITE_BIT);
 
    NVSDK_NGX_VK_DLSS_Eval_Params ep{};
-   ep.Feature.pInColor = &S.images[0].resource;
-   ep.Feature.pInOutput = &S.images[3].resource;
+   ep.Feature.pInColor = &im[0].resource;
+   ep.Feature.pInOutput = &im[3].resource;
    ep.Feature.InSharpness = sharpness;
-   ep.pInDepth = &S.images[1].resource;
-   ep.pInMotionVectors = &S.images[2].resource;
+   ep.pInDepth = &im[1].resource;
+   ep.pInMotionVectors = &im[2].resource;
    ep.InJitterOffsetX = jitterX;
    ep.InJitterOffsetY = jitterY;
    ep.InRenderSubrectDimensions = {S.inW, S.inH};
@@ -813,19 +871,24 @@ static int pzngx_evaluate_impl(float jitterX, float jitterY, float mvScaleX, flo
    ep.InFrameTimeDeltaInMsec = frameMs;
    NVSDK_NGX_Result r = NGX_VULKAN_EVALUATE_DLSS_EXT(S.cmd, S.feature, S.params, &ep);
    // back to the layouts GL expects at its wait
-   barrier(S.images[3].image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT);
+   barrier(im[3].image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_MEMORY_READ_BIT);
+   if (S.timestamps) {
+      F.vkCmdWriteTimestamp(S.cmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, S.timestamps, 2 * S.ring + 1);
+      S.slotTimed[S.ring] = true;
+      S.slotSeq[S.ring] = S.evaluations + 1; // the number this evaluation gets below
+   }
    F.vkEndCommandBuffer(S.cmd);
    if (NVSDK_NGX_FAILED(r)) return failNgx("EvaluateFeature", r);
 
    VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
    VkSubmitInfo si{VK_STRUCTURE_TYPE_SUBMIT_INFO};
    si.waitSemaphoreCount = 1;
-   si.pWaitSemaphores = &S.glDone;
+   si.pWaitSemaphores = &S.glDone[set];
    si.pWaitDstStageMask = &waitStage;
    si.commandBufferCount = 1;
    si.pCommandBuffers = &S.cmd;
    si.signalSemaphoreCount = 1;
-   si.pSignalSemaphores = &S.dlssDone;
+   si.pSignalSemaphores = &S.dlssDone[set];
    VkResult vr = F.vkQueueSubmit(S.queue, 1, &si, S.fence);
    if (vr != VK_SUCCESS) return failVk("vkQueueSubmit (evaluate)", vr);
    S.fencePending[S.ring] = true;
@@ -835,11 +898,39 @@ static int pzngx_evaluate_impl(float jitterX, float jitterY, float mvScaleX, flo
 }
 
 PZNGX_API int pzngx_evaluate(float jitterX, float jitterY, float mvScaleX, float mvScaleY, int reset, float sharpness, float frameMs) {
-   return worker.run([=] { return pzngx_evaluate_impl(jitterX, jitterY, mvScaleX, mvScaleY, reset, sharpness, frameMs); });
+   return worker.run([=] { return pzngx_evaluate_impl(jitterX, jitterY, mvScaleX, mvScaleY, reset, sharpness, frameMs, 0); });
+}
+
+/** pzngx_evaluate on image set `set` (0 or 1, see the create flag bit 16). */
+PZNGX_API int pzngx_evaluate_set(float jitterX, float jitterY, float mvScaleX, float mvScaleY, int reset, float sharpness, float frameMs, int set) {
+   return worker.run([=] { return pzngx_evaluate_impl(jitterX, jitterY, mvScaleX, mvScaleY, reset, sharpness, frameMs, set); });
 }
 
 PZNGX_API long long pzngx_evaluations(void) {
    return S.evaluations;
+}
+
+/** The GPU-clock start / end (ns) of evaluation number `seq` (1-based) once collected; 0 when not (yet) known. */
+PZNGX_API int pzngx_times(long long seq, long long* startNs, long long* endNs) {
+   return worker.run([=] {
+      int k = (int)(seq % State::TIMES);
+      if (S.timesSeq[k] != seq) return -1;
+      *startNs = S.timesStart[k];
+      *endNs = S.timesEnd[k];
+      return 0;
+   });
+}
+
+/** The mean GPU time of the evaluations collected since the last call, in microseconds (-1 when none were timed). */
+PZNGX_API double pzngx_gpu_us(void) {
+   double us = -1.0;
+   worker.run([&us] { // the counters belong to the worker thread
+      if (S.gpuCount > 0) us = S.gpuNs / S.gpuCount / 1000.0;
+      S.gpuNs = 0.0;
+      S.gpuCount = 0;
+      return 0;
+   });
+   return us;
 }
 
 PZNGX_API void pzngx_destroy(void) {
@@ -851,6 +942,7 @@ static int pzngx_shutdown_impl() {
    if (S.params) { NVSDK_NGX_VULKAN_DestroyParameters(S.params); S.params = nullptr; }
    if (S.ngxInit && S.device) { NVSDK_NGX_VULKAN_Shutdown1(S.device); S.ngxInit = false; }
    if (S.device) {
+      if (S.timestamps) { F.vkDestroyQueryPool(S.device, S.timestamps, nullptr); S.timestamps = VK_NULL_HANDLE; }
       for (int i = 0; i < State::RING; i++) if (S.fences[i]) F.vkDestroyFence(S.device, S.fences[i], nullptr);
       if (S.pool) F.vkDestroyCommandPool(S.device, S.pool, nullptr);
       F.vkDestroyDevice(S.device, nullptr);

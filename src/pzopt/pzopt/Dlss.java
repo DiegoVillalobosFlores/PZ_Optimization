@@ -50,17 +50,37 @@ final class Dlss {
 
    private static boolean tried;
    private static boolean ready;
-   private static MethodHandle init, error, optimal, create, imageFd, imageBytes, semaphoreFd, evaluate, destroy;
+   private static MethodHandle init, error, optimal, create, imageFd, imageBytes, semaphoreFd, evaluate, evaluateSet, destroy, gpuUs, times;
+   // devDlssGaps: GL timestamps at the hand-over and after the wait, matched with the evaluation's Vulkan start / end
+   private static final int GAP_RING = 16;
+   private static int[] gapSignalQ, gapResumeQ;
+   private static final long[] gapSeq = new long[GAP_RING];
+   private static long gapInNs, gapOutNs, gapCount;
+   private static MemorySegment gapStart, gapEnd;
+   private static long statFrames, prepNs, evalNs, waitNs, afterNs; // render-thread time per phase since the last stats line
+   private static long lastWaitEndNs;
    private static int inW, inH, outW, outH;
-   private static final int[] tex = new int[4]; // colour, depth, mv, output (GL names of the imported images)
-   private static final int[] mem = new int[4];
-   private static int colorFbo, depthFbo, mvFbo;
+   // one image set, or two with dlssPipeline (GL composites the previous frame's output while this frame's
+   // evaluation runs); the scalar names below are the set being written this frame (select / store)
+   private static int sets = 1;
+   private static final int[][] setTex = new int[2][4];
+   private static final int[][] setMem = new int[2][4];
+   private static final int[] setColorFbo = new int[2], setMvFbo = new int[2], setInputsFbo = new int[2];
+   private static final int[] setSemGl = new int[2], setSemDlss = new int[2], setMvDepthStencil = new int[2];
+   private static int current; // the set this frame writes and evaluates
+   private static int pending = -1; // the set evaluated last frame whose DLSS-done semaphore GL has not waited on yet
+   private static int shown = -1; // the set whose output was last waited on (what the composite shows)
+   private static int[] tex = setTex[0]; // colour, depth, mv, output (GL names of the imported images)
+   private static int[] mem = setMem[0];
+   private static int colorFbo, mvFbo;
+   private static int inputsFbo; // depth (attachment 0) + motion vectors (attachment 1): one pass writes both
    private static int semGlDone, semDlssDone;
-   private static int depthProgram, mvProgram, quadVbo;
-   private static int[] depthUniforms, mvUniforms;
+   private static int quadVbo;
    private static final int[] SAVED_VIEWPORT = new int[4];
    private static final int[] LAYOUTS = new int[4];
    private static final int[] NO_BUFFERS = new int[0];
+   private static final int[] OUT_LAYOUT = {EXTSemaphore.GL_LAYOUT_GENERAL_EXT};
+   private static final int[] OUT_TEX = new int[1];
    private static long frames;
    private static long lastFrameNs;
    private static float lastOffX, lastOffY, lastZoom;
@@ -71,7 +91,30 @@ final class Dlss {
 
    private static int rectProgram;
    private static int[] rectUniforms;
+   private static int inputsProgram;
+   private static int[] inputsUniforms;
+   private static int sceneDepthFbo = -1, sceneDepthTex; // the world framebuffer the depth attachment was last queried for
    private static int mvDepthStencilTex; // the world depth-stencil texture attached to mvFbo for the stencil-masked object rects
+
+   private static void select(int k) {
+      tex = setTex[k];
+      mem = setMem[k];
+      colorFbo = setColorFbo[k];
+      mvFbo = setMvFbo[k];
+      inputsFbo = setInputsFbo[k];
+      semGlDone = setSemGl[k];
+      semDlssDone = setSemDlss[k];
+      mvDepthStencilTex = setMvDepthStencil[k];
+   }
+
+   private static void store(int k) {
+      setColorFbo[k] = colorFbo;
+      setMvFbo[k] = mvFbo;
+      setInputsFbo[k] = inputsFbo;
+      setSemGl[k] = semGlDone;
+      setSemDlss[k] = semDlssDone;
+      setMvDepthStencil[k] = mvDepthStencilTex;
+   }
    private static long objectRects;
 
    /** The frame's resolve (render thread); objects = the frame's per-object motion entries (may be null). */
@@ -129,7 +172,11 @@ final class Dlss {
          semaphoreFd = linker.downcallHandle(lookup.find("pzngx_semaphore_fd").orElseThrow(), FunctionDescriptor.of(ValueLayout.JAVA_LONG, ValueLayout.JAVA_INT));
          evaluate = linker.downcallHandle(lookup.find("pzngx_evaluate").orElseThrow(),
             FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_INT, ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_FLOAT));
+         evaluateSet = lookup.find("pzngx_evaluate_set").map(a -> linker.downcallHandle(a,
+            FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_INT, ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_FLOAT, ValueLayout.JAVA_INT))).orElse(null);
          destroy = linker.downcallHandle(lookup.find("pzngx_destroy").orElseThrow(), FunctionDescriptor.ofVoid());
+         times = lookup.find("pzngx_times").map(a -> linker.downcallHandle(a, FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_LONG, ValueLayout.ADDRESS, ValueLayout.ADDRESS))).orElse(null);
+         gpuUs = lookup.find("pzngx_gpu_us").map(a -> linker.downcallHandle(a, FunctionDescriptor.of(ValueLayout.JAVA_DOUBLE))).orElse(null);
 
          // the GPU the GL context runs on, so the Vulkan device is the same one
          ByteBuffer uuid = BufferUtils.createByteBuffer(16);
@@ -208,8 +255,8 @@ final class Dlss {
       int[] r = RenderScale.scaledRect(0);
       inW = r[2];
       inH = r[3];
-      outW = RenderScale.fullWidth(0);
-      outH = RenderScale.fullHeight(0);
+      outW = outputSize(RenderScale.fullWidth(0));
+      outH = outputSize(RenderScale.fullHeight(0));
       MemorySegment ow = ARENA.allocate(4), oh = ARENA.allocate(4), sh = ARENA.allocate(4);
       int rc = (int)optimal.invokeExact(qualityIndex(), outW, outH, ow, oh, sh);
       if (rc == 0) {
@@ -218,7 +265,8 @@ final class Dlss {
             Log.info("dlss: optimal render size " + ow.get(ValueLayout.JAVA_INT, 0) + "x" + oh.get(ValueLayout.JAVA_INT, 0) + ", ours " + inW + "x" + inH);
          }
       }
-      int flags = (Config.DLSS_DEPTH_INVERTED ? 1 : 0) | (Config.DLSS_SHARPEN ? 2 : 0) | (presetValue() << 8);
+      sets = Config.DLSS_PIPELINE && evaluateSet != null ? 2 : 1;
+      int flags = (Config.DLSS_DEPTH_INVERTED ? 1 : 0) | (Config.DLSS_SHARPEN ? 2 : 0) | (Config.DLSS_AUTO_EXPOSURE ? 0 : 4) | (presetValue() << 8) | (sets == 2 ? 1 << 16 : 0);
       rc = (int)create.invokeExact(inW, inH, outW, outH, qualityIndex(), flags);
       if (rc != 0) {
          RenderScale.fallback("fsr1", "dlss: " + lastError());
@@ -226,70 +274,77 @@ final class Dlss {
       }
       // import the images
       int[] formats = {GL11.GL_RGBA8, GL30.GL_R32F, GL30.GL_RG16F, GL11.GL_RGBA8};
-      for (int i = 0; i < 4; i++) {
-         long fd = (long)imageFd.invokeExact(i);
-         long bytes = (long)imageBytes.invokeExact(i);
-         if (fd < 0 || bytes <= 0) {
-            RenderScale.fallback("fsr1", "dlss: image " + i + " has no exported memory");
+      for (int k = 0; k < sets; k++) {
+         select(k);
+         for (int i = 0; i < 4; i++) {
+            long fd = (long)imageFd.invokeExact(4 * k + i);
+            long bytes = (long)imageBytes.invokeExact(4 * k + i);
+            if (fd < 0 || bytes <= 0) {
+               RenderScale.fallback("fsr1", "dlss: image " + i + " has no exported memory");
+               return false;
+            }
+            mem[i] = EXTMemoryObject.glCreateMemoryObjectsEXT();
+            EXTMemoryObject.glMemoryObjectParameteriEXT(mem[i], EXTMemoryObject.GL_DEDICATED_MEMORY_OBJECT_EXT, GL_TRUE);
+            if (WINDOWS) {
+               org.lwjgl.opengl.EXTMemoryObjectWin32.glImportMemoryWin32HandleEXT(mem[i], bytes, org.lwjgl.opengl.EXTMemoryObjectWin32.GL_HANDLE_TYPE_OPAQUE_WIN32_EXT, fd);
+            } else {
+               EXTMemoryObjectFD.glImportMemoryFdEXT(mem[i], bytes, EXTMemoryObjectFD.GL_HANDLE_TYPE_OPAQUE_FD_EXT, (int)fd);
+            }
+            tex[i] = GL11.glGenTextures();
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, tex[i]);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, EXTMemoryObject.GL_TEXTURE_TILING_EXT, EXTMemoryObject.GL_OPTIMAL_TILING_EXT);
+            int w = i == 3 ? outW : inW, h = i == 3 ? outH : inH;
+            EXTMemoryObject.glTexStorageMem2DEXT(GL11.GL_TEXTURE_2D, 1, formats[i], w, h, mem[i], 0L);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL13.GL_CLAMP_TO_EDGE);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL13.GL_CLAMP_TO_EDGE);
+            int err = GL11.glGetError();
+            if (err != 0) {
+               RenderScale.fallback("fsr1", "dlss: importing image " + i + " failed (GL error 0x" + Integer.toHexString(err) + ")");
+               return false;
+            }
+         }
+         GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+         colorFbo = Upscaler.framebufferOf(tex[0]);
+         mvFbo = Upscaler.framebufferOf(tex[2]);
+         inputsFbo = framebufferOf2(tex[1], tex[2]);
+         if (colorFbo == 0 || mvFbo == 0 || inputsFbo == 0) {
+            RenderScale.fallback("fsr1", "dlss: a framebuffer over an imported image is incomplete");
             return false;
          }
-         mem[i] = EXTMemoryObject.glCreateMemoryObjectsEXT();
-         EXTMemoryObject.glMemoryObjectParameteriEXT(mem[i], EXTMemoryObject.GL_DEDICATED_MEMORY_OBJECT_EXT, GL_TRUE);
-         if (WINDOWS) {
-            org.lwjgl.opengl.EXTMemoryObjectWin32.glImportMemoryWin32HandleEXT(mem[i], bytes, org.lwjgl.opengl.EXTMemoryObjectWin32.GL_HANDLE_TYPE_OPAQUE_WIN32_EXT, fd);
-         } else {
-            EXTMemoryObjectFD.glImportMemoryFdEXT(mem[i], bytes, EXTMemoryObjectFD.GL_HANDLE_TYPE_OPAQUE_FD_EXT, (int)fd);
-         }
-         tex[i] = GL11.glGenTextures();
-         GL11.glBindTexture(GL11.GL_TEXTURE_2D, tex[i]);
-         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, EXTMemoryObject.GL_TEXTURE_TILING_EXT, EXTMemoryObject.GL_OPTIMAL_TILING_EXT);
-         int w = i == 3 ? outW : inW, h = i == 3 ? outH : inH;
-         EXTMemoryObject.glTexStorageMem2DEXT(GL11.GL_TEXTURE_2D, 1, formats[i], w, h, mem[i], 0L);
-         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
-         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
-         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL13.GL_CLAMP_TO_EDGE);
-         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL13.GL_CLAMP_TO_EDGE);
+         // the semaphores
+         semGlDone = EXTSemaphore.glGenSemaphoresEXT();
+         importSemaphore(semGlDone, (long)semaphoreFd.invokeExact(2 * k));
+         semDlssDone = EXTSemaphore.glGenSemaphoresEXT();
+         importSemaphore(semDlssDone, (long)semaphoreFd.invokeExact(2 * k + 1));
          int err = GL11.glGetError();
          if (err != 0) {
-            RenderScale.fallback("fsr1", "dlss: importing image " + i + " failed (GL error 0x" + Integer.toHexString(err) + ")");
+            RenderScale.fallback("fsr1", "dlss: importing the semaphores failed (GL error 0x" + Integer.toHexString(err) + ")");
             return false;
          }
+         mvDepthStencilTex = 0;
+         store(k);
       }
-      GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);
-      colorFbo = Upscaler.framebufferOf(tex[0]);
-      depthFbo = Upscaler.framebufferOf(tex[1]);
-      mvFbo = Upscaler.framebufferOf(tex[2]);
-      if (colorFbo == 0 || depthFbo == 0 || mvFbo == 0) {
-         RenderScale.fallback("fsr1", "dlss: a framebuffer over an imported image is incomplete");
-         return false;
-      }
-      // the semaphores
-      semGlDone = EXTSemaphore.glGenSemaphoresEXT();
-      importSemaphore(semGlDone, (long)semaphoreFd.invokeExact(0));
-      semDlssDone = EXTSemaphore.glGenSemaphoresEXT();
-      importSemaphore(semDlssDone, (long)semaphoreFd.invokeExact(1));
-      int err = GL11.glGetError();
-      if (err != 0) {
-         RenderScale.fallback("fsr1", "dlss: importing the semaphores failed (GL error 0x" + Integer.toHexString(err) + ")");
-         return false;
-      }
+      current = 0;
+      pending = -1;
+      shown = -1;
+      select(0);
       LAYOUTS[0] = EXTSemaphore.GL_LAYOUT_SHADER_READ_ONLY_EXT;
       LAYOUTS[1] = EXTSemaphore.GL_LAYOUT_SHADER_READ_ONLY_EXT;
       LAYOUTS[2] = EXTSemaphore.GL_LAYOUT_SHADER_READ_ONLY_EXT;
       LAYOUTS[3] = EXTSemaphore.GL_LAYOUT_GENERAL_EXT;
       // the passes that fill depth and motion vectors
-      depthProgram = Shaders.program("dlss depth", Upscaler.QUAD_VERT, DEPTH_FRAG);
-      mvProgram = Shaders.program("dlss motion", Upscaler.QUAD_VERT, MV_FRAG);
       rectProgram = Shaders.program("dlss object motion", Upscaler.QUAD_VERT, RECT_FRAG);
-      if (depthProgram == 0 || mvProgram == 0 || rectProgram == 0) {
+      inputsProgram = Shaders.program("dlss depth + motion", Upscaler.QUAD_VERT, INPUTS_FRAG);
+      if (rectProgram == 0 || inputsProgram == 0) {
          RenderScale.fallback("fsr1", "dlss: the depth / motion shaders were refused");
          return false;
       }
-      depthUniforms = new int[]{GL20.glGetUniformLocation(depthProgram, "SceneDepth"), GL20.glGetUniformLocation(depthProgram, "origin"),
-         GL20.glGetUniformLocation(depthProgram, "constantDepth")};
-      mvUniforms = new int[]{GL20.glGetUniformLocation(mvProgram, "cur"), GL20.glGetUniformLocation(mvProgram, "prev"),
-         GL20.glGetUniformLocation(mvProgram, "params")};
       rectUniforms = new int[]{GL20.glGetUniformLocation(rectProgram, "mv")};
+      inputsUniforms = new int[]{GL20.glGetUniformLocation(inputsProgram, "SceneDepth"), GL20.glGetUniformLocation(inputsProgram, "origin"),
+         GL20.glGetUniformLocation(inputsProgram, "constantDepth"), GL20.glGetUniformLocation(inputsProgram, "cur"), GL20.glGetUniformLocation(inputsProgram, "prev"),
+         GL20.glGetUniformLocation(inputsProgram, "params")};
       mvDepthStencilTex = 0;
       quadVbo = GL15.glGenBuffers();
       java.nio.FloatBuffer q = BufferUtils.createFloatBuffer(8);
@@ -308,7 +363,7 @@ final class Dlss {
          return;
       }
       int[] r = RenderScale.scaledRect(0);
-      if (r[2] != inW || r[3] != inH || RenderScale.fullWidth(0) != outW || RenderScale.fullHeight(0) != outH) {
+      if (r[2] != inW || r[3] != inH || outputSize(RenderScale.fullWidth(0)) != outW || outputSize(RenderScale.fullHeight(0)) != outH) {
          // resolution change: rebuild everything
          destroy.invokeExact();
          releaseGl();
@@ -316,10 +371,16 @@ final class Dlss {
             return;
          }
       }
+      select(current);
+      long tStart = System.nanoTime();
+      if (lastWaitEndNs != 0) {
+         afterNs += tStart - lastWaitEndNs; // the render thread from the last wait to this resolve (composite, UI, swap, next world pass)
+      }
       int worldFbo = world.getBufferId();
       PlayerCamera camera = SpriteRenderer.instance.getRenderingPlayerCamera(0);
       float s = RenderScale.scale();
       GpuSections.markNow("upscale", false);
+      GpuSections.markNow("dlss.inputs", false);
       GL11.glGetIntegerv(GL11.GL_VIEWPORT, SAVED_VIEWPORT);
       int previousFbo = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
       GL11.glDisable(GL11.GL_BLEND);
@@ -331,11 +392,13 @@ final class Dlss {
       GL11.glColorMask(true, true, true, true);
 
       // 1. colour: the low-res region straight into the shared colour image
+      GpuSections.markNow("dlss.color", false);
       GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, worldFbo);
       GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, colorFbo);
       GL30.glBlitFramebuffer(r[0], r[1], r[0] + inW, r[1] + inH, 0, 0, inW, inH, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
+      GpuSections.markNow("dlss.color", true);
 
-      // 2. depth and motion vectors: two full-rect passes
+      // 2. depth and camera motion vectors: one full-rect pass into both images
       GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, quadVbo);
       for (int i = 1; i < 5; i++) {
          GL20.glDisableVertexAttribArray(i);
@@ -344,18 +407,6 @@ final class Dlss {
       GL20.glVertexAttribPointer(0, 2, GL11.GL_FLOAT, false, 8, 0L);
       GL13.glActiveTexture(GL13.GL_TEXTURE0);
       int sceneDepth = sceneDepthTexture(worldFbo);
-      GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, depthFbo);
-      GL11.glViewport(0, 0, inW, inH);
-      GL20.glUseProgram(depthProgram);
-      GL11.glBindTexture(GL11.GL_TEXTURE_2D, sceneDepth);
-      GL20.glUniform1i(depthUniforms[0], 0);
-      GL20.glUniform2i(depthUniforms[1], r[0], r[1]);
-      GL20.glUniform1f(depthUniforms[2], sceneDepth == 0 ? 0.5F : -1.0F);
-      GL11.glDrawArrays(GL11.GL_TRIANGLE_STRIP, 0, 4);
-
-      GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, mvFbo);
-      GL11.glViewport(0, 0, inW, inH);
-      GL20.glUseProgram(mvProgram);
       float offX = camera.offX, offY = camera.offY, zoom = camera.zoom <= 0.0F ? 1.0F : camera.zoom;
       boolean reset = !haveLast;
       if (!haveLast) {
@@ -364,10 +415,18 @@ final class Dlss {
          lastZoom = zoom;
          haveLast = true;
       }
-      GL20.glUniform3f(mvUniforms[0], offX, offY, zoom);
-      GL20.glUniform3f(mvUniforms[1], lastOffX, lastOffY, lastZoom);
-      GL20.glUniform4f(mvUniforms[2], s, inH, Config.DLSS_MV_SIGN, 0.0F);
+      GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, inputsFbo);
+      GL11.glViewport(0, 0, inW, inH);
+      GL20.glUseProgram(inputsProgram);
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, sceneDepth);
+      GL20.glUniform1i(inputsUniforms[0], 0);
+      GL20.glUniform2i(inputsUniforms[1], r[0], r[1]);
+      GL20.glUniform1f(inputsUniforms[2], sceneDepth == 0 ? 0.5F : -1.0F);
+      GL20.glUniform3f(inputsUniforms[3], offX, offY, zoom);
+      GL20.glUniform3f(inputsUniforms[4], lastOffX, lastOffY, lastZoom);
+      GL20.glUniform4f(inputsUniforms[5], s, inH, Config.DLSS_MV_SIGN, 0.0F);
       GL11.glDrawArrays(GL11.GL_TRIANGLE_STRIP, 0, 4);
+      GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, mvFbo); // the object rects below write the motion image alone
       lastOffX = offX;
       lastOffY = offY;
       lastZoom = zoom;
@@ -401,21 +460,64 @@ final class Dlss {
       }
 
       // 3. hand over to Vulkan and back
+      GpuSections.markNow("dlss.inputs", true);
       GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
       GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+      boolean gaps = Config.DEV_DLSS_GAPS && times != null;
+      int gapSlot = (int)((frames + 1) % GAP_RING);
+      if (gaps) {
+         if (gapSignalQ == null) {
+            gapSignalQ = new int[GAP_RING];
+            gapResumeQ = new int[GAP_RING];
+            GL15.glGenQueries(gapSignalQ);
+            GL15.glGenQueries(gapResumeQ);
+            gapStart = ARENA.allocate(8);
+            gapEnd = ARENA.allocate(8);
+         }
+         readGaps(gapSlot); // the evaluation GAP_RING frames back used this slot
+         org.lwjgl.opengl.GL33.glQueryCounter(gapSignalQ[gapSlot], org.lwjgl.opengl.GL33.GL_TIMESTAMP);
+      }
       EXTSemaphore.glSignalSemaphoreEXT(semGlDone, NO_BUFFERS, tex, LAYOUTS);
       GL11.glFlush();
       long now = System.nanoTime();
+      prepNs += now - tStart;
       float frameMs = lastFrameNs == 0 ? 16.7F : (now - lastFrameNs) / 1.0e6F;
       lastFrameNs = now;
       float jx = RenderScale.frameJitterX() * Config.DLSS_JITTER_SIGN;
       float jy = RenderScale.frameJitterY() * Config.DLSS_JITTER_SIGN;
-      int rc = (int)evaluate.invokeExact(jx, jy, 1.0F, 1.0F, reset ? 1 : 0, dlssSharpness, frameMs);
+      int rc = sets == 2 ? (int)evaluateSet.invokeExact(jx, jy, 1.0F, 1.0F, reset ? 1 : 0, dlssSharpness, frameMs, current)
+         : (int)evaluate.invokeExact(jx, jy, 1.0F, 1.0F, reset ? 1 : 0, dlssSharpness, frameMs);
       if (rc != 0) {
          throw new IllegalStateException(lastError());
       }
-      EXTSemaphore.glWaitSemaphoreEXT(semDlssDone, NO_BUFFERS, tex, LAYOUTS);
-      Upscaler.output().set(tex[3], outW, outH);
+      long tEval = System.nanoTime();
+      evalNs += tEval - now;
+      store(current);
+      if (sets == 1 || pending < 0 && shown < 0) {
+         // this frame's own evaluation (one set, or the first pipelined frame)
+         waitDone(semDlssDone, tex);
+         shown = current;
+         pending = -1;
+      } else {
+         // pipelined: show the previous frame's evaluation, finished while this frame's world pass drew; this frame's
+         // is waited on next frame (GL writes this set's inputs again only after that wait, two frames from now)
+         if (pending >= 0) {
+            waitDone(setSemDlss[pending], setTex[pending]);
+            shown = pending;
+         }
+         pending = current;
+      }
+      current = (current + 1) % sets;
+      if (gaps) {
+         org.lwjgl.opengl.GL33.glQueryCounter(gapResumeQ[gapSlot], org.lwjgl.opengl.GL33.GL_TIMESTAMP);
+         gapSeq[gapSlot] = frames + 1; // this evaluation's number (frames is counted below)
+      }
+      lastWaitEndNs = System.nanoTime();
+      waitNs += lastWaitEndNs - tEval;
+      if (++statFrames >= 600) {
+         stats();
+      }
+      Upscaler.output().set(setTex[shown][3], outW, outH);
       frames++;
 
       // 4. the next frame's jitter (Halton 2,3 over the phase count NVIDIA recommends: 8 x ratio^2)
@@ -446,12 +548,101 @@ final class Dlss {
       GpuSections.markNow("upscale", true);
    }
 
+   /**
+    * GL waits for DLSS. The commands after the wait (the composite, the UI) sit in the driver's command buffer until
+    * its next flush, so the GPU idled ~0.2 ms after every evaluation (devDlssGaps, 2026-09-23); dlssFlushAfterWait
+    * submits the wait at once so the GL work queued behind it starts as soon as the semaphore signals.
+    */
+   private static void waitDone(int semaphore, int[] images) {
+      if (Config.DLSS_WAIT_OUTPUT_ONLY) {
+         OUT_TEX[0] = images[3];
+         EXTSemaphore.glWaitSemaphoreEXT(semaphore, NO_BUFFERS, OUT_TEX, OUT_LAYOUT);
+      } else {
+         EXTSemaphore.glWaitSemaphoreEXT(semaphore, NO_BUFFERS, images, LAYOUTS);
+      }
+      if (Config.DLSS_FLUSH_AFTER_WAIT) {
+         GL11.glFlush();
+      }
+   }
+
+   /** devDlssGaps: the hand-over gaps of the evaluation that last used this query slot, when its results are in. */
+   private static void readGaps(int slot) {
+      long seq = gapSeq[slot];
+      if (seq == 0 || GL15.glGetQueryObjecti(gapResumeQ[slot], GL15.GL_QUERY_RESULT_AVAILABLE) == 0) {
+         return;
+      }
+      gapSeq[slot] = 0;
+      long glSignal = org.lwjgl.opengl.GL33.glGetQueryObjecti64(gapSignalQ[slot], GL15.GL_QUERY_RESULT);
+      long glResume = org.lwjgl.opengl.GL33.glGetQueryObjecti64(gapResumeQ[slot], GL15.GL_QUERY_RESULT);
+      try {
+         if ((int)times.invokeExact(seq, gapStart, gapEnd) != 0) {
+            return;
+         }
+      } catch (Throwable t) {
+         return;
+      }
+      long vkStart = gapStart.get(ValueLayout.JAVA_LONG, 0), vkEnd = gapEnd.get(ValueLayout.JAVA_LONG, 0);
+      gapInNs += vkStart - glSignal;
+      gapOutNs += glResume - vkEnd;
+      gapCount++;
+   }
+
+   /** One console line per ~600 frames: DLSS's own GPU time (Vulkan timestamps) and the render thread's time per phase. */
+   private static void stats() {
+      double gpu = -1.0;
+      try {
+         if (gpuUs != null) {
+            gpu = (double)gpuUs.invokeExact();
+         }
+      } catch (Throwable t) {
+         gpuUs = null;
+      }
+      long n = Math.max(1L, statFrames);
+      String gapText = gapCount == 0 ? "" : String.format(java.util.Locale.ROOT, " gap_in_us=%.0f gap_out_us=%.0f (n=%d)",
+         gapInNs / 1000.0 / gapCount, gapOutNs / 1000.0 / gapCount, gapCount);
+      Log.info(String.format(java.util.Locale.ROOT, "dlss: stats frames=%d gpu_dlss_us=%.0f cpu_prep_us=%.0f cpu_eval_us=%.0f cpu_wait_us=%.0f cpu_between_us=%.0f preset=%s %dx%d->%dx%d",
+         statFrames, gpu, prepNs / 1000.0 / n, evalNs / 1000.0 / n, waitNs / 1000.0 / n, afterNs / 1000.0 / n, Config.DLSS_PRESET, inW, inH, outW, outH) + gapText);
+      statFrames = prepNs = evalNs = waitNs = afterNs = 0L;
+      gapInNs = gapOutNs = gapCount = 0L;
+   }
+
+   /** The DLSS output size for a screen size: dlssOutputPct of it (never below the render size), else the screen size. */
+   private static int outputSize(int screenPixels) {
+      int pct = Config.DLSS_OUTPUT_PCT;
+      if (pct <= 0 || pct >= 100) {
+         return screenPixels;
+      }
+      return Math.max(Math.round(screenPixels * RenderScale.scale()), Math.round(screenPixels * pct / 100.0F));
+   }
+
+   /** The DLSS output is smaller than the screen (dlssOutputPct): Upscaler runs EASU + RCAS on it. */
+   static boolean outputBelowScreen() {
+      return ready && shown >= 0 && (outW < RenderScale.fullWidth(0) || outH < RenderScale.fullHeight(0));
+   }
+
+   static int outputTexture() {
+      return setTex[shown][3];
+   }
+
+   static int[] outputRect() {
+      return new int[]{0, 0, outW, outH};
+   }
+
    static long objectRects() {
       return objectRects;
    }
 
    /** The world framebuffer's depth attachment when it is a texture (FogPass.sceneDepthAsTexture), else 0. */
    private static int sceneDepthTexture(int worldFbo) {
+      if (worldFbo == sceneDepthFbo) {
+         return sceneDepthTex; // the world framebuffer keeps its attachments; a new one (resize) is queried again
+      }
+      sceneDepthFbo = worldFbo;
+      sceneDepthTex = queryDepthAttachment(worldFbo);
+      return sceneDepthTex;
+   }
+
+   private static int queryDepthAttachment(int worldFbo) {
       GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, worldFbo);
       int type = GL30.glGetFramebufferAttachmentParameteri(GL30.GL_READ_FRAMEBUFFER, GL30.GL_DEPTH_ATTACHMENT, GL30.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
       if (type != GL11.GL_TEXTURE) {
@@ -461,25 +652,51 @@ final class Dlss {
    }
 
    private static void releaseGl() {
-      for (int i = 0; i < 4; i++) {
-         if (tex[i] != 0) {
-            GL11.glDeleteTextures(tex[i]);
-            tex[i] = 0;
+      for (int k = 0; k < 2; k++) {
+         select(k);
+         for (int i = 0; i < 4; i++) {
+            if (tex[i] != 0) {
+               GL11.glDeleteTextures(tex[i]);
+               tex[i] = 0;
+            }
+            if (mem[i] != 0) {
+               EXTMemoryObject.glDeleteMemoryObjectsEXT(mem[i]);
+               mem[i] = 0;
+            }
          }
-         if (mem[i] != 0) {
-            EXTMemoryObject.glDeleteMemoryObjectsEXT(mem[i]);
-            mem[i] = 0;
-         }
+         mvDepthStencilTex = 0;
+         if (colorFbo != 0) GL30.glDeleteFramebuffers(colorFbo);
+         if (mvFbo != 0) GL30.glDeleteFramebuffers(mvFbo);
+         if (inputsFbo != 0) GL30.glDeleteFramebuffers(inputsFbo);
+         colorFbo = mvFbo = inputsFbo = 0;
+         if (semGlDone != 0) EXTSemaphore.glDeleteSemaphoresEXT(semGlDone);
+         if (semDlssDone != 0) EXTSemaphore.glDeleteSemaphoresEXT(semDlssDone);
+         semGlDone = semDlssDone = 0;
+         store(k);
       }
-      mvDepthStencilTex = 0;
-      if (colorFbo != 0) GL30.glDeleteFramebuffers(colorFbo);
-      if (depthFbo != 0) GL30.glDeleteFramebuffers(depthFbo);
-      if (mvFbo != 0) GL30.glDeleteFramebuffers(mvFbo);
-      colorFbo = depthFbo = mvFbo = 0;
-      if (semGlDone != 0) EXTSemaphore.glDeleteSemaphoresEXT(semGlDone);
-      if (semDlssDone != 0) EXTSemaphore.glDeleteSemaphoresEXT(semDlssDone);
-      semGlDone = semDlssDone = 0;
+      select(0);
+      sceneDepthFbo = -1;
+      current = 0;
+      pending = -1;
+      shown = -1;
       Upscaler.output().set(0, 0, 0);
+   }
+
+   /** A framebuffer with two colour attachments drawn together (glDrawBuffers), or 0 when incomplete. */
+   private static int framebufferOf2(int tex0, int tex1) {
+      int previous = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+      int fbo = GL30.glGenFramebuffers();
+      GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, fbo);
+      GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, tex0, 0);
+      GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT1, GL11.GL_TEXTURE_2D, tex1, 0);
+      GL20.glDrawBuffers(new int[]{GL30.GL_COLOR_ATTACHMENT0, GL30.GL_COLOR_ATTACHMENT1});
+      int status = GL30.glCheckFramebufferStatus(GL30.GL_FRAMEBUFFER);
+      GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, previous);
+      if (status != GL30.GL_FRAMEBUFFER_COMPLETE) {
+         GL30.glDeleteFramebuffers(fbo);
+         return 0;
+      }
+      return fbo;
    }
 
    static float halton(int index, int base) {
@@ -496,37 +713,25 @@ final class Dlss {
       return frames;
    }
 
-   /** The scene depth of the low-res region resampled 1:1 into the R32F depth image (or a constant when none). */
-   static final String DEPTH_FRAG = String.join("\n",
+   /**
+    * The inputs pass: attachment 0 the scene depth of the low-res region resampled 1:1 into the R32F depth image (or a
+    * constant when none); attachment 1 the camera motion per pixel, in low-res pixels from the current position to the
+    * previous one (DLSS's convention, MVScale 1): a fragment at memory row / column (x, y) is the screen point
+    * (x / s, (inH - y) / s), which is the world pixel offX + sx * zoom; the previous frame's camera puts that world
+    * pixel at another position.
+    */
+   static final String INPUTS_FRAG = String.join("\n",
       "#version 330",
       "uniform sampler2D SceneDepth;",
       "uniform ivec2 origin;",
       "uniform float constantDepth;",
-      "out float fragDepth;",
-      "void main() {",
-      "   if (constantDepth >= 0.0) { fragDepth = constantDepth; return; }",
-      "   fragDepth = texelFetch(SceneDepth, ivec2(gl_FragCoord.xy) + origin, 0).r;",
-      "}");
-
-   /** One object's motion over its stencil-masked rectangle. */
-   static final String RECT_FRAG = String.join("\n",
-      "#version 330",
-      "uniform vec2 mv;",
-      "out vec2 fragMv;",
-      "void main() { fragMv = mv; }");
-
-   /**
-    * Camera motion per pixel, in low-res pixels from the current position to the previous one (DLSS's convention,
-    * MVScale 1): a fragment at memory row / column (x, y) is the screen point (x / s, (inH - y) / s) which is the
-    * world pixel offX + sx * zoom; the previous frame's camera puts that world pixel at another position.
-    */
-   static final String MV_FRAG = String.join("\n",
-      "#version 330",
-      "uniform vec3 cur;",  // offX, offY, zoom
+      "uniform vec3 cur;",
       "uniform vec3 prev;",
-      "uniform vec4 params;", // scale, inH, sign, -
-      "out vec2 fragMv;",
+      "uniform vec4 params;",
+      "layout(location = 0) out float fragDepth;",
+      "layout(location = 1) out vec2 fragMv;",
       "void main() {",
+      "   fragDepth = constantDepth >= 0.0 ? constantDepth : texelFetch(SceneDepth, ivec2(gl_FragCoord.xy) + origin, 0).r;",
       "   float s = params.x;",
       "   float inH = params.y;",
       "   vec2 p = gl_FragCoord.xy;",
@@ -536,4 +741,11 @@ final class Dlss {
       "   vec2 prevP = vec2(prevScreen.x * s, inH - prevScreen.y * s);",
       "   fragMv = (prevP - p) * params.z;",
       "}");
+
+   /** One object's motion over its stencil-masked rectangle. */
+   static final String RECT_FRAG = String.join("\n",
+      "#version 330",
+      "uniform vec2 mv;",
+      "out vec2 fragMv;",
+      "void main() { fragMv = mv; }");
 }

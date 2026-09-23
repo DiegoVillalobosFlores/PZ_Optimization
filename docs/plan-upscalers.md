@@ -161,3 +161,44 @@ against the matching `ups-off` recording of the same route (overlay panels off).
   a two-predictor regression of the frame on (re-projected previous, unshifted previous) — the two predictors
   are collinear at 4 px/frame and the fit returned noise; and sharpness of the moving phase against the parked
   settling phase — different scenery, so the ratio measured content, not the renderer.
+- 2026-09-23 — second pass (branch `upscaler-fix`, session pz-optimization-87): the FSR "second view cone", and
+  the DLSS cost at 5120x2160 on the 4090 taken apart. Runs `vcone*`, `dl1-*`, `dl2-*`, `dg-*`, `sf1-*`, `sw*`; every
+  number below is the harness route window (`result.txt` / analyze.py `overlay:`), uncapped, quality = 67 %.
+  - **Second view cone (fixed).** The view-cone shadow's screen quad (`visibilityBlur`) writes the shadow's depth
+    from `displaySize`, the offscreen buffer's size, which the scaled world pass left unscaled while `screenSize` /
+    `displayOrigin` were scaled; the depth came from a copy of the shadow shrunk by the render scale towards the
+    bottom-left, and the depth test (less-or-equal) cut the true cone with that copy: wedges missing and a second
+    apex. New `VisibilityPolygon2` override scales `displaySize` (docs/override-edits.md). Shots `vcone2-*` at max
+    zoom-out: against no upscaler the stock value's diff shows straight-edged cone wedges, the fix's only cloud
+    noise. Same override: its closing integer viewport restore now puts the DLSS jitter back.
+  - **A correction for whoever reads the raw logs**: `dl1-off` stalled on the route (`route_complete=0`), so its
+    whole-log 774 fps is mostly a parked car; with it every upscaler looked slower than off. `dg-off-2` (route
+    complete) is the drive reference, and bicubic at 99 % (`dg-bicubic-99`, 464 fps) equals it: the scaled pass
+    costs nothing by itself.
+  - **Where the frame goes.** Drive (E:1200, 120 km/h, zoom 2.5): off 468 fps, bicubic 67 % 530 (+13 %), fsr1 486
+    (+4 %), bicubic 50 % 646; dlss E 327, dlss default (K) 249. Storm + fog spinning route: off 266, bicubic 321
+    (+21 %), fsr1 290, dlss E 226, dlss K 186. So in the moving scenes even a free upscaler gains 13–21 % at
+    quality: most of the world pass does not follow the render resolution. Per frame (GPU sections): chunk bakes
+    (world pixels whatever the zoom or scale; lightning / light re-bakes are paced per second, so their per-frame
+    share grows as fps falls) and the chunk composite, which shrinks only 710 → 605 us for 44 % of the pixels
+    (hundreds of chunk-level quads, each a texture + depth-texture fetch with gl_FragDepth: bound by draws, not
+    fill). A near-static GPU-bound scene (storm + fog, walking 1 tile/s, zoom 1, `sw-z1-*`) is pixel-bound: off
+    494, bicubic 814 (+65 %), dlss E 458, dlss K 328; at zoom 2.5 off 424, bicubic 584, dlss E 359.
+  - **The DLSS path, measured piece by piece** (Vulkan timestamps around the evaluation in the shim, GL timer
+    sections, render-thread timings, and GL `glQueryCounter` vs the evaluation's Vulkan start / end on the same GPU
+    clock, `devDlssGaps`): evaluation E 0.64–0.74 ms, K 1.54 ms at 5120x2160 output (NVIDIA's table: 4090 at
+    3840x2160 E 0.53 / K 1.06 ms, i.e. ours is on the table once scaled to 11 MP); GL input copies 0.13 ms (colour
+    blit, depth pass, motion pass; the depth and motion passes are now one two-target pass); hand-over GL → Vulkan
+    12 us; **Vulkan → GL 0.19–0.21 ms of idle GPU after every evaluation**. The render thread returns from
+    `glWaitSemaphoreEXT` in 8 us, so the wait is on the GPU side: the GL commands behind it (the composite, the UI)
+    stay in the driver's command buffer until its next flush. `dlssFlushAfterWait` (default on) flushes right after
+    the wait; A/B runs `sw3-*` pending (the desktop was locked and Steam showed a blocking cloud-sync dialog from
+    09:53; resubmitted with `--launcher direct`).
+  - **Tried and rejected, measured**: one-frame pipelining (`dlssPipeline`, two image sets, the composite shows the
+    previous evaluation): 241 vs 244 fps on the drive — GL and Vulkan are separate GPU channels that time-slice,
+    the evaluation's wall time stretched to 2.7 ms, no overlap is gained. Auto-exposure off (`dlssAutoExposure`,
+    now default off; the input is LDR at exposure 1): 1545 vs 1538 us, no change.
+  - **What does help**: DLSS output below the screen size (`dlssOutputPct`), since the network's cost follows the
+    output pixels; the stock screen shader's bicubic does the rest (`dlssOutputFilter=bicubic`, no extra pass; `fsr1`
+    = EASU + RCAS first, 0.18 ms more). Drive, K: 247 → 283 fps at 75 %. Static storm-fog zoom 1, E: full output 454
+    fps (−8 % vs off 495), 75 % 513 (+3.5 %), 67 % 528 (+6.7 %) — before the flush fix.

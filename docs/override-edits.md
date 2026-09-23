@@ -2403,6 +2403,23 @@ screen rectangle, so the stock screen shader's bicubic filter is the upscaler.
 texture's size from `Upscaler.compositeTextureSize()` when the quad draws it; stock's offscreen texture size
 otherwise.
 
+### zombie.vispoly.VisibilityPolygon2 (new override, 2026-09-23, the "second view cone")
+
+The view-cone shadow is drawn in two steps: the shadow polygons into a half-size blur buffer (colour + depth) with
+the world projection, then a screen quad whose shader (`visibilityBlur`) takes the shadow's alpha from the blur
+buffer through `screenSize`, and the shadow's depth (written as the fragment depth, tested less-or-equal against
+the scene) through `displayOrigin` / `displaySize`. The IsoCamera hook already scaled `screenSize` and
+`displayOrigin` in the scaled world pass, but `displaySize` is the offscreen buffer's size, read from the buffer
+itself, so under an upscaler the depth came from a copy of the shadow shrunk by the render scale towards the
+bottom-left corner. The visible shadow was the true cone intersected with that shrunken copy: wedges of the cone
+missing and a second cone apex off the player, most visible zoomed out (report of 2026-09-23).
+`Drawer.renderToScreen`: `displaySize` goes through `RenderScale.visBlurPx`, scaled like the two other uniforms
+inside the scaled world pass (`devUpscalerStockVisBlur=true` keeps the stock value, the A/B of the bug).
+`Drawer.renderNew`: after its closing integer viewport restore, `RenderScale.afterModelDraw` puts the jittered
+float viewport back (DLSS), as after a model draw. Screenshots: runs `vcone2-*` (fsr1 with the stock value vs the
+fix vs no upscaler; the stock value's diff against no upscaler shows the straight-edged cone wedges, the fix's diff
+only cloud-shadow noise). With the upscaler off both hooks are no-ops.
+
 ## zombie.characters.IsoZombie (fifth edit, 2026-09-22, the flat draw of the horde's zombies)
 
 New `pzoptRenderFlat(x, y, z, col)` (`zombieAtlasFast`), called by `FBORenderCell.renderMovingObject` in place of

@@ -287,6 +287,8 @@ public final class MultiTextureFBO2 {
       }
    }
 
+   private final int[] pzoptSrc = new int[4]; // pzopt: upscaler, the composite's source rectangle in the resolved texture
+
    public void render() {
       if (this.current != null) {
          int max = 0;
@@ -300,6 +302,7 @@ public final class MultiTextureFBO2 {
 
          max = Math.max(max, IsoPlayer.numPlayers - 1);
          pzopt.Upscaler.queueResolve(); // pzopt: upscaler, the low-res world image is resolved to the screen size on the render thread before the quads below
+         pzopt.GpuSections.begin("screen"); // pzopt: GPU section (the full-size screen-shader composite)
 
          for (int playerIndex = 0; playerIndex <= max; playerIndex++) {
             if (SceneShaderStore.weatherShader != null && DebugOptions.instance.fboRenderChunk.useWeatherShader.getValue()) {
@@ -315,7 +318,8 @@ public final class MultiTextureFBO2 {
                   // pzopt: upscaler. fsr1 / dlss: the resolved screen-size texture; bicubic: the stock screen shader's
                   // bicubic filter samples the low-res region of the offscreen buffer straight into the screen rect
                   if (pzopt.Upscaler.drawsOutput() && pzopt.Upscaler.output().hasTexture()) {
-                     pzopt.Upscaler.output().rendershader2(sx, sy, sw, sh, sx, sy, sw, sh, 1.0F, 1.0F, 1.0F, 1.0F);
+                     pzopt.Upscaler.outputSourceRect(sx, sy, sw, sh, this.pzoptSrc); // pzopt: upscaler, a smaller DLSS output (dlssOutputPct) is sampled over its own size
+                     pzopt.Upscaler.output().rendershader2(sx, sy, sw, sh, this.pzoptSrc[0], this.pzoptSrc[1], this.pzoptSrc[2], this.pzoptSrc[3], 1.0F, 1.0F, 1.0F, 1.0F); // pzopt: upscaler
                   } else {
                      int[] r = pzopt.RenderScale.scaledRect(playerIndex);
                      ((Texture)this.current.getTexture()).rendershader2(sx, sy, sw, sh, r[0], r[1], r[2], r[3], 1.0F, 1.0F, 1.0F, 1.0F);
@@ -332,6 +336,8 @@ public final class MultiTextureFBO2 {
             IndieGL.EndShader();
          }
 
+         pzopt.GpuSections.end("screen"); // pzopt: GPU section
+         pzopt.Upscaler.queueCompositeFlush(); // pzopt: upscaler, dlssFlushAfterComposite
          IsoPlayer.forEachPlayer(MultiTextureFBO2::renderCursor);
       }
    }

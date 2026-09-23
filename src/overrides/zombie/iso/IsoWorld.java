@@ -2761,7 +2761,9 @@ public final class IsoWorld {
       AbstractPerformanceProfileProbe var1 = IsoWorld.s_performance.isoWorldRender.profile();
 
       try {
+         pzopt.GpuSections.begin("world"); // pzopt: GPU section (the whole world pass, the part the render scale shrinks)
          this.renderInternal();
+         pzopt.GpuSections.end("world"); // pzopt: GPU section
       } catch (Throwable var5) {
          if (var1 != null) {
             try {

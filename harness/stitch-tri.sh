@@ -10,15 +10,16 @@
 # drive), each clip = [onset - PRE, onset + shortest route). The result lines come from analyze.py's overlay line
 # (fps mean, p99, p99.9, frames over 33 ms, 1 %-low) and the game-thread block (load, the three biggest sub-phases).
 #
-# Usage: harness/stitch-tri.sh <lou|spin|drive120|storm120> [out.mp4]
+# Usage: harness/stitch-tri.sh <lou|spin|drive120|storm120|stormfog> [out.mp4]
 # Env:   RUN_STOCK RUN_BEFORE RUN_AFTER   run labels (latest run dir of each; default tri-<scene>-{stock,before,after})
 #        PRE                              seconds of clip before the route start (default 2)
 #        BEFORE_REV                       the commit of the "before" build (default: /tmp/pzopt-before's HEAD, else e1afa29)
 #        LABEL_STOCK LABEL_BEFORE LABEL_AFTER   panel labels
+#        COMPARE                          the comparison named in the title line (default: stock vs optimized before vs now)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-scene="${1:?scene: lou|spin|drive120|storm120}"
+scene="${1:?scene: lou|spin|drive120|storm120|stormfog}"
 case "$scene" in
   lou)      what='downtown Louisville, zombie population x4'; route='Teleport into downtown Louisville, spectator view, max zoom, walking south at 6 tiles/s while the camera spins'
             def_out=docs/media/louisville-horde-profiled-stock-vs-before-vs-after.mp4 ;;
@@ -28,11 +29,14 @@ case "$scene" in
             def_out=docs/media/drive-120kmh-profiled-stock-vs-before-vs-after.mp4 ;;
   storm120) what='120 km/h highway drive, thunderstorm'; route='Highway east at ~120 km/h (Base.RaceCar12, 1200 tiles), max zoom, pinned thunderstorm with a lightning strike every 6 s'
             def_out=docs/media/drive-120kmh-storm-profiled-stock-vs-before-vs-after.mp4 ;;
+  stormfog) what='thunderstorm + heavy fog, GPU-bound'; route='Rosewood, zoom 1, pinned thunderstorm with heavy fog (stock fog on the stock side), walking south at 2 tiles/s while the facing turns'
+            def_out=docs/media/storm-fog-stock-vs-optimized-vs-dlss.mp4 ;;
   *) echo "unknown scene: $scene" >&2; exit 2 ;;
 esac
 out="${2:-$def_out}"
 RUN_STOCK="${RUN_STOCK:-tri-$scene-stock}"; RUN_BEFORE="${RUN_BEFORE:-tri-$scene-before}"; RUN_AFTER="${RUN_AFTER:-tri-$scene-after}"
 PRE="${PRE:-2}"
+COMPARE="${COMPARE:-stock vs optimized before vs optimized now}"
 BEFORE_REV="${BEFORE_REV:-$(git -C /tmp/pzopt-before rev-parse --short HEAD 2>/dev/null || echo e1afa29)}"
 LABEL_STOCK="${LABEL_STOCK:-STOCK GAME  (every optimization off, overlay + profiler on)}"
 LABEL_BEFORE="${LABEL_BEFORE:-OPTIMIZED, BEFORE THE UNCOMMITTED CHANGES OF 2026-09-22  (commit $BEFORE_REV)}"
@@ -120,7 +124,7 @@ $(cell 2)[g];
 [bg][s]overlay=0:${Y1}:shortest=1[b1];
 [b1][o]overlay=${CW}:${Y1}[b2];
 [b2][g]overlay=0:${Y2},drawbox=x=${CW}-2:y=0:w=4:h=${Y2}+${CH}:color=0x202026:t=fill,drawbox=x=${CW}:y=${Y2}:w=${CW}:h=${CH}:color=0x0c0c10:t=fill[b3];
-[b3]drawtext=fontfile=$FONT:text='Project Zomboid B42.20  \\|  ${what}  \\|  uncapped  \\|  stock vs optimized before vs optimized now, game-thread profiler on screen':fontsize=62:fontcolor=$TXT:x=(w-tw)/2:y=36,
+[b3]drawtext=fontfile=$FONT:text='Project Zomboid B42.20  \\|  ${what}  \\|  uncapped  \\|  ${COMPARE}, game-thread profiler on screen':fontsize=62:fontcolor=$TXT:x=(w-tw)/2:y=36,
 $(label "$LABEL_STOCK" "(${CW}-tw)/2" "${Y1L}+8"),
 $(label "$LABEL_BEFORE" "${CW}+(${CW}-tw)/2" "${Y1L}+8"),
 $(label "$LABEL_AFTER" "(${CW}-tw)/2" "${Y2L}+8"),

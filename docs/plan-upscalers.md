@@ -265,3 +265,25 @@ against the matching `ups-off` recording of the same route (overlay panels off).
   files installed: restart the game"; the next launch logged `dlss: ready, 3413x1440 -> 3413x1440 (quality, preset e)`.
   Windows: the button has its branch (`pzopt_ngx64.dll` from a `dlss-windows-*` release, `nvngx_dlss.dll` from NVIDIA);
   the DLL itself is to be built with MSVC on the maintainer's Windows boot, `docs/dlss-windows-build.md`.
+- 2026-09-24 00:00–00:15 — **The Windows shim is built and runs** (`docs/dlss-windows-build.md` on the maintainer's
+  Windows 11 boot, same 4090 / 5120x2160 desktop). `src/native/pzopt_ngx.cpp` compiled with MSVC **unchanged**: none of
+  the `#ifdef _WIN32` spots the doc expected to break did (the `HANDLE` casts, `CreateThread` in `BigStackWorker`, the
+  `nvsdk_ngx_s.lib` link all went through on the first `cl` line, exit 0, no warnings that mattered). `dumpbin /exports`
+  lists all 13 entry points `pzopt.Dlss` looks up. VS 2022 Build Tools 17.14 (MSVC 14.44.35207, Windows SDK 10.0.26100);
+  the machine had no compiler and no winget, so the bootstrapper came from `https://aka.ms/vs/17/release/vs_BuildTools.exe`.
+  With `pzopt_ngx64.dll` + NVIDIA's `nvngx_dlss.dll` (v310.9.1, the pinned sha256) in the game's `natives\`, the first
+  launch logged `dlss: ready, 3413x1440 -> 3413x1440 (quality, preset e, DLSS sharpness hint 0.35)` and held it for a
+  100 s / 50k-frame route with no crash and no NGX error. DLSS's own cost matches Linux: `gpu_dlss_us` 339–347,
+  `cpu_eval_us` ~110 per frame.
+  **Numbers** (bench save, 5120x2160, uncapped, quality 67 % / preset E / RCAS, `fogPass=false`, zoom 1; `analyze-win.ps1`):
+  | scene | off | dlss | |
+  |---|---|---|---|
+  | default bench route (walking 18 tiles/s, `dlss-off` / `dlss-first`) | 632.4 fps, p99 5.31, p99.9 9.23, GPU 88.2 % | 495.3 fps, p99 6.15, p99.9 11.49, GPU 88.1 % | **−21.7 %** |
+  | storm, stock fog, 1 tile/s (`sf-off` / `sf-dlss`) | 579.8 fps, p99 4.37, GPU 92.0 % | 526.9 fps, p99 4.67, GPU 87.2 % | −9.1 % |
+  | storm + heavy fog, 1 tile/s (`sf2-off` / `sf2-dlss`) | 440.3 fps, p99 5.06, GPU 93.3 %, 354 W | 461.1 fps, p99 4.75, GPU 88.1 %, 314 W | **+4.7 %** |
+  Same shape as Linux — DLSS only wins once the scene is GPU-bound on per-pixel work — but the win is far smaller than
+  the Linux `sf*` +25.9 %. The scene is not the same one: `off` here is 440 fps where the Linux scene's `off` was
+  382–385, so this heavy-fog route is lighter than the one those numbers came from. Worth reproducing the exact Linux
+  scene before treating +4.7 % as the Windows figure. Open: nobody has **looked** at the Windows DLSS image yet (step 5
+  of the build doc — artifacts, trailing edges, the view cone); the runs only prove it does not crash. The default-route
+  DLSS run also had one unexplained 296 ms frame (`max_ms`), absent from the other three runs.

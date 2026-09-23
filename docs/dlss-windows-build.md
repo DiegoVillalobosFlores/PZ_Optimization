@@ -8,7 +8,9 @@ top to bottom; every step says what success looks like.
 Background (docs/plan-upscalers.md): DLSS runs through `src/native/pzopt_ngx.cpp`, a small C++ shim that creates a
 Vulkan device on the GPU of the game's OpenGL context, runs NVIDIA NGX there and shares the images with OpenGL
 (`GL_EXT_memory_object_win32` / `GL_EXT_semaphore_win32` on Windows). The Windows paths of the shim (`#ifdef _WIN32`)
-and of `pzopt.Dlss` (Win32 handles, `natives/pzopt_ngx64.dll`) are written but **have never been compiled or run**.
+and of `pzopt.Dlss` (Win32 handles, `natives/pzopt_ngx64.dll`) were written blind; **they were first compiled and run
+on 2026-09-24 and needed no change** (MSVC 14.44, DLSS SDK v310.9.1, `dlss: ready` in game). Steps 1-4 below are
+therefore a re-run, not an experiment; docs/plan-upscalers.md carries the numbers.
 NVIDIA's static library `nvsdk_ngx_s.lib` only links with MSVC, which is why this has to happen on Windows.
 
 ## 1. Tools (once)

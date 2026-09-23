@@ -27,7 +27,21 @@ mingw cannot link (`__security_cookie`, `StringCch*`, MSVC-mangled internals), s
     cl /O2 /std:c++17 /LD /I%SDK%\include /I<vulkan headers> src\native\pzopt_ngx.cpp ^
        %SDK%\lib\Windows_x86_64\x64\nvsdk_ngx_s.lib /Fe:natives\pzopt_ngx64.dll
 
-with `nvngx_dlss.dll` from `%SDK%\lib\Windows_x86_64\rel\` next to it. Until someone builds and runs that,
-`upscaler=dlss` on Windows logs "natives/pzopt_ngx64.dll not found" and falls back to the bicubic path.
+with `nvngx_dlss.dll` from `%SDK%\lib\Windows_x86_64\rel\` next to it.
+
+**Built and run on 2026-09-24** (Windows 11, VS 2022 Build Tools 17.14 = MSVC 14.44.35207 + Windows SDK 10.0.26100,
+DLSS SDK v310.9.1). The source needed **no change**: the `#ifdef _WIN32` branches compiled and linked as written.
+The exact line, from the *x64 Native Tools Command Prompt* (or after `VC\Auxiliary\Build\vcvars64.bat`):
+
+    cl /nologo /O2 /EHsc /std:c++17 /MT /LD /DNDEBUG /DWIN32_LEAN_AND_MEAN /DNOMINMAX ^
+       /I %SDK%\include /I %VULKAN_HEADERS%\include ^
+       src\native\pzopt_ngx.cpp %SDK%\lib\Windows_x86_64\x64\nvsdk_ngx_s.lib ^
+       /Fe:build\pzopt_ngx64.dll /Fo:build\ ^
+       /link advapi32.lib user32.lib shell32.lib ole32.lib version.lib
+
+303,104-byte PE32+ DLL exporting all 13 `pzngx_*` entry points; `dlss: ready` on the first launch with it and
+NVIDIA's `nvngx_dlss.dll` in the game's `natives\`. Measurements in docs/plan-upscalers.md (2026-09-24).
+Note: wrapping that `cl` line in PowerShell's `Start-Process -Wait` never returns even though `cl` exits 0 (a stray
+child keeps the handle open) — redirect to a log and read the log.
 Intel XeSS (Windows only, `libxess.dll`, a Vulkan API since XeSS 2) would take the same shape — its own
 `pzngx_*`-style backend behind the same images and semaphores — and is not written yet.

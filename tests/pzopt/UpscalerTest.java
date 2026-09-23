@@ -30,7 +30,11 @@ public class UpscalerTest {
       Check.check(Config.UPSCALER_QUALITY.equals("performance"), "quality key: " + Config.UPSCALER_QUALITY);
       Check.check(Config.FSR_SHARPNESS_PCT == 80, "default sharpness 80: " + Config.FSR_SHARPNESS_PCT);
       Check.check(Config.UPSCALER_SCALE_PCT == 0, "no explicit scale: " + Config.UPSCALER_SCALE_PCT);
-      Check.check(Config.DLSS_PRESET.equals("default"), "dlss preset default: " + Config.DLSS_PRESET);
+      // the DLSS defaults of 2026-09-23 (docs/plan-upscalers.md): preset E, 67 % output (the render size at quality),
+      // the RCAS finish, the world drawn straight into the DLSS image
+      Check.check(Config.DLSS_PRESET.equals("e"), "dlss preset default: " + Config.DLSS_PRESET);
+      Check.check(Config.DLSS_OUTPUT_PCT == 67 && "rcas".equals(Config.DLSS_OUTPUT_FILTER) && Config.DLSS_DIRECT_COLOR,
+         "dlss output defaults: " + Config.DLSS_OUTPUT_PCT + " " + Config.DLSS_OUTPUT_FILTER + " " + Config.DLSS_DIRECT_COLOR);
       Check.check(Config.DLSS_JITTER_SIGN == 1.0F && Config.DLSS_MV_SIGN == 1.0F, "sign defaults");
       System.out.println("UpscalerTest OK");
    }

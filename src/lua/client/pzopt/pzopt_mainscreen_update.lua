@@ -3,7 +3,8 @@
 --  releases once per boot whether a newer build for this game revision exists. The main menu (never
 --  the pause menu) has one more item in the style of the stock ones (ISLabel, UIFont.Large, the same
 --  hover fade and sounds) between Credits and Exit: greyed out and inert while the check runs and when
---  the build is current, enabled while a newer build is offered. Clicking it opens a small dialog: what is installed, what is available, the release notes, and "Update now": the download
+--  the build is current, enabled while a newer build is offered. A small line under it names the installed
+--  build ("Version <commit>", "Version <commit> -> <offered commit>" while an update is offered). Clicking it opens a small dialog: what is installed, what is available, the release notes, and "Update now": the download
 --  and the file swap run on a daemon thread while the item shows the progress; once done the dialog
 --  offers to quit, because the classes the JVM already loaded stay the old ones until a restart.
 --  A copy without pzopt-installed.txt (a hand-unpacked zip) cannot swap its own files: the dialog
@@ -336,12 +337,33 @@ local function onItemClick(item, x, y)
     PzoptUpdateDialog.show()
 end
 
--- The stock hover fade only while enabled; a disabled item is a plain grey label.
+-- The version line under the item: the installed build's commit, and "-> <commit>" of the offered
+-- release (tag win-<revision>-<commit>) while one is offered, downloading, installed or failed.
+local function versionText()
+    local p = perf()
+    local text = "Version " .. p:getPzoptUpdateInstalledCommit()
+    local tag = p:getPzoptUpdateTag()
+    if tag ~= "" then
+        text = text .. " -> " .. (tag:match("([^-]+)$") or tag)
+    end
+    return text
+end
+
+-- The stock hover fade only while enabled; a disabled item is a plain grey label. The item is taller
+-- than the stock ones by the version line: the label text stays centred in the stock row height (the
+-- hover rectangle covers both) and the version is drawn under it in the small font.
 local function itemPrerender(self)
+    local fullHgt = self.height
+    self.height = self.pzoptRowHgt
     if self.fade then
         MainScreen.prerenderBottomPanelLabel(self)
     else
         ISLabel.prerender(self)
+    end
+    self.height = fullHgt
+    if self.pzoptVersion then
+        local a = self.pzoptEnabled and 0.75 or 0.45
+        self:drawText(self.pzoptVersion, 0, self.pzoptRowHgt - 6, a, a, a, 1, UIFont.Small)
     end
 end
 
@@ -350,12 +372,14 @@ end
 -- there, like the stock items; enabled or greyed by the updater's state (syncItem).
 local function addItem(self)
     if self.inGame or not self.creditOption or not self.exitOption or self.pzoptUpdateOption then return end
-    local labelHgt = getTextManager():getFontHeight(UIFont.Large) + 8 * 2
+    local rowHgt = getTextManager():getFontHeight(UIFont.Large) + 8 * 2
+    local labelHgt = rowHgt + FONT_HGT_SMALL   -- the version line starts 6 px above the stock row's bottom
     local label = ISLabel:new(0, self.creditOption:getBottom(), labelHgt, ITEM_TEXT, 1, 1, 1, 1, UIFont.Large, true)
     label.internal = "PZOPT_UPDATE"
     label:initialise()
     label.onMouseDown = onItemClick
     label.prerender = itemPrerender
+    label.pzoptRowHgt = rowHgt
     label.pzoptEnabled = false
     label:setColor(0.45, 0.45, 0.45)
     label:setVisible(false)
@@ -449,6 +473,7 @@ local function syncItem(self)
         label:setNameWithoutMoving(text)
         label:setWidth(self.maxMenuItemWidth or label:getWidth())
     end
+    label.pzoptVersion = versionText()
     label:setVisible(self.exitOption:isVisible())
     if self.joyfocus then syncJoypadRow(self) end
 end

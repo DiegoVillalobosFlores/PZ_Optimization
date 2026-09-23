@@ -2426,8 +2426,11 @@ The aiming cursor (`IsoCursorShader`, shader `isocursor`) colours itself with th
 `accept` maps the cursor's screen rectangle into the offscreen world texture as `x / width, y / height` of that
 texture. Under an upscaler the world image fills only the scaled rectangle of the texture (every mode keeps it
 there; fsr1 / dlss draw a separate resolved texture), so the cursor read the world from a point the render scale
-away and took the wrong colour. The two sizes it divides by are divided by `RenderScale.scale()` (1 when the
-upscaler is off, i.e. stock). `IsoReticle` has the same mapping but its shader never samples the world texture.
+away and took the wrong colour. `startMainThread` now takes the background from `Upscaler.cursorBackground`: the
+resolved output when there is one (fsr1 / dlss: the image on screen, and with `dlssDirectColor` the only current
+one), else the offscreen texture; `accept` divides its two sizes by `Upscaler.cursorBackgroundScale` (the output's
+share of the screen, or the render scale for the offscreen texture; 1 with the upscaler off, i.e. stock).
+`IsoReticle` has the same mapping but its shader never samples the world texture.
 
 ## zombie.characters.IsoZombie (fifth edit, 2026-09-22, the flat draw of the horde's zombies)
 
@@ -2741,6 +2744,10 @@ square of every dirty chunk level on the FrameBatch workers; `updateChunk` then 
 Where the street is wider than the 15-tile scan the controller held course, keeping the heading error of the last
 curve; at the Dell's ~30 fps the car drifted off the route line through the wide stretch after the Rosewood start,
 overcorrected at 100 km/h and stopped in a yard (three drive timeouts). It now steers back to the route line there.
+Since 2026-09-23 it aims at the lateral position 0.6 s ahead (the lateral velocity taken from the heading) rather than
+the current one: on position alone a start yaw of a few degrees went uncorrected until the car was tiles off the line,
+and past the +-3 tile clamp the target stopped moving, which removed the damping; on the desktop half of the evening's
+E:1200 drives swung +10 / -8 tiles and hit the north side at x~8120 about 8 s in (route_complete could still read 1).
 
 ### zombie.core.properties.PropertyContainer (new override, `propertySurfaceNoAlloc`)
 

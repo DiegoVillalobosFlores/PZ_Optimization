@@ -57,6 +57,7 @@ import zombie.vehicles.BaseVehicle;
  *   find     curtains  dev: at route start list the curtains within 100 tiles (type, open state, attached window,
  *                      room) so a screenshot run can be started inside such a room with start=X,Y (issue #4)
  *   upstairs Z         dev: at route start move the player to the nearest loaded indoor square at level Z (issue #12)
+ *   upstairs_at S      dev: with upstairs, make that move S seconds into the route instead (a Stats mark "upstairs")
  *   close_curtains true dev: at route start close every open curtain in that range through IsoCurtain.ToggleDoor
  *                      (map curtains always load open; the bench save is a copy, nothing persists)
  *   route_start_epoch  unix seconds: do not start the route before this instant (puts the route on the
@@ -159,6 +160,7 @@ public final class Harness {
    private static float legDone = 0f;
    private static float x, y;
    private static int routeZ; // the level the bench route walks on (upstairs=Z moves it)
+   private static float upstairsAt; // upstairs_at: seconds into the route of the level change (0 = at route start)
    private static float startX, startY;
    private static int chunksAtStart;
    private static long runStartNs;
@@ -476,7 +478,8 @@ public final class Harness {
                   findCurtains(p, closeCurtains); // dev: curtain screenshot rig (issue #4)
                }
                int upstairs = Integer.parseInt(HarnessFlags.get("upstairs", "0").trim());
-               if (upstairs > 0) {
+               upstairsAt = Float.parseFloat(HarnessFlags.get("upstairs_at", "0").trim());
+               if (upstairs > 0 && upstairsAt <= 0f) {
                   goUpstairs(p, upstairs); // dev: upper-floor rig (issue #12, FSR black squares upstairs)
                }
                Scene.routeStart(nowNs);
@@ -543,6 +546,11 @@ public final class Harness {
                 }
                 return;
              }
+            if (upstairsAt > 0f && (nowNs - runStartNs) / 1e9 >= upstairsAt) {
+               upstairsAt = 0f; // once: the level change mid-route (upstairs_at, issue #12 transition)
+               Stats.mark("upstairs");
+               goUpstairs(p, Integer.parseInt(HarnessFlags.get("upstairs", "1").trim()));
+            }
             if (shotAt > 0f && shotPhase < 2 && !holdForScreenshot(nowNs)) {
                return; // camera held for the screenshot: no teleport, no turn this frame
             }

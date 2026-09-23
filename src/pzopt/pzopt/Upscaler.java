@@ -39,6 +39,7 @@ public final class Upscaler {
 
    // render-thread GL objects
    private static int texA; // EASU output (fsr1)
+   private static int texR, fboR, texRW, texRH; // RCAS alone at a smaller size (dlssOutputFilter=rcas)
    private static int texB; // RCAS output = the composite input (fsr1)
    private static int fboA;
    private static int fboB;
@@ -168,6 +169,9 @@ public final class Upscaler {
          } else {
             if (Dlss.outputBelowScreen() && "fsr1".equals(Config.DLSS_OUTPUT_FILTER)) {
                fsr(Dlss.outputTexture(), Dlss.outputRect()); // dlssOutputPct: DLSS wrote a smaller image, EASU + RCAS take it the rest of the way
+            } else if (Dlss.outputBelowScreen() && "rcas".equals(Config.DLSS_OUTPUT_FILTER)) {
+               int[] r = Dlss.outputRect();
+               rcasAtSize(Dlss.outputTexture(), r[2], r[3]); // RCAS at the DLSS output size, the composite's bicubic does the rest
             } // else the composite quad's bicubic samples the smaller output directly (outputSourceRect)
             return;
          }
@@ -259,6 +263,73 @@ public final class Upscaler {
       SpriteRenderer.ringBuffer.restoreVbos = true;
       SpriteRenderer.ringBuffer.restoreBoundTextures = true;
       GpuSections.markNow(sourceRect == null ? "upscale" : "upscale.fsr", true);
+   }
+
+   /**
+    * dlssOutputFilter=rcas: FSR 1.0's contrast-adaptive sharpen alone, run at the DLSS output's own size (below the
+    * screen with dlssOutputPct) into a texture of that size, which the composite's bicubic then stretches: the
+    * sharpness of the EASU + RCAS finish without EASU's full-screen pass.
+    */
+   private static void rcasAtSize(int sourceTex, int w, int h) {
+      if (!ensureTargets(Core.width, Core.height) || !ensurePrograms()) {
+         return;
+      }
+      if (texR == 0 || texRW != w || texRH != h) {
+         if (texR != 0) {
+            GL30.glDeleteFramebuffers(fboR);
+            GL11.glDeleteTextures(texR);
+         }
+         texR = colorTexture(w, h);
+         fboR = framebufferOf(texR);
+         texRW = w;
+         texRH = h;
+         if (fboR == 0) {
+            fail("rcas target incomplete");
+            return;
+         }
+      }
+      GpuSections.markNow("upscale.rcas", false);
+      GL11.glGetIntegerv(GL11.GL_VIEWPORT, SAVED_VIEWPORT);
+      int previousFbo = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+      GL11.glDisable(GL11.GL_BLEND);
+      GL11.glDisable(GL11.GL_DEPTH_TEST);
+      GL11.glDisable(GL11.GL_SCISSOR_TEST);
+      GL11.glDisable(GL11.GL_STENCIL_TEST);
+      GL11.glDisable(GL11.GL_CULL_FACE);
+      GL11.glDepthMask(false);
+      GL11.glColorMask(true, true, true, true);
+      GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, quadVbo);
+      for (int i = 1; i < 5; i++) {
+         GL20.glDisableVertexAttribArray(i);
+      }
+      GL20.glEnableVertexAttribArray(0);
+      GL20.glVertexAttribPointer(0, 2, GL11.GL_FLOAT, false, 8, 0L);
+      GL13.glActiveTexture(GL13.GL_TEXTURE0);
+      GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, fboR);
+      GL11.glViewport(0, 0, w, h);
+      GL20.glUseProgram(rcasProgram);
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, sourceTex);
+      GL20.glUniform1i(rcasUniforms[0], 0);
+      GL20.glUniform1f(rcasUniforms[1], (float)Math.pow(2.0, -2.0F * (1.0F - Config.FSR_SHARPNESS_PCT / 100.0F)));
+      GL20.glUniform4i(rcasUniforms[2], 0, 0, w, h);
+      GL11.glDrawArrays(GL11.GL_TRIANGLE_STRIP, 0, 4);
+      OUTPUT.set(texR, w, h);
+      GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, previousFbo);
+      GL11.glViewport(SAVED_VIEWPORT[0], SAVED_VIEWPORT[1], SAVED_VIEWPORT[2], SAVED_VIEWPORT[3]);
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+      Texture.lastTextureID = -1;
+      GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
+      for (int i = 0; i < 5; i++) {
+         GL20.glEnableVertexAttribArray(i);
+      }
+      GL20.glUseProgram(0);
+      GL11.glDepthMask(true);
+      GL11.glEnable(GL11.GL_BLEND);
+      GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+      GLStateRenderThread.restore();
+      SpriteRenderer.ringBuffer.restoreVbos = true;
+      SpriteRenderer.ringBuffer.restoreBoundTextures = true;
+      GpuSections.markNow("upscale.rcas", true);
    }
 
    private static boolean ensureTargets(int w, int h) {

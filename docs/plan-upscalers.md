@@ -206,3 +206,47 @@ against the matching `ups-off` recording of the same route (overlay panels off).
     output pixels; the stock screen shader's bicubic does the rest (`dlssOutputFilter=bicubic`, no extra pass; `fsr1`
     = EASU + RCAS first, 0.18 ms more). Drive, K: 247 → 283 fps at 75 %. Static storm-fog zoom 1, E: full output 454
     fps (−8 % vs off 495), 75 % 513 (+3.5 %), 67 % 528 (+6.7 %) — before the flush fix.
+- 2026-09-23 evening (22:00-23:40, same branch): the scenes, the image quality and the target.
+  - **Harness drive fix first.** Half of the evening's 120 km/h drives crashed about 8 s in (the road follower's
+    wide-street branch, docs/override-edits.md "pzopt.Harness road following"; `dl1-off` and `dl1-bicubic-q` in the
+    morning too). After the fix three validation drives (`dv-*`) completed with |lateral| <= 3.2 tiles, the two off runs
+    at 522.9 / 522.8 fps. Every drive number below is from a run whose telemetry shows no crash.
+  - **Drive (fixed harness, 5120x2160, uncapped, quality 67 %)**: off 523 fps (484 recorded), bicubic 616 (+18 %), fsr1
+    507 (recorded), DLSS E 357 (−32 %), E at 75 % output 379, E at 67 % 391, K 253. No DLSS configuration comes near off
+    on the drive: most of that frame (chunk bakes, the draw-bound composite) does not follow the render size.
+  - **The GPU-bound scene where DLSS can win**: static storm + stock fog (`fogPass=false`: the stock ~190 screen-wide fog
+    rectangles per level, pure per-pixel work), zoom 1, walking 1 tile/s (`sf5-*` … `sf8-*`). Off 382–385 fps, bicubic 664
+    (+73 %), FSR 1.0 591 (+54 %). DLSS at quality (render 67 %): full output E 391 (+1.5 %), K 297 (−23 %); **E with the
+    output at 67 % (`dlssOutputPct=67`) and the world drawn straight into the DLSS image (`dlssDirectColor`, now default
+    on) 483.5 (+25.9 %), at 75 % 468.5 (+22.5 %)** — the +20 % target is met only with a DLSS output below the screen
+    size. The same with the static storm and the fog pass (zoom 1, `sw*`): off 495, E-67 % 526 (+6 %), bicubic 814.
+  - **Image quality** (ghostscan over the recorded fixed-harness drives, soft = detail lost vs off; no mode trails):
+    fsr1 1.3 %, DLSS K full output 10.8 %, bicubic 12.3 %, DLSS E full 14.4 %, E-75 % bicubic finish 19.7 %, E-67 %
+    bicubic finish 21.2 %, E-75 % EASU + RCAS finish 4.8 %, E-67 % EASU + RCAS finish 5.8 %. So the configurations that
+    meet the target are softer than plain bicubic (DLSS only anti-aliases, the bicubic does the stretch; the metric also
+    counts removed aliasing as lost detail), and the sharp EASU + RCAS finish costs the gain (stock-fog scene: 67 %
+    434.9 fps +13.7 %, 75 % 420.9 +10.0 %: EASU is a full-screen pass).
+  - **Tried and dropped**: pipelining again, now in the pixel-bound scene (`sw4`, `sf6-*-pipe`): 477.5 vs 483.5 fps
+    without (the Vulkan and GL channels time-slice; GL's wait leaves the frame but the world pass stretches); a
+    flush after the wait (no effect on the ~0.2 ms GL resume gap, see above); presets K / default at a reduced output
+    (K-67 % 404.6, +5 %).
+  - **Issue #12 (black artifacts with FSR on an upper floor)**: harness `upstairs=Z` (+ `upstairs_at=S` for the
+    change mid-route). Settled upper-floor shots at max zoom-out (`us2-*`): fsr1 / bicubic / dlss vs off 0.001 % newly
+    black pixels, no black tile; recorded level change (`ust-off` / `ust-fsr1`): the same black-tile timeline in both
+    (0.27 at the change, 0.10 after: the unlit floor). Not reproduced; needs the reporter's screenshot.
+  - **Other upscaler bugs fixed on the way**: the aiming cursor's inverted background was read from the wrong place
+    under any upscaler (`IsoCursor` override); the view-cone blur's integer viewport restore dropped the DLSS jitter.
+  - **The sharp finish without its cost** (`dlssOutputFilter=rcas`, new): FSR 1.0's RCAS sharpen alone, run at the DLSS
+    output's own size into a texture of that size, which the composite's bicubic then stretches (no full-screen EASU
+    pass). Stock-fog scene: E at 67 % output **469.9 fps vs off 384.4 = +22.2 %**, at 75 % 451.2 (+17.4 %); drive
+    ghostscan soft 7.5 % / 6.2 % — sharper than full-size DLSS K (10.8 %) and than bicubic (12.3 %), at twice K's frame
+    rate. **New DLSS defaults** (2026-09-23): `dlssPreset=e`, `dlssOutputPct=67` (never below the render size, so DLAA
+    keeps the full size), `dlssOutputFilter=rcas`, `dlssDirectColor=true`; the Options tab lists them first with the
+    measured trade in the tips. Where DLSS still loses: the moving scenes (drive −19 % with these settings vs off, recorded runs 390.7 vs 483.8 fps,
+    because the render scale saves little there) and at the full output size; on this 4K desktop FSR 1.0 remains the
+    fastest and sharpest upscaler in every scene measured (stock-fog +54 %, soft 1.3 %).
+  - **Final check of the defaults** (the final build; an output within 2 % of the render size now takes exactly the
+    render size, 3413x1440 at quality, no 1.005x resample; the preset forced to `e` because this desktop's
+    `~/Zomboid/pzopt/options.ini` has the maintainer's saved `dlssPreset=default`, which a saved choice keeps): static
+    storm + stock fog, alternating runs `fin2-*`: off 415.9 / 416.5 fps (p99 5.0 / 4.8 ms), DLSS 523.6 / 518.7 fps
+    (p99 4.4 / 4.4 ms): **+25.2 %** with a lower p99.

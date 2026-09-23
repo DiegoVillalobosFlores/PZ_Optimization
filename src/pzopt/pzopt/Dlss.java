@@ -619,7 +619,9 @@ final class Dlss {
       if (pct <= 0 || pct >= 100) {
          return screenPixels;
       }
-      return Math.max(Math.round(screenPixels * RenderScale.scale()), Math.round(screenPixels * pct / 100.0F));
+      int render = Math.round(screenPixels * RenderScale.scale());
+      int out = Math.round(screenPixels * pct / 100.0F);
+      return out <= render * 1.02F ? render : out; // within 2 % of the render size (67 at quality): exactly that size, no 1.005x resample
    }
 
    /** The DLSS output is smaller than the screen (dlssOutputPct): Upscaler runs EASU + RCAS on it. */

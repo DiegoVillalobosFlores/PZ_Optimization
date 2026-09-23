@@ -392,6 +392,12 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   period is in the GPU-bound re-bake regime and not comparable. A startup death with a 0-byte console that day was an
   override marker calling `onClassLoaded` from a class the logger touches first (use `onClassLoadedQuiet`); diagnose with
   `--env JAVA_TOOL_OPTIONS=-Xlog:exceptions=info:file=/tmp/x.log`.
+- Upscaler second pass (2026-09-23, branch `upscaler-fix`, `docs/plan-upscalers.md`): the FSR "second view cone"
+  (`VisibilityPolygon2` blur `displaySize` unscaled) and the aiming cursor's background (`IsoCursor`) fixed. DLSS on the
+  4090 at 5120x2160: the network costs 0.64 ms (E) / 1.54 ms (K) at full output, so it only beats no upscaler when it
+  writes less than the screen: new defaults `dlssPreset=e dlssOutputPct=67 dlssOutputFilter=rcas dlssDirectColor=true`
+  (+22 % in the static storm + stock-fog scene, image sharper than full-size K); the drive stays DLSS-negative. The
+  120 km/h drive harness no longer swings into the roadside (check `harness: drive t=` telemetry before trusting a drive).
 - Open plans: `docs/plan-game-load.md`, `docs/plan-vulkan-renderer.md`, `docs/plan-resource-use.md`,
   `docs/plan-zombie-multithread.md` (2026-09-22: the rest of the zombie simulation on all cores, phased).
   The game-thread optimization plans were dropped on 2026-09-21 at the maintainer's request.

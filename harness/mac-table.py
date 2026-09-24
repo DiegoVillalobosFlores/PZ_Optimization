@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Render docs/media/mac-comparison.png: stock vs the overrides on a MacBook Pro (Apple M1 Pro), the
-120 km/h highway drive (docs/results.md, 2026-09-21 macOS section). Same media style as
+120 km/h highway drive (docs/archive/2026-09-24/results.md, 2026-09-21 macOS section). Same media style as
 harness/lowend-table.py (docs/media-style.md): near-black surface, Noto Sans, numbers in Noto Sans Mono,
 stock in amber, the overrides in green. The image carries every word of the Workshop's "New! macOS
 support" section (the description embeds only the picture): title, machine, date, install line, table.
@@ -85,7 +85,7 @@ text(X0, H - PAD - 84, "Apple's OpenGL has no ARB_buffer_storage, so the persist
      "runs as on Linux and Windows.", 12.5, INK2)
 text(X0, H - PAD - 60, "Install: subscribe, close the game, then in Terminal  bash ~/Library/Application\\ Support/Steam/steamapps/workshop/"
      "content/108600/3805285544/mods/PZ_Optimization/42/install.bash", 12.5, INK2)
-text(X0, H - PAD - 30, "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, README \"macOS\" and docs/results.md, "
+text(X0, H - PAD - 30, "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, README \"macOS\" and docs/archive/2026-09-24/results.md, "
      + DATE + ".", 11.5, MUTED)
 fig.savefig(OUT, dpi=100, facecolor=BG)
 print(OUT, W, H)

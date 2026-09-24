@@ -2,7 +2,7 @@
 
 Written after an inventory of every OpenGL touch point in the decompiled
 build, the shipped shader set, the bundled LWJGL, and the frame-time runs
-recorded in `docs/results.md` and `docs/plan-resource-use.md`. It follows the
+recorded in `docs/archive/2026-09-24/results.md` and `docs/plan-resource-use.md`. It follows the
 same shape as `docs/plan-driving-frame-time.md`: what was found, what the
 target is, the work in order, and how each step is verified. Numbers point at
 run directories under `harness/runs/` or at the decompiled tree (`decompiled/`,
@@ -78,7 +78,7 @@ that every phase ends in a runnable, benchmarkable game.
 
 ### 1.2 What the measurements say the backend costs today
 
-From `docs/results.md` (2026-09-19, 5120×2160, max zoom, uncapped):
+From `docs/archive/2026-09-24/results.md` (2026-09-19, 5120×2160, max zoom, uncapped):
 
 | run | renderer | fps | GPU busy | game thread | render thread |
 |---|---|---|---|---|---|
@@ -288,7 +288,7 @@ measured by the harness. Effort is one person, full time, wide error bars.
    the 4090 with `VK_KHR_swapchain`, descriptor indexing, timeline semaphores;
    `glslang`/`spirv-cross` installed (`paru`).
 4. Decide against section 3. Record the decision and the numbers in
-   `docs/results.md`.
+   `docs/archive/2026-09-24/results.md`.
 
 Exit: the gate table in section 3 is filled in.
 
@@ -361,7 +361,7 @@ Exit: the completion column of section 3.
 ### Phase 5: tail (2–3 weeks)
 
 Debug tools (vehicle editor, physics debug, gizmos), Zink retirement in the
-harness docs, validation-layer clean run, a `docs/results.md` write-up, and
+harness docs, validation-layer clean run, a `docs/archive/2026-09-24/results.md` write-up, and
 the fallback path tested (Vulkan unavailable → GL).
 
 Total: roughly 4–5 months. Phases 2 and 3 are the ones most likely to
@@ -408,7 +408,7 @@ overrun, because each `GenericDrawer` site hides its own GL state assumptions.
 ## 8. Order of work
 
 1. Phase 0 (this week): profile, bundle check, decision written to
-   `docs/results.md`.
+   `docs/archive/2026-09-24/results.md`.
 2. Phase 1 regardless of the decision, because the seam is also where the
    GL batching work lands.
 3. Phases 2–5 only on a "go", each ending in a harness run that is compared

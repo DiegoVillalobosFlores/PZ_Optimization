@@ -23,7 +23,7 @@ LEN60="${LEN60:-79}"; LEN120="${LEN120:-40.5}"   # 120 km/h clips end at route c
 FONT=/usr/share/fonts/noto/NotoSans-Bold.ttf
 
 run() { ls -d harness/runs/$1-*/recording.mp4 | tail -1; }
-S60=$(run quad6-stock60-1);  O60=$(run quad6-opt60-1)      # runs made with Steam's performance monitor OFF (it pins the GL thread: ~160 fps instead of 240; see docs/results.md 2026-09-19)
+S60=$(run quad6-stock60-1);  O60=$(run quad6-opt60-1)      # runs made with Steam's performance monitor OFF (it pins the GL thread: ~160 fps instead of 240; see docs/archive/2026-09-24/results.md 2026-09-19)
 S120=$(run quad6-stock120-1); O120=$(run quad6-opt120-2)    # config/mangohud-showcase-opt.conf (HUD left edge)
 
 W=3840; H=1920; CW=1920; CH=810

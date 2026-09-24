@@ -28,7 +28,7 @@ what is on disk, what was changed in the harness, and the exact steps.
   installed 2026-09-15), `pzopt.properties` with `instrument=true dev=true`,
   the tuned launcher JSON variants (`.opt`, `.stock`, `.bak`, `.prev`) and the
   JVMs `jre64.graal` (what `jre64` links to), `jre64.stock`, `jre64.zulu`.
-- Sep-15 Proton baselines: `harness/runs/stock4k-*`, `harness/baseline/bench-*.json`
+- Sep-15 Proton baselines: `harness/runs/stock4k-*`, `harness/archive/2026-09-24/baseline/bench-*.json`
   (5120x2160, NVIDIA GL 615, Oracle JVM, older harness). They are not directly
   comparable to native runs (`compare.py` warns on the "OpenGL version" line).
 
@@ -60,7 +60,7 @@ Caveats that decide what the run is compared against:
 - `ProjectZomboid64.json` comes back stock from the depot (`-Xmx3072m`);
   `run.sh --gc`/`--jfr` edit and restore it as usual.
 - The Steam performance monitor must stay off (it caps the optimized runs at
-  ~160 fps, see `docs/results.md`).
+  ~160 fps, see `docs/archive/2026-09-24/results.md`).
 
 ## 3. Harness changes made today for this run
 

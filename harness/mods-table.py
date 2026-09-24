@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Render docs/media/workshop-mods-comparison.png: the Workshop performance mods vs this build on the
-three uncapped routes (docs/results.md, 2026-09-21). Table form with an inline fps bar per route, in
+three uncapped routes (docs/archive/2026-09-24/results.md, 2026-09-21). Table form with an inline fps bar per route, in
 the media style of docs/media-style.md (the showcase video's results card): near-black surface, Noto
 Sans, numbers in Noto Sans Mono, stock in amber, this build in green, everything else de-emphasised."""
 import matplotlib
@@ -80,6 +80,6 @@ for name, subs, what, *cells, note in ROWS:
 
 text(X0, H - PAD - 42, "Bars: fps mean, same scale on every route (0 to 500). Every mod is within run-to-run noise of stock; "
      "Multi-Cpu Enhance's ParallelGC adds a 300-350 ms stop-the-world pause per route (stock G1 max 21 ms).", 12, INK2)
-text(X0, H - PAD - 20, "Per-mod details and every number: docs/results.md, 2026-09-21 sections.", 11.5, MUTED)
+text(X0, H - PAD - 20, "Per-mod details and every number: docs/archive/2026-09-24/results.md, 2026-09-21 sections.", 11.5, MUTED)
 fig.savefig(OUT, dpi=100, facecolor=BG)
 print(OUT, W, H)

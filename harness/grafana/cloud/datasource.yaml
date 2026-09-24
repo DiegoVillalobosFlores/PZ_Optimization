@@ -1,0 +1,20 @@
+# The public dashboard's datasource: the GCP VM pzopt-db over Direct VPC egress (internal IP), read-only role grafana
+# (statement_timeout 30 s). PZ_DB_HOST / PZ_DB_PASSWORD come from the Cloud Run service's environment.
+apiVersion: 1
+datasources:
+  - name: pzopt
+    uid: pzopt-pg
+    type: grafana-postgresql-datasource
+    url: ${PZ_DB_HOST}:5432
+    user: grafana
+    isDefault: true
+    jsonData:
+      database: pzopt
+      sslmode: disable
+      postgresVersion: 1500
+      timescaledb: false
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 300
+    secureJsonData:
+      password: ${PZ_DB_PASSWORD}

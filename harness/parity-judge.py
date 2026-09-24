@@ -98,7 +98,7 @@ def measure(path, start, end, scale):
     luma = f.mean(axis=(1, 2))
     luma_steps = np.abs(np.diff(luma))
     px = h * w
-    # the blocky-lights metric (docs/findings-blocky-lights-2026-09-21.md): pixels whose luminance
+    # the blocky-lights metric (docs/archive/2026-09-24/findings-blocky-lights-2026-09-21.md): pixels whose luminance
     # jumps by > 40 between consecutive frames at 30 fps; a stale chunk lands as a chunk-sized solid
     # block of jumps, a stock-like light sweep changes smoothly. Solid blocks: 32x32 reduced-px cells
     # (about half a tile at 1280 wide) where >= 90 % of the pixels jump in the same frame.

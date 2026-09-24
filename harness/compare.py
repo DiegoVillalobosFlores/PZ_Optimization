@@ -39,7 +39,7 @@ METRICS = [
     ("frames below 240 fps cap", lambda s: 100 * s["mangohud"]["under_cap_share"], "%", True, 2.0),
     # utilization: the objective is to use the machine when not at the cap, so higher is better here
     ("CPU load (all threads)", lambda s: s["mangohud"]["util"]["cpu_load"]["mean"], "%", False, 2.0),
-    # MangoHud's GPU columns read 0 / idle clocks on the native GL path (see docs/native-baseline-2026-09-18.md);
+    # MangoHud's GPU columns read 0 / idle clocks on the native GL path (see docs/archive/2026-09-24/native-baseline-2026-09-18.md);
     # they are skipped when they carry no signal and the sysmon rows below are the GPU measurement
     ("GPU load (MangoHud)", lambda s: nonzero(s["mangohud"]["util"]["gpu_load"]["mean"]), "%", False, 3.0),
     ("GPU core clock (MangoHud)", lambda s: nonzero(s["mangohud"]["util"]["gpu_core_clock"]["mean"]), "MHz", False, 50.0),

@@ -102,6 +102,7 @@ PzoptOptionClasses = {
     hotsaveStaged = { "ChunkSaveWorker" },
     inputLatch = { "pzopt.InputLatch" },
     inputLatchWaitUs = { "pzopt.InputLatch" },
+    inputLog = { "pzopt.InputRecorder" },
     instrument = { "AmbientStreamManager", "FBORenderCell", "GameLoadingState", "GLVertexBufferObject", "pzopt.LoadTrace", "pzopt.Stats" },
     itemParamSwitch = { "Item" },
     jitC1Cores = { "pzopt.JitGovernor" },

@@ -1,0 +1,9 @@
+# gcloud builds submit of the Cloud Run image: only what the Dockerfile copies
+*
+!Dockerfile
+!provisioning/
+!provisioning/**
+!cloud/
+!cloud/**
+!dashboards/
+!dashboards/**

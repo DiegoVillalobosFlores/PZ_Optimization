@@ -16,7 +16,7 @@ chunk), and `RecalcProperties` re-runs inside loop 3 via
 `RecalcPropertiesIfNeeded`, reaching shared lazy state (`IsoMetaGrid`'s clipper
 scratch, lazy singletons, square construction) that only loop 1 warms.
 
-Measurement (docs/baseline-findings.md) added a third: the streamer thread is
+Measurement (docs/archive/2026-09-24/baseline-findings.md) added a third: the streamer thread is
 idle >90 % of the time at car speed, and chunk latency is set by
 `threadLoop()`'s fixed 140 ms sleeps, not by the pass.
 

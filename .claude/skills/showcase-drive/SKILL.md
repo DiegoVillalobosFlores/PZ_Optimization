@@ -29,6 +29,5 @@ Afterwards:
 ```bash
 harness/stitch-quad.sh <stock60> <opt60> <stock120> <opt120>   # 3840x1920 quad video
 python3 harness/readme-chart.py                                 # docs/media/drive-results.svg
-python3 harness/dashboard.py
 ```
 Update the run names inside `readme-chart.py` and paste the new figures into README.md.

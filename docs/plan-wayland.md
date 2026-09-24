@@ -36,11 +36,11 @@ All capped at 240, bench route, max zoom, `--no-dashboard`, NVIDIA GL 615.71.
 
 ## Outcome (2026-09-19 22:15)
 
-Answered; see `docs/results.md` (2026-09-19 20:48–22:15). Native Wayland is within the
+Answered; see `docs/archive/2026-09-24/results.md` (2026-09-19 20:48–22:15). Native Wayland is within the
 noise floor of XWayland at the 240 cap on bench and drive routes. The one structural
 difference is that NVIDIA's threaded-optimisation worker thread exists under GLX
 (XWayland) and not under EGL (Wayland), so the render thread carries the driver's
-command-building itself. That is invisible capped and costs 12–17 % of frame rate uncapped (measured 22:20–22:50, `docs/results.md`). XWayland
+command-building itself. That is invisible capped and costs 12–17 % of frame rate uncapped (measured 22:20–22:50, `docs/archive/2026-09-24/results.md`). XWayland
 stays the default; native Wayland remains available through the `--env` flag for the
 scaled-desktop case it was built for. MangoHud CSV and HUD work on both; only the
 cosmetic fps-metrics reset key is Wayland-incapable, and the harness now skips it there.

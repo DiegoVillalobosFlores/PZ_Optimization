@@ -204,7 +204,7 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   via a queue `cmd` job driving the menus with `ui-drive.py` (`/tmp/pzopt-menu-check.sh`); new
   `src/media/` ships through build.sh like the Lua. The paths are `media/ui/...` relative to the game dir:
   `ZomboidFileSystem`'s "work dir" is already `<game>/media`, strip the prefix before `getMediaFile`.
-- Game thread (2026-09-20, `docs/results.md`): new heavy bench route `--flag route=S:450 --flag turn=90
+- Game thread (2026-09-20, `docs/archive/2026-09-24/results.md`): new heavy bench route `--flag route=S:450 --flag turn=90
   --route-seconds 25` (south through Rosewood, facing spinning). Adopted: weatherMaskIdleSkip,
   cutawayRadius=6, gridStackInterval=8, lightingRebakeMs=250, rebakeBudget=4/rebakeMaxFrames=3,
   lightSwitchCheckFrames=15, single-lookup Kahlua rawget, occluder masks on IsoChunk. 199 → 229 fps
@@ -236,12 +236,12 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   from ~450 fps (`pzopt.GpuSections`, `--prop gpuSections=true`: chunk composite ~0.6 ms, bakes
   ~0.3-0.5 ms a frame). `harness/gametree.py` prints the game-thread call tree from a JFR run.
   Never build or decompile while a run is going; check `pzopt.sh status` says installed before a launch.
-- JVM matrix on the desktop (2026-09-20 13:35, `docs/results.md`): GraalVM 25.0.3 is 7-9 % behind
+- JVM matrix on the desktop (2026-09-20 13:35, `docs/archive/2026-09-24/results.md`): GraalVM 25.0.3 is 7-9 % behind
   Zulu/C2 uncapped on the spinning route (copy kept at `jre64_graal`); Zulu + the tuned G1 JSON
   (`config/launcher/ProjectZomboid64.g1.json`, now installed) has the tightest tail (508 fps, p99 7.3 ms,
   game thread 81 %). The ~500 fps numbers need `persistentVbo=true translucentTilesInChunkTexture=true`
   (tab file or `--prop`); with both off the same route is 184 fps, so check the console `settings:` line.
-- Thunderstorm pass (2026-09-20 evening, `docs/findings-scene-presets-2026-09-20.md` §3-5): the storm
+- Thunderstorm pass (2026-09-20 evening, `docs/archive/2026-09-24/findings-scene-presets-2026-09-20.md` §3-5): the storm
   preset was 83 fps uncapped with nothing saturated. GameProfiler A/B (`--game-profiler`, `sections.py
   --thread game|render`, the file names are `MainThread` = game thread, `main` = render thread) and JFR
   showed puddles (4.5 ms/frame, stock re-packs every wet square) and the rain quads (73 % of the render
@@ -261,7 +261,7 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   chunk checkerboard for ~90 ms while a flash ramps). Laptop runs go through
   `/tmp/pzopt-laptop-run.sh` on diego-flip (`~/PZ_Optimization-rain` worktree). The interior-object
   flicker itself was the peer's find, fixed in 100f441 (held re-bakes drew empty per-frame lists).
-- Flicker fix (2026-09-20 evening, `docs/results.md`): objects inside buildings, doors, windows and
+- Flicker fix (2026-09-20 evening, `docs/archive/2026-09-24/results.md`): objects inside buildings, doors, windows and
   corpses blinked out for 1-3 frames because stock `FBORenderLevels.invalidate()` empties the per-frame
   square lists and every pzopt held re-bake (`lightingRebakeMs`, `rebakeBudget`) drew the previous
   texture with them empty. FBORenderCell now keeps the lists across invalidations (IsoChunk clears them
@@ -285,7 +285,7 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   command, `--prop treeBakePass=false` (old bake), `--prop treesInChunkTexture=false` (per frame). Found on the
   way: `vboFastQuads=true` draws per-frame FBORenderTrees quads ~40 % darker than the stock element path
   (runs `trees-town-off` vs `trees-town-off-slowvbo`), reported to the VBORenderer session, not fixed here.
-- Fog pass (2026-09-21, `docs/findings-fog-2026-09-21.md`): heavy fog was 447 → 220 fps on the 120 km/h uncapped
+- Fog pass (2026-09-21, `docs/archive/2026-09-24/findings-fog-2026-09-21.md`): heavy fog was 447 → 220 fps on the 120 km/h uncapped
   desktop route (stock draws ~190 screen-wide row rectangles per level, 12 per pixel, `gl_FragDepth`, one draw call
   each, plus a game-thread square walk that fed nothing). `fogPass` (default on): `pzopt.FogPass` + overrides of
   `ImprovedFog`, `ImprovedFogDrawer`, `MultiTextureFBO2` (the offscreen depth is a D24S8 texture now, read in place),
@@ -294,7 +294,7 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   on the game thread (`fogMaskFrames`, 20). Now 389 fps / 2.6 ms (clear 447 / 2.2), laptop 98 → 223 (clear 259).
   A/Bs: `--prop fogPass=false`, `fogScalePct=50|100`, `fogDepthCopy=true`, `devFogNoDraw`, `devFogFlat`; GPU
   sub-sections `fog.blit/rects/composite` with `gpuSections=true`. Screenshot rig: bench `--flag fog=heavy --shot-at 8`.
-- Storm parity pass (2026-09-21 afternoon, `docs/findings-storm-parity-2026-09-21.md`, branch
+- Storm parity pass (2026-09-21 afternoon, `docs/archive/2026-09-24/findings-storm-parity-2026-09-21.md`, branch
   `worktree-lightning-zero-cost`): the 120 km/h storm drive on the desktop was GPU-bound at 232 fps / 4.3 ms vs
   ~450 clear; the puddle "GPU cost" was the render thread streaming every wet square through the ring buffer each
   frame. Adopted (all default on): `puddleVbo` (per-chunk-level GL buffers, uploads only on light / camera-chunk
@@ -304,7 +304,7 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   neighbour textures instead of re-baking them; half the neighbour re-bakes while driving). Storm with lightning
   232 → 390 fps (2.6 ms, p99 8.6), clear 420 → 454 fps; the flashes cost ~0.1 ms mean. Laptop numbers pending
   (it was shut down mid-pass). A reduced-resolution puddle layer and a two-texture flash blend were rejected.
-- World-sound hitch (2026-09-22, `docs/findings-world-sound-2026-09-22.md`): `WorldSoundManager.addSound` walks
+- World-sound hitch (2026-09-22, `docs/archive/2026-09-24/findings-world-sound-2026-09-22.md`): `WorldSoundManager.addSound` walks
   `(radius/3)²` squares to scare fish and asks the cell for `(2·radius·hearing/8)²` chunks per call, and
   `Alarm.update` makes that call every frame while a house alarm rings: 0.4 ms per call at 600 (620 → 533 fps
   uncapped), 4.4 ms at 2000 (→ 170 fps). `worldSoundFast` (default on; `WorldSoundManager` + `FishSchoolManager`
@@ -334,7 +334,7 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   says dirty for 99 % of the visible squares every frame — that is what the 8 % "lighting jni" is), and `getChunkDirty`
   outside `LightingJNI.update` (throws; zombies vanish). Builds go through `queue.sh submit cmd -- scripts/build.sh`
   when peers are running. The peer session's §3.1 losParallel plan is dropped (nothing left to parallelise).
-- Camera zoom (2026-09-22, `docs/results.md` "Camera zoom changes", `docs/override-edits.md`): stock frees a chunk level's
+- Camera zoom (2026-09-22, `docs/archive/2026-09-24/results.md` "Camera zoom changes", `docs/override-edits.md`): stock frees a chunk level's
   textures the frame it leaves the screen and bakes every level a zoom-out reveals in the frame it appears (the bake budget
   never caught them: DIRTY_CREATE is set after the deferral decision); a 0.25 → 2.5 wheel spin was an 80-375 ms frame, a
   notch at wide zoom 45-51 ms. `zoomRetain` (`pzopt.ZoomRetain`, default on): textures kept while the chunk is inside the
@@ -374,7 +374,7 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   `GameThreadProfile` is safepoint-biased (hot-method self time lands on loop back-edges). The harness summary now
   carries `zombie_batches=` and `bake_counters=` (`pzopt-bench.out`) so short runs still report the batch and
   bake / re-bake counters.
-- Characters draw pass (2026-09-22 morning, `docs/findings-characters-draw-2026-09-22.md`, runs `cd*-*`): the game-thread
+- Characters draw pass (2026-09-22 morning, `docs/archive/2026-09-24/findings-characters-draw-2026-09-22.md`, runs `cd*-*`): the game-thread
   render sub-phase `characters draw` (renderMovingObjects) on the Louisville horde 13.2 % → 4.4-4.8 % (~3.0 → ~0.75 ms a
   frame; 11.3 % with the keys off on the same tree). Stock already ran `ModelSlotRenderData.init` on its eight-thread
   executor (`Threading.ModelSlotInit`); the game-thread cost was `initModel`, one submit per zombie, the culled zombies'
@@ -396,7 +396,7 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   writes less than the screen: new defaults `dlssPreset=e dlssOutputPct=67 dlssOutputFilter=rcas dlssDirectColor=true`
   (+22 % in the static storm + stock-fog scene, image sharper than full-size K); the drive stays DLSS-negative. The
   120 km/h drive harness no longer swings into the roadside (check `harness: drive t=` telemetry before trusting a drive).
-- Variable refresh (2026-09-24, `docs/findings-vrr-2026-09-24.md`): stock borderless never got VRR (KWin / Mutter /
+- Variable refresh (2026-09-24, `docs/archive/2026-09-24/findings-vrr-2026-09-24.md`): stock borderless never got VRR (KWin / Mutter /
   gamescope need a fullscreen window); `borderlessFullscreen` (Linux default) makes it a GLFW monitor window at the desktop
   mode. `pzopt.Vrr` reads DRM `VRR_ENABLED`; while on, `vrrCap` (157 at 165 Hz) and `presentPacing=auto` (gpu: swap held to
   GPU-completion lag, judder 3.10 -> 0.95 ms). Mac `macPresent` (Metal bridge, ProMotion 4.17 ms steps, off by default,

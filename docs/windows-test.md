@@ -303,7 +303,7 @@ quit-to-menu-and-Continue, and the visible-fps reading with the in-game limiter 
 
 Same machine, cap and route; options.ini `zoomLevels2x` now starts at 250, so `zoom=max`
 gives 2.5 and the zoom-out buffer is 12800x5400, the Linux configuration. Two stock runs
-for the noise floor. Summaries in `harness/baseline/windows/z25/`.
+for the noise floor. Summaries in `harness/archive/2026-09-24/baseline/windows/z25/`.
 
 | Run | fps mean | frame mean | p50 | p90 | p99 | p99.9 | max | >33 ms |
 |---|---|---|---|---|---|---|---|---|

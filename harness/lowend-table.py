@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Render docs/media/dell-lowend-comparison.png: stock vs the "Low-end hardware" profile on the Dell
-(i5-6300HQ / GTX 960M), four routes (docs/results.md, 2026-09-21 low-end section). Same media style as
+(i5-6300HQ / GTX 960M), four routes (docs/archive/2026-09-24/results.md, 2026-09-21 low-end section). Same media style as
 harness/mods-table.py (docs/media-style.md): near-black surface, Noto Sans, numbers in Noto Sans Mono,
 stock in amber, the profile in green. The image carries every word of the Workshop's "New! Low-end
 hardware mode" section (the description embeds only the picture), so the title, the machine, the
@@ -80,6 +80,6 @@ text(X0, H - PAD - 84, "Bars: fps mean, 0 to 100. World load 70 s -> 25 s. 60 fp
      "(1 to 2 % of frames over 33 ms).", 12.5, INK2)
 text(X0, H - PAD - 60, "Apply the profile, restart, and copy config/launcher/ProjectZomboid64.g1.json over the game's launcher JSON "
      "(the stock ZGC stalls for seconds on four cores).", 12.5, INK2)
-text(X0, H - PAD - 30, "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, docs/results.md, " + DATE + " sections.", 11.5, MUTED)
+text(X0, H - PAD - 30, "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, docs/archive/2026-09-24/results.md, " + DATE + " sections.", 11.5, MUTED)
 fig.savefig(OUT, dpi=100, facecolor=BG)
 print(OUT, W, H)

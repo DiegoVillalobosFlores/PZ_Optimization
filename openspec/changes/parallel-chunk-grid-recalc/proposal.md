@@ -15,7 +15,7 @@ how many are idle. It shows up as the stutter and pop-in when the player moves
 faster than chunks can be recalculated — driving is the worst case, since it
 crosses chunk boundaries continuously.
 
-Measurement (docs/baseline-findings.md) then showed a second, larger cause of
+Measurement (docs/archive/2026-09-24/baseline-findings.md) then showed a second, larger cause of
 the same symptom: `WorldStreamer.threadLoop()` polls its job queue with fixed
 `Thread.sleep(140L)` calls — two of them back to back when idle, and one after
 the last chunk of a burst — so a chunk waits a median ~155 ms before the

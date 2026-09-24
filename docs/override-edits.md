@@ -282,7 +282,7 @@ objects, chunks by lighting counter, translucent squares). Every fix is marked
     obscuring changes are never held, for the flicker reason in item 6. On
     the 25 s Rosewood teleport route with the facing spinning, bakes were
     2.4 to 4.3 per frame and 87 % of them re-bakes; this took the p99 from
-    15.6 to 11.2 ms (`docs/results.md`, 2026-09-20). Counters
+    15.6 to 11.2 ms (`docs/archive/2026-09-24/results.md`, 2026-09-20). Counters
     `budgeted rebakes` / `held` join the instrument line.
 13. **Defaults changed 2026-09-20**: `lightingRebakeMs` 0 → 250,
     `cutawayRadius` 0 → 6, `gridStackInterval` 0 → 8 (measured on the same
@@ -1364,7 +1364,7 @@ budget `lightingRebakeBudget` (default 8) and its own longest hold `lightingReba
 reason (1024: light switches must answer within a few frames). Why: a lightning strike dirties
 every on-screen chunk texture; with the 3-frame cap they all landed in one frame, five times per
 strike (flash on, flash off, then every `lightingRebakeMs` of the fade), a 50-90 ms stall each
-that the maintainer saw as the rain freezing and jumping every ~6 s (`docs/findings-scene-presets-2026-09-20.md`
+that the maintainer saw as the rain freezing and jumping every ~6 s (`docs/archive/2026-09-24/findings-scene-presets-2026-09-20.md`
 §6). With the spread the same bakes land over ~25 frames: storm drive p99.9 57 -> 12.5 ms, max
 88 -> 19 ms, no frame over 33 ms, at the price of a faint chunk checkerboard for ~90 ms while a
 flash ramps (chunks baked at different points of the ramp). `lightingRebakeMs=100` was tried
@@ -1512,7 +1512,7 @@ and `pzoptTreePassActive()` — now an instance method — is false, so a chunk 
 frame gets no trees and no tree pass, and the per-frame path draws them. Counter
 `pzoptTreesPerFrameFrames` and the current rate on the instrument line.
 
-Why: on a 4-core i5-6300HQ (Dell, `docs/results.md` 2026-09-21 low-end section) baking trees
+Why: on a 4-core i5-6300HQ (Dell, `docs/archive/2026-09-24/results.md` 2026-09-21 low-end section) baking trees
 while driving at 120 km/h was a net loss — a chunk texture lives a second or two, and baking its
 trees (own texture plus the neighbour copies of the tree pass, plus the tree pass's 5x5-chunk scan)
 cost more game-thread time than drawing them per frame for that long: `workers=1` 19.5 fps, with
@@ -2025,7 +2025,7 @@ Now (`pzopt.ZoomRetain`, keys `zoomRetain` true, `zoomRebakeBudget` 12, `zoomFra
   starve again. Counter `dropped=` in the periodic `zoom kept=` log line; 0 on the bench route.
 
 Results (240 cap, south route, `zoomsteps.py --window 1.0`): 0.25 ↔ 2.5 instant jumps, worst frame per
-jump 375 / 86 / 59 / 52 ms (stock) → see `docs/results.md` for the adopted build's numbers.
+jump 375 / 86 / 59 / 52 ms (stock) → see `docs/archive/2026-09-24/results.md` for the adopted build's numbers.
 
 ## zombie.characters.IsoPlayer (added 2026-09-22, player line-of-sight pass)
 
@@ -2899,7 +2899,7 @@ Mac (one run each, same build): depth-map task time 8.9 -> 7.7 s, image decode 4
 ## Zombie postupdate pass (2026-09-23 night; `animatorParallel`, `animBatchAsync`, `animatorPipeline`, `guardedCallbacks`, `modelLockPerInstance`, `poolStatsBatched`, `headOnWorker`)
 
 Goal: `MovingObjectUpdateScheduler.postupdate` under 4 % of the game thread on the Louisville horde. Numbers in
-`docs/results.md` ("Zombie postupdate pass"). The pass moves the per-zombie finish of the postupdate loop to the frame
+`docs/archive/2026-09-24/results.md` ("Zombie postupdate pass"). The pass moves the per-zombie finish of the postupdate loop to the frame
 workers (`pzopt.AnimParallel`) and fixes the shared state that kept them serial.
 
 ### zombie.characters.IsoGameCharacter (`animatorParallel`, `headOnWorker`)
@@ -3114,7 +3114,7 @@ sprite to the newest pointer position right before it replays the frame (RenderT
 
 ## Variable refresh: G-SYNC / FreeSync / ProMotion (2026-09-24; `borderlessFullscreen`, `vrr`, `vrrCap`, `presentPacing`, `limiterSleep`, `macPresent`)
 
-Measurements and the reasoning behind every key: `docs/findings-vrr-2026-09-24.md`.
+Measurements and the reasoning behind every key: `docs/archive/2026-09-24/findings-vrr-2026-09-24.md`.
 
 ### org.lwjglx.opengl.Display (`borderlessFullscreen`, `macPresent`)
 

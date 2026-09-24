@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Render docs/media/input-latency-reflex.png: input -> screen latency, stock vs this build with the low-latency options
-(docs/findings-input-latency-2026-09-24.md). Same media style as harness/lowend-table.py (docs/media-style.md): stock in
+(docs/archive/2026-09-24/findings-input-latency-2026-09-24.md). Same media style as harness/lowend-table.py (docs/media-style.md): stock in
 amber, the new build in green. The image carries every word of the Workshop's "New! NVIDIA Reflex-style low latency"
 section (the description embeds only the picture).
 
@@ -78,6 +78,6 @@ text(X0, H - PAD - 84, "Uncapped with vsync on: 25-28 ms -> 5-10 ms with the low
      " ~28 W at a 60 fps cap and is released when the game exits.", 12.5, INK2)
 text(X0, H - PAD - 60, "NVIDIA Reflex itself exists only for Direct3D and Vulkan; the game uses OpenGL, so this implements Reflex's method with"
      " OpenGL and NVIDIA's NVML.", 12.5, INK2)
-text(X0, H - PAD - 30, "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, docs/findings-input-latency-2026-09-24.md.", 11.5, MUTED)
+text(X0, H - PAD - 30, "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, docs/archive/2026-09-24/findings-input-latency-2026-09-24.md.", 11.5, MUTED)
 fig.savefig(OUT, dpi=100, facecolor=BG)
 print(OUT, W, H)

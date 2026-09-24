@@ -10,6 +10,7 @@
 
 # harness run outputs (logs, captures)
 /harness/runs/
+/harness/archive/*/runs/
 
 # harness run outputs (logs, captures)
 /harness/runs/

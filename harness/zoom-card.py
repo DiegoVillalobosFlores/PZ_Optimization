@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render docs/media/zoom-card.png, the Workshop page's "New! Smooth zoom" image (2026-09-22 zoom pass, docs/results.md
+"""Render docs/media/zoom-card.png, the Workshop page's "New! Smooth zoom" image (2026-09-22 zoom pass, docs/archive/2026-09-24/results.md
 "Camera zoom changes"). Same media style as harness/lowend-table.py (docs/media-style.md): near-black surface, Noto Sans,
 numbers in Noto Sans Mono, stock in amber, new in green. The image carries every word of the section (the description
 embeds only the picture): title, date, what changed, the machine, and the worst-frame table with a bar per cell.
@@ -19,7 +19,7 @@ STOCK, OPT = "#c9592b", "#44de7c"
 plt.rcParams["font.family"] = ["Noto Sans", "DejaVu Sans", "sans-serif"]
 MONO = "Noto Sans Mono"
 
-# case, worst frame ms stock, worst frame ms new (docs/results.md, runs zs-out-* / zo-jump9-plan5u / zo-wheel-* / zo-wheel9-ease)
+# case, worst frame ms stock, worst frame ms new (docs/archive/2026-09-24/results.md, runs zs-out-* / zo-jump9-plan5u / zo-wheel-* / zo-wheel9-ease)
 ROWS = [
     ("Full wheel spin 0.25 -> 2.5 at once, first time at a spot (textures never baked)", 375, 25),
     ("Full wheel spin 0.25 -> 2.5 at once, again (median of three)", 83, 18),
@@ -78,6 +78,6 @@ text(X0, H - PAD - 108, "Zoom motion: stock 0.03 per frame and a snap (8 frames 
 text(X0, H - PAD - 84, "Options > Optimizations: Keep chunk textures across zoom changes, Chunk textures a zoom change bakes per frame, "
      "Zoom: motion time, Zoom: motion timing curve. Video: bench-zoom-spin-stock-vs-new on the repository.", 12.5, INK2)
 text(X0, H - PAD - 60, "Kept textures use no more video memory than stock holds at the widest zoom; a chunk that unloads still frees everything.", 12.5, INK2)
-text(X0, H - PAD - 30, "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, docs/results.md, " + DATE + " Camera zoom changes.", 11.5, MUTED)
+text(X0, H - PAD - 30, "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, docs/archive/2026-09-24/results.md, " + DATE + " Camera zoom changes.", 11.5, MUTED)
 fig.savefig(OUT, dpi=100, facecolor=BG)
 print(OUT, W, H)

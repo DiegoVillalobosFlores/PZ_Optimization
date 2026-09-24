@@ -15,7 +15,7 @@ For each class in `OVERRIDES`: diff `build/vineflower/<class>.java` against
 `src/overrides/<class>.java`, re-apply the edits listed in `docs/override-edits.md` onto the
 fresh copy, then `scripts/build.sh`, `scripts/test.sh`, `scripts/accept.sh` (parity), and
 `scripts/pzopt.sh install`. Re-run stock and optimized bench + drive baselines into
-`harness/baseline/native/` (see `bench-run`), because numbers from the old build are not
+`harness/archive/2026-09-24/baseline/native/` (see `bench-run`), because numbers from the old build are not
 comparable. Update `.codegraph` with `codegraph index` if the decompiled tree changed.
 Steam may also swap the platform depot (native <-> Windows); `scripts/pz-env.sh` detects the
 layout, and the Proton dir keeps stale overrides that must be uninstalled separately.

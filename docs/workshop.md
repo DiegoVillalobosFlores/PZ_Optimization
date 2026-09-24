@@ -94,7 +94,7 @@ the main menu with the item greyed out and enabled plus the dialog before and af
 captures `docs/media/updater-menu-current.png`, `updater-menu.png`, `updater-dialog-available.png`,
 `updater-dialog-installed.png`; 2026-09-22; the two earlier "New!" sections lost their "New!" with it), `16` the
 "New! Smooth zoom" card (`docs/media/zoom-card.png` from `harness/zoom-card.py`: the worst-frame table of the four zoom
-cases, stock vs `zoomRetain` + `zoomEase`, from `docs/results.md` "Camera zoom changes"; 2026-09-22 evening; the updater
+cases, stock vs `zoomRetain` + `zoomEase`, from `docs/archive/2026-09-24/results.md` "Camera zoom changes"; 2026-09-22 evening; the updater
 section lost its "New!" with it), `17` the "New! Upscaler: FSR 1.0 and DLSS" card (`docs/media/upscaler-card.png` from
 `harness/upscaler-card.py`: the per-mode table of the 120 km/h drive — off, FSR 1.0 50 %, bicubic 50 %, DLSS 50 % preset F
 and default — from `docs/plan-upscalers.md`; 2026-09-22 night; the zoom section lost its "New!" with it, and the "Better
@@ -118,7 +118,7 @@ titles; page 7,892 substituted characters). `21` the "New! NVIDIA Reflex-style l
 (`docs/media/input-latency-reflex.png` from `harness/reflex-table.py`: input -> screen at a 60 fps cap with vsync, stock
 `il-60-base` vs all input-latency keys + `reflexBoost`, mean of `il-60-boost` / `il-60-boostb`; 2026-09-24): the zombie
 card lost its `[h1]`, the upscaler caption was shortened (page 7,891 substituted characters). `22` the "New! Variable refresh" card
-(`docs/media/vrr.png` from `harness/vrr-table.py`: the desktop VRR runs of `docs/findings-vrr-2026-09-24.md`, without vs with the
+(`docs/media/vrr.png` from `harness/vrr-table.py`: the desktop VRR runs of `docs/archive/2026-09-24/findings-vrr-2026-09-24.md`, without vs with the
 VRR work; 2026-09-24): the low-latency card lost its `[h1]`, the upscaler caption was shortened again. `23` the "New! Zombie detail follows the frame cap" card
 (`docs/media/zombie-lod-card.png` from `harness/zombie-lod-card.py`: the Louisville horde at a 144 and a 240 fps cap, `zombieLodDynamic`
 off vs on, runs `lod-144-off` / `lod2-144-off` / `lod2-144-on` / `lod-240-off` / `lod2-240-on`; 2026-09-24, release eb305b6): the VRR card

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Render docs/media/zombie-cores-comparison.png: the Louisville horde before vs with the zombie postupdate
-pass (docs/results.md, "Zombie postupdate pass", 2026-09-23): four alternating pairs on the same build, the
+pass (docs/archive/2026-09-24/results.md, "Zombie postupdate pass", 2026-09-23): four alternating pairs on the same build, the
 pass's keys off vs on. Style and layout from harness/lowend-table.py (docs/media-style.md). The image
 carries every word of the Workshop's "New! Zombie hordes on all cores" section.
 
@@ -74,6 +74,6 @@ for route, s, p in ROWS:
 text(X0, H - PAD - 84, "Bars: fps mean, 0 to 120. Frames over 33 ms: 18.8 -> 15.5 per run. On by default; each part is a switch in "
      "Options > Optimizations (search \"zombie\").", 12.5, INK2)
 text(X0, H - PAD - 60, "Also fixed: the game gives every 3D model the same update lock, which made the extra cores wait for each other.", 12.5, INK2)
-text(X0, H - PAD - 30, "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, docs/results.md, " + DATE + " sections.", 11.5, MUTED)
+text(X0, H - PAD - 30, "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, docs/archive/2026-09-24/results.md, " + DATE + " sections.", 11.5, MUTED)
 fig.savefig(OUT, dpi=100, facecolor=BG)
 print(OUT, W, H)

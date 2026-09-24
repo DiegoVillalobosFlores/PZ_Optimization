@@ -1,6 +1,6 @@
 ---
 name: analyze-run
-description: Read and compare finished harness runs - frame-time tails, utilization, chunk latency, JFR waits, load phases - and regenerate the dashboard. Use when asked what a run shows, whether a change helped, or why a frame is slow.
+description: Read and compare finished harness runs - frame-time tails, utilization, chunk latency, JFR waits, load phases - and look them up in Grafana. Use when asked what a run shows, whether a change helped, or why a frame is slow.
 ---
 
 # Analyze runs
@@ -11,8 +11,8 @@ is a finding.
 
 ```bash
 python3 harness/analyze.py harness/runs/<run>/                       # one run
-python3 harness/compare.py --baseline harness/baseline/native harness/runs/<run>/   # vs stock
-python3 harness/dashboard.py                                          # docs/benchmark-progress.html
+python3 harness/compare.py harness/runs/<run>/                       # vs the newest *stock-1/*stock-2 pair (baselines archived 2026-09-24)
+harness/grafana/stack.sh status                                      # Grafana http://127.0.0.1:3000: dashboards PZ runs / run / compare / live
 python3 harness/waits.py harness/runs/<run>/                          # needs --jfr + wait thresholds
 python3 harness/attribute.py harness/runs/<run>/                      # JFR samples per slow frame
 python3 harness/sections.py harness/runs/<run>/                       # GameProfiler sections (--game-profiler)

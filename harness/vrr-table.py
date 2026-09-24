@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Render docs/media/vrr.png: variable refresh (G-SYNC / FreeSync / ProMotion), without vs with this build's VRR work
-(docs/findings-vrr-2026-09-24.md). Same media style as harness/reflex-table.py (docs/media-style.md): the "without" side in
+(docs/archive/2026-09-24/findings-vrr-2026-09-24.md). Same media style as harness/reflex-table.py (docs/media-style.md): the "without" side in
 amber, this build in green. The image carries every word of the Workshop's "New! Variable refresh" section.
 
     python3 harness/vrr-table.py
@@ -82,6 +82,6 @@ text(X0, H - PAD - 86, "any multiple of 4.17 ms: at a steady game step 94 % of f
      " fps (M1 Pro). Costs ~10-15 ms of latency, so it is off by default.", 12.5, INK2)
 text(X0, H - PAD - 58, "Windows: the borderless window already covers the screen; set Variable refresh rate = on for the cap and the even"
      " delivery. Not yet measured there or on AMD FreeSync.", 12.5, INK2)
-text(X0, H - PAD - 28, "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, docs/findings-vrr-2026-09-24.md.", 11.5, MUTED)
+text(X0, H - PAD - 28, "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, docs/archive/2026-09-24/findings-vrr-2026-09-24.md.", 11.5, MUTED)
 fig.savefig(OUT, dpi=100, facecolor=BG)
 print(OUT, W, H)

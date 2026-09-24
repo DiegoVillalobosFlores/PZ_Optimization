@@ -98,7 +98,7 @@ on a 69-Mpixel target).
 
 - `harness/compare.py` crashed with `StopIteration` on every native run (the
   GL thread is named `main` on the native build, `Render Thread` on Windows).
-- `harness/baseline/native/bench-stock-1/2.json` were Zink runs, so every
+- `harness/archive/2026-09-24/baseline/native/bench-stock-1/2.json` were Zink runs, so every
   NVIDIA-GL comparison printed "not comparable" warnings; regenerated from the
   two NVIDIA-GL stock runs, Zink pair kept as `bench-zink-*.json`.
 - MangoHud's `gpu_load` / `gpu_core_clock` / `cpu_power` columns read 0 or idle
@@ -250,13 +250,12 @@ to be tried on the driving route.
    runs, one with `--jfr --jfr-period 5` and one with `--game-profiler`;
    `harness/attribute.py` and `harness/sections.py` on them. Confirm the
    section-1.2 ranking holds while driving, fix the target (section 2), and
-   store the pair in `harness/baseline/native/drive-stock-{1,2}.json`.
+   store the pair in `harness/archive/2026-09-24/baseline/native/drive-stock-{1,2}.json`.
 1. 3.1 translucent cache — build, parity trace, three A/B runs.
 2. 3.2 trees — same gate, on top of 3.1.
 3. 3.3 warm-up — spike count gate.
 4. 3.4 cutaways, 3.5 and 3.6 A/Bs.
-5. Update `docs/results.md`, regenerate `docs/benchmark-progress.html`
-   (`python3 harness/dashboard.py`), long play session on the final build.
+5. Update `docs/results.md` (Grafana holds every run's metrics), long play session on the final build.
 
 ## 5. Harness and tooling changes made in this review
 
@@ -277,6 +276,6 @@ to be tried on the driving route.
   auto-zoom off, measures distance from the route start, logs telemetry every
   second, records `vehicle_spawned`, `cruise_kmh`, `auto_zoom_option`, and
   escalates the quit if the world does not close.
-- `harness/baseline/native/`: NVIDIA-GL stock pair; Zink pair renamed.
-- `harness/dashboard.py` → `docs/benchmark-progress.html` (+ `.json`): the
-  progress dashboard, built from the run directories.
+- `harness/archive/2026-09-24/baseline/native/`: NVIDIA-GL stock pair; Zink pair renamed.
+- `harness/dashboard.py` → `benchmark-progress.html` (+ `.json`): the progress dashboard, built from
+  the run directories (replaced by Grafana, `harness/grafana/`, on 2026-09-24; last snapshot in `docs/archive/2026-09-24/`).

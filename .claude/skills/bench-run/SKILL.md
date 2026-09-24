@@ -96,7 +96,7 @@ grep zoom= harness/runs/<label>-*/pzopt-bench.out
 ```
 Valid = mangohud, sysmon and thread lines present, `route complete`, zoom 2.5 on bench,
 resolution/renderer match the baseline. On drive runs look at `recording.mp4` frames (ffmpeg
-tile sheet) before concluding anything. Then `python3 harness/dashboard.py`.
+tile sheet) before concluding anything. The Grafana follower imports the run within ~30 s (dashboard "PZ run" at http://127.0.0.1:3000; `harness/grafana/ingest.py <run>` forces it).
 
 ## Do not
 

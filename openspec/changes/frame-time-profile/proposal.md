@@ -2,7 +2,7 @@
 
 `parallel-chunk-grid-recalc` cut chunk latency 18× but left frame time
 untouched: on the fixed bench route the game thread runs 6.7 ms mean, ~18 ms
-at p99, 25–30 ms at p99.9, with 40–200 ms spikes (docs/results.md), and none
+at p99, 25–30 ms at p99.9, with 40–200 ms spikes (docs/archive/2026-09-24/results.md), and none
 of it moved with any streamer setting. The stutter the player feels is that
 tail, and we do not yet know what is in it — the harness measures how long
 frames take, not what they spend it on. Guessing at a fix would be the

@@ -288,7 +288,7 @@ import java.util.Properties;
  *                            texture), composited once with a depth-aware blend; the rectangle depth comes from the
  *                            vertex (early depth rejection), the noise is sampled with mipmaps, and the game thread
  *                            skips the per-square walk that only fed the row iterator (pzopt.FogPass,
- *                            docs/findings-fog-2026-09-21.md). Stock shades every pixel up to twelve times with a
+ *                            docs/archive/2026-09-24/findings-fog-2026-09-21.md). Stock shades every pixel up to twelve times with a
  *                            gl_FragDepth write and one draw call per row segment: 447 -> 220 fps on the 5120x2160
  *                            120 km/h uncapped route, ~340 with the pass at 25 %. EXPERIMENTAL (2026-09-21): the
  *                            maintainer still sees a slight flicker on power lines in fog while the camera moves that
@@ -327,6 +327,7 @@ public final class Config {
    public static final boolean PARALLEL = bool("parallel", true);
    public static final int WORKERS = clampWorkers(integer("workers", defaultWorkers(Runtime.getRuntime().availableProcessors())));
    public static final boolean INSTRUMENT = bool("instrument", false);
+   public static final boolean INPUT_LOG = bool("inputLog", INSTRUMENT); // every key / mouse / pad change the game thread sees -> pzopt-input.out (pzopt.InputRecorder); on in harness runs
    public static final boolean WAKE = bool("wake", true);
    public static final String CHUNK_GRID_SETTING = string("chunkGridWidth", "0"); // chunks per side of the player's chunk grid, or "auto"; 0 = the stock screen-size value (IsoChunkMap.CalcChunkWidth, pzopt.ChunkGrid)
    public static final boolean CHUNK_GRID_AUTO = "auto".equalsIgnoreCase(CHUNK_GRID_SETTING);

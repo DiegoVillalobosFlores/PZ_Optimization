@@ -18,7 +18,8 @@ line and the game behaves as stock.
 | **Steam Workshop** | [PZ_Optimization (item 3805285544)](https://steamcommunity.com/sharedfiles/filedetails/?id=3805285544) |
 | **Latest release** | [github.com/xD3I/PZ_Optimization/releases/latest](https://github.com/xD3I/PZ_Optimization/releases/latest) (`install.ps1`, `install.sh`, `pzopt-b0bbce05d5-classes.zip`) |
 | **Showcase video** | [youtube.com/watch?v=GCjCYbTE9AQ](https://www.youtube.com/watch?v=GCjCYbTE9AQ), stock vs all optimizations ([See it in action](#see-it-in-action)) |
-| **Every run, in order** | [`docs/results.md`](docs/results.md) |
+| **Live benchmark dashboard** | [pzopt-dashboard-20282332834.us-central1.run.app](https://pzopt-dashboard-20282332834.us-central1.run.app) (Grafana: every harness run since 2026-09-24 frame by frame, CPU / GPU use, profiler flame graphs, run-vs-run diffs, the game being benchmarked right now; the first page load after a quiet spell takes a few seconds) |
+| **Every run, in order** | [`docs/results.md`](docs/results.md) (earlier runs: [`docs/archive/2026-09-24/`](docs/archive/2026-09-24/)) |
 
 Single player is what has been measured. The files are client side only (nothing to
 install on a server); read [Known limitations](#known-limitations) before installing on a
@@ -28,7 +29,7 @@ machine you play on.
 > performance monitor", the newer overlay, not the classic Shift+Tab one). It hooks every
 > GL call and serialises the render thread: with it on the optimized game stops at about
 > 160 fps and the headroom these patches recover is hidden (164 vs 237 fps on the 120 km/h
-> route, `docs/results.md` 2026-09-19). Use the build's own overlay
+> route, `docs/archive/2026-09-24/results.md` 2026-09-19). Use the build's own overlay
 > ([F9 / L3 + R3](#performance-overlay-f9--l3--r3)), MangoHud or RivaTuner instead.
 
 ---
@@ -130,8 +131,8 @@ was 232 vs 420. Runs `sbs2-storm120-stock-1` / `sbs2-storm120-opt-1` and `sbs-st
 `sbs-stormfog-opt` (2026-09-21); videos (AV1 HDR)
 `docs/media/drive-120kmh-storm-stock-vs-optimized-2026-09-21.mp4` and
 `drive-120kmh-storm-fog-stock-vs-optimized-1080.mp4`; findings in
-[`docs/findings-storm-parity-2026-09-21.md`](docs/findings-storm-parity-2026-09-21.md) and
-[`docs/findings-fog-2026-09-21.md`](docs/findings-fog-2026-09-21.md).
+[`docs/archive/2026-09-24/findings-storm-parity-2026-09-21.md`](docs/archive/2026-09-24/findings-storm-parity-2026-09-21.md) and
+[`docs/archive/2026-09-24/findings-fog-2026-09-21.md`](docs/archive/2026-09-24/findings-fog-2026-09-21.md).
 
 ![120 km/h through a thunderstorm, stock vs optimized](docs/media/drive-120kmh-storm-stock-vs-optimized-2026-09-21.jpg)
 
@@ -283,14 +284,14 @@ on the route) doubles: 15.4 → 31.4 fps, p99 202 → 101 ms, the render thread 
 24 % of a core (the fog pass's single draw call, the rain tiles and the puddle cache), CPU the
 game thread gets back on a box that is at 100 % throughout. World load 70 → 25 s. The stock
 JSON's ZGC is not usable here (allocation stalls of up to 3 s once its concurrent threads lose
-the four cores) and GraalVM 25.3 is 25–40 % behind HotSpot C2. Full pass in `docs/results.md`.
+the four cores) and GraalVM 25.3 is 25–40 % behind HotSpot C2. Full pass in `docs/archive/2026-09-24/results.md`.
 
 ### Against the Workshop's performance mods
 
 The most-subscribed Build 42 performance mods, each run on the same three routes (120 km/h
 drive, the same drive in a thunderstorm, the Rosewood spin), uncapped, one mod at a time on
 the stock game, checked in the console to be loaded and patching (2026-09-21; per-mod detail
-in `docs/results.md`).
+in `docs/archive/2026-09-24/results.md`).
 
 ![Workshop performance mods vs PZ_Optimization on the three routes](docs/media/workshop-mods-comparison.png)
 
@@ -340,7 +341,7 @@ latency:
 NVIDIA Reflex itself is an SDK for Direct3D and Vulkan; there is none for OpenGL, which the game uses, so these are
 Reflex's methods rebuilt with OpenGL and NVML. Every run and the techniques that did not help (the driver's
 `__GL_MaxFramesAllowed`, adaptive vsync, a vblank-locked start under XWayland):
-[docs/findings-input-latency-2026-09-24.md](docs/findings-input-latency-2026-09-24.md).
+[docs/archive/2026-09-24/findings-input-latency-2026-09-24.md](docs/archive/2026-09-24/findings-input-latency-2026-09-24.md).
 
 ### Variable refresh: G-SYNC, FreeSync, ProMotion
 
@@ -366,7 +367,7 @@ the game's own per-frame stamps (`harness/pacing.py`):
   steady frames exactly on their slot at 60 fps, 84 % at 80 (M1 Pro). It adds ~10-15 ms of latency, hence opt-in.
 
 Windows (borderless already covers the screen there) and AMD FreeSync are not measured yet; on Windows set Variable
-refresh rate = on in Options > Optimizations. Every run: [docs/findings-vrr-2026-09-24.md](docs/findings-vrr-2026-09-24.md).
+refresh rate = on in Options > Optimizations. Every run: [docs/archive/2026-09-24/findings-vrr-2026-09-24.md](docs/archive/2026-09-24/findings-vrr-2026-09-24.md).
 
 ---
 
@@ -573,7 +574,7 @@ unticks it, and after the next launch the game runs its original code everywhere
 nothing were installed (the tab's heading reads "since this boot: OFF"); **Enable all
 (recommended defaults)** ticks it again and puts every setting back to the build's defaults.
 A third button, **Low-end hardware (4 cores or less)**, is the set measured on a 4-core Core
-i5-6300HQ with a GTX 960M (2026-09-21, `docs/results.md`): no chunk worker pool, trees baked
+i5-6300HQ with a GTX 960M (2026-09-21, `docs/archive/2026-09-24/results.md`): no chunk worker pool, trees baked
 into chunk textures only while walking (`treeBakeMaxChunksPerSec`: while driving a chunk
 texture lives seconds and baking its trees cost more than drawing them), and on the Display
 page lighting updates 10/s and the UI redrawn 30/s — 120 km/h drive 44 → 68 fps, walking
@@ -582,7 +583,7 @@ page lighting updates 10/s and the UI redrawn 30/s — 120 km/h drive 44 → 68 
 four cores. A fourth button, **Low-end hardware + FSR 1.0 upscaling**, is that same set plus
 `upscaler=fsr1` at Quality (67 % per axis): on the same laptop the clear routes are CPU-bound, so
 the upscaler is free but idle there, while the night thunderstorm in heavy fog goes from p99 145 ms
-to 111 and the GPU load from 48 % to 40 % (2026-09-22, `docs/results.md`); a machine whose GPU is
+to 111 and the GPU load from 48 % to 40 % (2026-09-22, `docs/archive/2026-09-24/results.md`); a machine whose GPU is
 the wall gains roughly the pixel ratio.
 Below come titled groups: chunk textures (what bakes, bake budgets), cutaways / lighting /
 weather, sprite buffers, multiplayer, performance overlay (one dropdown per overlay element:
@@ -1077,7 +1078,7 @@ soon as the world is loaded instead of after the 33 s intro; the lines still pla
 ### 6. Visual fixes found on the way
 
 Each came from a bisect on the bench route or a user report and has a repro rig in the
-harness (`docs/results.md`, `docs/override-edits.md`):
+harness (`docs/archive/2026-09-24/results.md`, `docs/override-edits.md`):
 
 - **Black chunk squares** (2026-09-20): the light-info chunk gate left squares that had never
   been lit out of the bake and the whole 8x8 level came out black; the gate now refreshes any
@@ -1249,7 +1250,7 @@ python3 harness/compare.py harness/runs/spin-stock-* harness/runs/spin-opt-*
 python3 harness/loadtime.py harness/runs/<run>            # boot and load phases
 python3 harness/gametree.py harness/runs/<jfr-run>        # game-thread call tree (--jfr --jfr-period 1)
 python3 harness/flamegraph.py harness/runs/<run>          # the route as an SVG flame graph (pzopt-stacks.out)
-python3 harness/dashboard.py                              # docs/benchmark-progress.html
+harness/grafana/stack.sh up                               # Grafana + Postgres (podman) at http://127.0.0.1:3000, every run's metrics
 ```
 
 `--record` captures the run (AV1 10-bit HDR); `harness/stitch-*.sh` build the side-by-side
@@ -1318,7 +1319,7 @@ python harness\analyze.py harness\runs\bench-opt-*
 | `config/` | MangoHud profiles, the tuned G1 launcher JSON |
 | `tools/` | Standalone Java probes (JFR sample dump, GLFW swap probe, static audit) |
 | `tests/` | JVM-only unit tests (`scripts/test.sh`) |
-| `docs/` | `results.md` (every run, in order), `override-edits.md` (every edit, in prose), `windows-test.md`, `workshop.md`, the findings and plans, `benchmark-progress.html` |
+| `docs/` | `results.md` (every run since 2026-09-24, in order; the earlier results, findings and dashboard snapshot are in `docs/archive/2026-09-24/`), `override-edits.md` (every edit, in prose), `windows-test.md`, `workshop.md`, the plans |
 | `docs/media/` | The comparison videos, posters, thumbnails and charts |
 | `docs/workshop/` | The Workshop item's `workshop.txt`, description and page images |
 

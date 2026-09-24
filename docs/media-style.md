@@ -66,7 +66,7 @@ Four roles, and every colour is one of them. Text is white or grey; a hue means 
   the table, a two-line footer (how to read the bars, where the numbers come from). Inline bars share
   one scale across every column so bars are comparable across routes; thin (18 px), rounded 4 px,
   the value beside them in ink, never inside them.
-- Every number in a video also exists in `docs/results.md` with its run label; the footer of a still
+- Every number in a video also exists in `docs/archive/2026-09-24/results.md` with its run label; the footer of a still
   image points there.
 
 ## Encoding

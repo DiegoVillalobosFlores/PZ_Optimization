@@ -1,0 +1,3473 @@
+{
+ "uid": "pzopt-run",
+ "title": "PZ run",
+ "description": "One run on the route-time axis (00:00:00 = route start)",
+ "tags": [
+  "pzopt"
+ ],
+ "timezone": "utc",
+ "editable": false,
+ "graphTooltip": 1,
+ "schemaVersion": 41,
+ "version": 1,
+ "refresh": "",
+ "liveNow": false,
+ "time": {
+  "from": "1999-12-31T23:59:30.000Z",
+  "to": "2000-01-01T00:02:00.000Z"
+ },
+ "timepicker": {
+  "refresh_intervals": [
+   "1s",
+   "2s",
+   "5s",
+   "10s",
+   "30s",
+   "1m",
+   "5m"
+  ]
+ },
+ "templating": {
+  "list": [
+   {
+    "type": "query",
+    "name": "run",
+    "label": "run",
+    "datasource": {
+     "type": "grafana-postgresql-datasource",
+     "uid": "pzopt-pg"
+    },
+    "definition": "SELECT run FROM runs ORDER BY started DESC",
+    "query": "SELECT run FROM runs ORDER BY started DESC",
+    "refresh": 2,
+    "multi": false,
+    "includeAll": false,
+    "sort": 0,
+    "hide": 0,
+    "options": []
+   },
+   {
+    "type": "query",
+    "name": "source",
+    "label": "profiler",
+    "datasource": {
+     "type": "grafana-postgresql-datasource",
+     "uid": "pzopt-pg"
+    },
+    "definition": "SELECT source FROM (SELECT DISTINCT source FROM stacks WHERE run = ${run:sqlstring}) s ORDER BY CASE source WHEN 'game' THEN 0 WHEN 'asprof' THEN 1 WHEN 'jfr' THEN 2 ELSE 3 END",
+    "query": "SELECT source FROM (SELECT DISTINCT source FROM stacks WHERE run = ${run:sqlstring}) s ORDER BY CASE source WHEN 'game' THEN 0 WHEN 'asprof' THEN 1 WHEN 'jfr' THEN 2 ELSE 3 END",
+    "refresh": 2,
+    "multi": false,
+    "includeAll": false,
+    "sort": 0,
+    "hide": 0,
+    "options": []
+   },
+   {
+    "type": "query",
+    "name": "thread",
+    "label": "threads",
+    "datasource": {
+     "type": "grafana-postgresql-datasource",
+     "uid": "pzopt-pg"
+    },
+    "definition": "SELECT DISTINCT thread FROM stacks WHERE run = ${run:sqlstring} AND source = ${source:sqlstring} ORDER BY 1",
+    "query": "SELECT DISTINCT thread FROM stacks WHERE run = ${run:sqlstring} AND source = ${source:sqlstring} ORDER BY 1",
+    "refresh": 2,
+    "multi": true,
+    "includeAll": true,
+    "sort": 0,
+    "hide": 0,
+    "options": [],
+    "allValue": null,
+    "current": {
+     "text": "All",
+     "value": "$__all"
+    }
+   },
+   {
+    "type": "textbox",
+    "name": "search",
+    "label": "console search",
+    "query": "",
+    "current": {
+     "text": "",
+     "value": ""
+    },
+    "hide": 0
+   }
+  ]
+ },
+ "annotations": {
+  "list": [
+   {
+    "builtIn": 1,
+    "datasource": {
+     "type": "grafana",
+     "uid": "-- Grafana --"
+    },
+    "enable": true,
+    "hide": true,
+    "iconColor": "rgba(0, 211, 255, 1)",
+    "name": "Annotations & Alerts",
+    "type": "dashboard"
+   },
+   {
+    "name": "marks",
+    "datasource": {
+     "type": "grafana-postgresql-datasource",
+     "uid": "pzopt-pg"
+    },
+    "enable": true,
+    "hide": false,
+    "iconColor": "#FADE2A",
+    "target": {
+     "refId": "Anno",
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT rt AS time, key AS text FROM series WHERE run = ${run:sqlstring} AND source = 'mark' AND key NOT LIKE 'route-%' AND $__timeFilter(rt)"
+    }
+   },
+   {
+    "name": "route",
+    "datasource": {
+     "type": "grafana-postgresql-datasource",
+     "uid": "pzopt-pg"
+    },
+    "enable": true,
+    "hide": false,
+    "iconColor": "#73BF69",
+    "target": {
+     "refId": "Anno",
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT timestamptz '2000-01-01 00:00:00+00' AS time, 'route start' AS text UNION ALL SELECT timestamptz '2000-01-01 00:00:00+00' + make_interval(secs => route_seconds), 'route end' FROM runs WHERE run = ${run:sqlstring} AND route_seconds IS NOT NULL"
+    }
+   }
+  ]
+ },
+ "links": [
+  {
+   "title": "PZ Optimization",
+   "type": "dashboards",
+   "tags": [
+    "pzopt"
+   ],
+   "asDropdown": false,
+   "includeVars": false
+  },
+  {
+   "title": "Compare this run",
+   "type": "link",
+   "url": "/d/pzopt-compare/compare?var-runs=${run}&var-base=${run}",
+   "icon": "dashboard"
+  }
+ ],
+ "panels": [
+  {
+   "type": "stat",
+   "title": "Frame time (route)",
+   "description": "pzopt-frames.out over the route window",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT p50_ms AS p50, p99_ms AS p99, p99_9_ms AS \"p99.9\", max_ms AS max FROM runs WHERE run = ${run:sqlstring}",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "#EAB839",
+        "value": 4.167
+       },
+       {
+        "color": "orange",
+        "value": 10
+       },
+       {
+        "color": "red",
+        "value": 16.7
+       }
+      ]
+     },
+     "decimals": 2
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "values": false,
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "/.*/"
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 26
+    }
+   },
+   "id": 1,
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 8,
+    "h": 4
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Throughput",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT fps_mean AS fps, fps_1pct_low AS \"1% low\", over_33ms AS \">33 ms\", jitter_ms AS \"jitter ms\" FROM runs WHERE run = ${run:sqlstring}",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     },
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "values": false,
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "/.*/"
+    },
+    "colorMode": "none",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 26
+    }
+   },
+   "id": 2,
+   "gridPos": {
+    "x": 8,
+    "y": 0,
+    "w": 8,
+    "h": 4
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Utilization (route mean)",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT cpu_pct AS CPU, busiest_core_pct AS \"busiest core\", gpu_pct AS GPU, game_thread_pct AS \"game thread\", render_thread_pct AS \"render thread\" FROM runs WHERE run = ${run:sqlstring}",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 50
+       },
+       {
+        "color": "#EAB839",
+        "value": 75
+       },
+       {
+        "color": "green",
+        "value": 90
+       }
+      ]
+     },
+     "decimals": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "values": false,
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "/.*/"
+    },
+    "colorMode": "background",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 26
+    }
+   },
+   "id": 3,
+   "gridPos": {
+    "x": 16,
+    "y": 0,
+    "w": 8,
+    "h": 4
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Verdict",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT coalesce(verdict, '-') AS \"Jev\", CASE\n  WHEN gpu_pct >= 90 THEN 'GPU-bound'\n  WHEN game_thread_pct >= 90 OR game_load_pct >= 90 THEN 'game thread'\n  WHEN fps_mean >= 235 AND props NOT LIKE '%uncappedFps=true%' THEN 'at 240 cap'\n  WHEN fps_mean IS NULL THEN NULL\n  ELSE 'headroom left' END AS bound, CASE WHEN valid THEN 'valid' ELSE 'INVALID' END AS route, variant FROM runs WHERE run = ${run:sqlstring}",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "values": false,
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "/.*/"
+    },
+    "colorMode": "none",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 18
+    }
+   },
+   "id": 4,
+   "gridPos": {
+    "x": 0,
+    "y": 4,
+    "w": 8,
+    "h": 3
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Chunks / GC",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT chunk_p99_ms AS \"chunk p99 ms\", chunks_per_s AS \"chunks/s\", gc_events AS \"GC pauses\", gc_max_ms AS \"worst GC ms\" FROM runs WHERE run = ${run:sqlstring}",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     },
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "values": false,
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "/.*/"
+    },
+    "colorMode": "none",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 26
+    }
+   },
+   "id": 5,
+   "gridPos": {
+    "x": 8,
+    "y": 4,
+    "w": 8,
+    "h": 3
+   }
+  },
+  {
+   "type": "stat",
+   "title": "GPU",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT gpu_ms_mean AS \"GPU ms/frame\", gpu_w AS watts, gpu_c AS \"\u00b0C\", vram_mib AS \"VRAM MiB\" FROM runs WHERE run = ${run:sqlstring}",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     },
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "values": false,
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "/.*/"
+    },
+    "colorMode": "none",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 26
+    }
+   },
+   "id": 6,
+   "gridPos": {
+    "x": 16,
+    "y": 4,
+    "w": 8,
+    "h": 3
+   }
+  },
+  {
+   "type": "table",
+   "title": "Run",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT k AS fact, v AS value FROM runs, LATERAL (VALUES\n  ('started', to_char(started, 'YYYY-MM-DD HH24:MI:SS')), ('machine', machine), ('platform', platform), ('mode', mode), ('preset', preset),\n  ('route', route), ('zoom', zoom), ('resolution', resolution), ('opengl', opengl), ('jvm', jvm), ('launcher', launcher),\n  ('variant', variant), ('props', props), ('flags', flags), ('route seconds', round(route_seconds::numeric, 2)::text),\n  ('zombies loaded', zombies_loaded::text), ('verdict', verdict || ' (' || round(verdict_confidence::numeric, 2) || ')'), ('path', path)\n) AS x(k, v) WHERE run = ${run:sqlstring} AND v IS NOT NULL",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "filterable": false
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "fact"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 130
+       }
+      ]
+     }
+    ]
+   },
+   "transformations": [],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false,
+     "reducer": [
+      "sum"
+     ],
+     "fields": ""
+    },
+    "sortBy": []
+   },
+   "id": 7,
+   "gridPos": {
+    "x": 0,
+    "y": 7,
+    "w": 24,
+    "h": 11
+   }
+  },
+  {
+   "type": "row",
+   "title": "Frame time (x = route time, 00:00:00 = route start)",
+   "collapsed": false,
+   "panels": [],
+   "id": 8,
+   "gridPos": {
+    "x": 0,
+    "y": 18,
+    "w": 24,
+    "h": 1
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Every frame",
+   "description": "game frame = pzopt-frames.out, presented = the overlay's presented frame, GPU = GL timer query per frame. Dashed: 4.17 (240 fps), 10 (p99 target), 16.7 ms (p99.9 target).",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, ms AS \"game frame\" FROM frames WHERE run = ${run:sqlstring} AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, ms AS \"presented\" FROM overlay WHERE run = ${run:sqlstring} AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    },
+    {
+     "refId": "C",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, ms AS \"GPU\" FROM (SELECT rt, gpu_ms AS ms FROM overlay WHERE run = ${run:sqlstring} AND $__timeFilter(rt)) x ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000,
+      "scaleDistribution": {
+       "type": "log",
+       "log": 2
+      },
+      "thresholdsStyle": {
+       "mode": "dashed"
+      }
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 4.167
+       },
+       {
+        "color": "orange",
+        "value": 10
+       },
+       {
+        "color": "red",
+        "value": 16.7
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GPU"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "purple"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "presented"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#8AB8FF"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 9,
+   "gridPos": {
+    "x": 0,
+    "y": 19,
+    "w": 24,
+    "h": 10
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Per second: p50 / p99 / max",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT date_trunc('second', rt) AS time, percentile_cont(0.5) WITHIN GROUP (ORDER BY ms) AS p50,\n  percentile_cont(0.99) WITHIN GROUP (ORDER BY ms) AS p99, max(ms) AS max\nFROM frames WHERE run = ${run:sqlstring} AND $__timeFilter(rt) GROUP BY 1 ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000,
+      "scaleDistribution": {
+       "type": "log",
+       "log": 2
+      },
+      "thresholdsStyle": {
+       "mode": "dashed"
+      }
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 10
+       },
+       {
+        "color": "red",
+        "value": 16.7
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 10,
+   "gridPos": {
+    "x": 0,
+    "y": 29,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "fps per second",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT date_trunc('second', rt) AS time, count(*) / nullif(sum(ms) / 1000, 0) AS fps, min(1000 / nullif(ms, 0)) AS \"slowest frame as fps\"\nFROM frames WHERE run = ${run:sqlstring} AND $__timeFilter(rt) GROUP BY 1 ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000,
+      "thresholdsStyle": {
+       "mode": "dashed"
+      }
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 240
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 11,
+   "gridPos": {
+    "x": 12,
+    "y": 29,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "histogram",
+   "title": "Frame time distribution (route)",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT ms AS \"frame ms\" FROM frames x WHERE run = ${run:sqlstring} AND rt >= timestamptz '2000-01-01 00:00:00+00' AND rt <= timestamptz '2000-01-01 00:00:00+00' + make_interval(secs => coalesce((SELECT route_seconds FROM runs r WHERE r.run = x.run), 1e9))",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "fillOpacity": 70
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "bucketSize": 0.5,
+    "combine": false,
+    "legend": {
+     "showLegend": false
+    }
+   },
+   "id": 12,
+   "gridPos": {
+    "x": 0,
+    "y": 37,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "table",
+   "title": "Percentiles (route)",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT 'game frame' AS source, count(*) AS frames,\n  percentile_cont(0.5) WITHIN GROUP (ORDER BY ms) AS p50, percentile_cont(0.9) WITHIN GROUP (ORDER BY ms) AS p90,\n  percentile_cont(0.99) WITHIN GROUP (ORDER BY ms) AS p99, percentile_cont(0.999) WITHIN GROUP (ORDER BY ms) AS \"p99.9\",\n  max(ms) AS max, count(*) FILTER (WHERE ms > 16.7) AS \">16.7\", count(*) FILTER (WHERE ms > 33.3) AS \">33.3\", stddev(ms) AS stdev\nFROM frames x WHERE run = ${run:sqlstring} AND rt >= timestamptz '2000-01-01 00:00:00+00' AND rt <= timestamptz '2000-01-01 00:00:00+00' + make_interval(secs => coalesce((SELECT route_seconds FROM runs r WHERE r.run = x.run), 1e9))\nUNION ALL\nSELECT 'presented', count(*), percentile_cont(0.5) WITHIN GROUP (ORDER BY ms), percentile_cont(0.9) WITHIN GROUP (ORDER BY ms),\n  percentile_cont(0.99) WITHIN GROUP (ORDER BY ms), percentile_cont(0.999) WITHIN GROUP (ORDER BY ms), max(ms),\n  count(*) FILTER (WHERE ms > 16.7), count(*) FILTER (WHERE ms > 33.3), stddev(ms)\nFROM overlay x WHERE run = ${run:sqlstring} AND rt >= timestamptz '2000-01-01 00:00:00+00' AND rt <= timestamptz '2000-01-01 00:00:00+00' + make_interval(secs => coalesce((SELECT route_seconds FROM runs r WHERE r.run = x.run), 1e9))\nUNION ALL\nSELECT 'GPU time', count(*), percentile_cont(0.5) WITHIN GROUP (ORDER BY gpu_ms), percentile_cont(0.9) WITHIN GROUP (ORDER BY gpu_ms),\n  percentile_cont(0.99) WITHIN GROUP (ORDER BY gpu_ms), percentile_cont(0.999) WITHIN GROUP (ORDER BY gpu_ms), max(gpu_ms),\n  count(*) FILTER (WHERE gpu_ms > 16.7), count(*) FILTER (WHERE gpu_ms > 33.3), stddev(gpu_ms)\nFROM overlay x WHERE run = ${run:sqlstring} AND rt >= timestamptz '2000-01-01 00:00:00+00' AND rt <= timestamptz '2000-01-01 00:00:00+00' + make_interval(secs => coalesce((SELECT route_seconds FROM runs r WHERE r.run = x.run), 1e9))\nUNION ALL\nSELECT 'flip interval', count(*), percentile_cont(0.5) WITHIN GROUP (ORDER BY interval_ms), percentile_cont(0.9) WITHIN GROUP (ORDER BY interval_ms),\n  percentile_cont(0.99) WITHIN GROUP (ORDER BY interval_ms), percentile_cont(0.999) WITHIN GROUP (ORDER BY interval_ms), max(interval_ms),\n  count(*) FILTER (WHERE interval_ms > 16.7), count(*) FILTER (WHERE interval_ms > 33.3), stddev(interval_ms)\nFROM present x WHERE run = ${run:sqlstring} AND rt >= timestamptz '2000-01-01 00:00:00+00' AND rt <= timestamptz '2000-01-01 00:00:00+00' + make_interval(secs => coalesce((SELECT route_seconds FROM runs r WHERE r.run = x.run), 1e9))",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "filterable": false
+     },
+     "unit": "ms"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "frames"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "none"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": ">16.7"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "none"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": ">33.3"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "none"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "source"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 110
+       }
+      ]
+     }
+    ]
+   },
+   "transformations": [],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false,
+     "reducer": [
+      "sum"
+     ],
+     "fields": ""
+    },
+    "sortBy": []
+   },
+   "id": 13,
+   "gridPos": {
+    "x": 12,
+    "y": 37,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "row",
+   "title": "Utilization",
+   "collapsed": false,
+   "panels": [],
+   "id": 14,
+   "gridPos": {
+    "x": 0,
+    "y": 45,
+    "w": 24,
+    "h": 1
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Machine (sysmon)",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, cpu_pct AS \"CPU\", busiest_core_pct AS \"busiest core\", gpu_pct AS \"GPU\"\nFROM sysmon WHERE run = ${run:sqlstring} AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0,
+     "max": 100
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 15,
+   "gridPos": {
+    "x": 0,
+    "y": 46,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Threads (overlay, per frame)",
+   "description": "100 ms means of the overlay's own load columns",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT date_trunc('second', rt) + (extract(milliseconds FROM rt)::int / 100) * interval '100 ms' AS time,\n  avg(game_load) AS \"game thread\", avg(render_load) AS \"render thread\", avg(gpu_load) AS \"GPU\", avg(cpu_load) AS \"CPU\"\nFROM overlay WHERE run = ${run:sqlstring} AND $__timeFilter(rt) GROUP BY 1 ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0,
+     "max": 100
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 16,
+   "gridPos": {
+    "x": 12,
+    "y": 46,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Game process cores / GPU power",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, game_cpu_pct / 100 AS \"game process cores\", gpu_w AS \"GPU W\", gpu_c AS \"GPU \u00b0C\"\nFROM sysmon WHERE run = ${run:sqlstring} AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GPU W"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "watt"
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "right"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GPU \u00b0C"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "celsius"
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "right"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 17,
+   "gridPos": {
+    "x": 0,
+    "y": 54,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "GPU clocks / VRAM",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, gpu_sm_mhz AS \"SM MHz\", gpu_mem_mhz AS \"memory MHz\", vram_mib AS \"VRAM MiB\"\nFROM sysmon WHERE run = ${run:sqlstring} AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "VRAM MiB"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "mbytes"
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "right"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 18,
+   "gridPos": {
+    "x": 12,
+    "y": 54,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "table",
+   "title": "CPU per thread (route)",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT thread, cpu_ms AS \"CPU ms\", share * 100 AS \"% of wall\" FROM threads WHERE run = ${run:sqlstring} ORDER BY share DESC LIMIT 40",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "filterable": false
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "% of wall"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "green",
+           "value": null
+          },
+          {
+           "color": "orange",
+           "value": 75
+          },
+          {
+           "color": "red",
+           "value": 90
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "gauge",
+         "mode": "basic",
+         "valueDisplayMode": "text"
+        }
+       },
+       {
+        "id": "max",
+        "value": 100
+       },
+       {
+        "id": "min",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "thread"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 260
+       }
+      ]
+     }
+    ]
+   },
+   "transformations": [],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false,
+     "reducer": [
+      "sum"
+     ],
+     "fields": ""
+    },
+    "sortBy": []
+   },
+   "id": 19,
+   "gridPos": {
+    "x": 0,
+    "y": 62,
+    "w": 24,
+    "h": 9
+   }
+  },
+  {
+   "type": "row",
+   "title": "Game thread (pzopt-gamethread.out, share of stack samples)",
+   "collapsed": false,
+   "panels": [],
+   "id": 20,
+   "gridPos": {
+    "x": 0,
+    "y": 71,
+    "w": 24,
+    "h": 1
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Phases",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, name AS metric, share * 100 AS value FROM gamethread WHERE run = ${run:sqlstring} AND kind = 'p' AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 60,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0,
+     "max": 100
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 21,
+   "gridPos": {
+    "x": 0,
+    "y": 72,
+    "w": 24,
+    "h": 9
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Sub-phases (top 12 over the route)",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "WITH top AS (SELECT name FROM gamethread x WHERE run = ${run:sqlstring} AND kind = 's' AND rt >= timestamptz '2000-01-01 00:00:00+00' AND rt <= timestamptz '2000-01-01 00:00:00+00' + make_interval(secs => coalesce((SELECT route_seconds FROM runs r WHERE r.run = x.run), 1e9)) GROUP BY name ORDER BY sum(samples) DESC LIMIT 12)\nSELECT rt AS time, name AS metric, share * 100 AS value FROM gamethread WHERE run = ${run:sqlstring} AND kind = 's' AND name IN (SELECT name FROM top) AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 60,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 22,
+   "gridPos": {
+    "x": 0,
+    "y": 81,
+    "w": 24,
+    "h": 9
+   }
+  },
+  {
+   "type": "table",
+   "title": "Sub-phases (route)",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT name, sum(samples) AS samples, 100.0 * sum(samples) / nullif((SELECT sum(samples) FROM gamethread x WHERE run = ${run:sqlstring} AND kind = 'total' AND rt >= timestamptz '2000-01-01 00:00:00+00' AND rt <= timestamptz '2000-01-01 00:00:00+00' + make_interval(secs => coalesce((SELECT route_seconds FROM runs r WHERE r.run = x.run), 1e9))), 0) AS share\nFROM gamethread x WHERE run = ${run:sqlstring} AND kind = 's' AND rt >= timestamptz '2000-01-01 00:00:00+00' AND rt <= timestamptz '2000-01-01 00:00:00+00' + make_interval(secs => coalesce((SELECT route_seconds FROM runs r WHERE r.run = x.run), 1e9)) GROUP BY name ORDER BY 2 DESC LIMIT 30",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "filterable": false
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "share"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "gauge",
+         "mode": "basic",
+         "valueDisplayMode": "text"
+        }
+       },
+       {
+        "id": "max",
+        "value": 100
+       },
+       {
+        "id": "min",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "samples"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 80
+       }
+      ]
+     }
+    ]
+   },
+   "transformations": [],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false,
+     "reducer": [
+      "sum"
+     ],
+     "fields": ""
+    },
+    "sortBy": []
+   },
+   "id": 23,
+   "gridPos": {
+    "x": 0,
+    "y": 90,
+    "w": 8,
+    "h": 12
+   }
+  },
+  {
+   "type": "table",
+   "title": "Hot methods (route)",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT name, sum(samples) AS samples, 100.0 * sum(samples) / nullif((SELECT sum(samples) FROM gamethread x WHERE run = ${run:sqlstring} AND kind = 'total' AND rt >= timestamptz '2000-01-01 00:00:00+00' AND rt <= timestamptz '2000-01-01 00:00:00+00' + make_interval(secs => coalesce((SELECT route_seconds FROM runs r WHERE r.run = x.run), 1e9))), 0) AS share\nFROM gamethread x WHERE run = ${run:sqlstring} AND kind = 'l' AND rt >= timestamptz '2000-01-01 00:00:00+00' AND rt <= timestamptz '2000-01-01 00:00:00+00' + make_interval(secs => coalesce((SELECT route_seconds FROM runs r WHERE r.run = x.run), 1e9)) GROUP BY name ORDER BY 2 DESC LIMIT 40",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "filterable": false
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "share"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "gauge",
+         "mode": "basic",
+         "valueDisplayMode": "text"
+        }
+       },
+       {
+        "id": "max",
+        "value": 25
+       },
+       {
+        "id": "min",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "samples"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 80
+       }
+      ]
+     }
+    ]
+   },
+   "transformations": [],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false,
+     "reducer": [
+      "sum"
+     ],
+     "fields": ""
+    },
+    "sortBy": []
+   },
+   "id": 24,
+   "gridPos": {
+    "x": 8,
+    "y": 90,
+    "w": 8,
+    "h": 12
+   }
+  },
+  {
+   "type": "table",
+   "title": "Waits (not runnable) (route)",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT name, sum(samples) AS samples, 100.0 * sum(samples) / nullif((SELECT sum(samples) FROM gamethread x WHERE run = ${run:sqlstring} AND kind = 'total' AND rt >= timestamptz '2000-01-01 00:00:00+00' AND rt <= timestamptz '2000-01-01 00:00:00+00' + make_interval(secs => coalesce((SELECT route_seconds FROM runs r WHERE r.run = x.run), 1e9))), 0) AS share\nFROM gamethread x WHERE run = ${run:sqlstring} AND kind = 'w' AND rt >= timestamptz '2000-01-01 00:00:00+00' AND rt <= timestamptz '2000-01-01 00:00:00+00' + make_interval(secs => coalesce((SELECT route_seconds FROM runs r WHERE r.run = x.run), 1e9)) GROUP BY name ORDER BY 2 DESC LIMIT 25",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "filterable": false
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "share"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "gauge",
+         "mode": "basic",
+         "valueDisplayMode": "text"
+        }
+       },
+       {
+        "id": "max",
+        "value": 100
+       },
+       {
+        "id": "min",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "samples"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 80
+       }
+      ]
+     }
+    ]
+   },
+   "transformations": [],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false,
+     "reducer": [
+      "sum"
+     ],
+     "fields": ""
+    },
+    "sortBy": []
+   },
+   "id": 25,
+   "gridPos": {
+    "x": 16,
+    "y": 90,
+    "w": 8,
+    "h": 12
+   }
+  },
+  {
+   "type": "row",
+   "title": "Chunks, GC, flips",
+   "collapsed": false,
+   "panels": [],
+   "id": 26,
+   "gridPos": {
+    "x": 0,
+    "y": 102,
+    "w": 24,
+    "h": 1
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Chunk latency (enqueue \u2192 publish, one point per chunk)",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, total_ms AS \"total\" FROM chunks WHERE run = ${run:sqlstring} AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 3,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000,
+      "scaleDistribution": {
+       "type": "log",
+       "log": 2
+      }
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 27,
+   "gridPos": {
+    "x": 0,
+    "y": 103,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Chunk stages (per-second mean) and chunks/s",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT date_trunc('second', rt) AS time, avg(queue_wait_ms) AS \"queue wait\", avg(load_ms) AS load, avg(recalc_wait_ms) AS \"recalc wait\",\n  avg(recalc_ms) AS recalc, avg(publish_wait_ms) AS \"publish wait\", count(*) AS \"chunks/s\"\nFROM chunks WHERE run = ${run:sqlstring} AND $__timeFilter(rt) GROUP BY 1 ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 60,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "chunks/s"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "none"
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "text"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "right"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 28,
+   "gridPos": {
+    "x": 12,
+    "y": 103,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "GC pauses",
+   "description": "gc.log: every stop-the-world pause",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, pause_ms AS \"pause\" FROM gc WHERE run = ${run:sqlstring} AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 3,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 29,
+   "gridPos": {
+    "x": 0,
+    "y": 111,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Flip interval on screen (X Present)",
+   "description": "present.txt: time between the game window's flips",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, interval_ms AS \"flip interval\" FROM present WHERE run = ${run:sqlstring} AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 3,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000,
+      "scaleDistribution": {
+       "type": "log",
+       "log": 2
+      }
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 30,
+   "gridPos": {
+    "x": 12,
+    "y": 111,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "row",
+   "title": "Drive (path pilot, pzopt-drive.out)",
+   "collapsed": false,
+   "panels": [],
+   "id": 31,
+   "gridPos": {
+    "x": 0,
+    "y": 119,
+    "w": 24,
+    "h": 1
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Speed",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, key AS metric, value FROM series WHERE run = ${run:sqlstring} AND source = 'drive' AND key IN ('kmh', 'target_kmh') AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "velocitykmh",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 32,
+   "gridPos": {
+    "x": 0,
+    "y": 120,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Line and inputs",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, key AS metric, value FROM series WHERE run = ${run:sqlstring} AND source = 'drive' AND key IN ('xte', 'hdg_err', 'steer', 'brake', 'offset', 'obstacles', 'chunk_ahead') AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 33,
+   "gridPos": {
+    "x": 12,
+    "y": 120,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "row",
+   "title": "Profiler: flame graph (pick the source and threads above; drag across any time panel to narrow the window)",
+   "collapsed": false,
+   "panels": [],
+   "id": 34,
+   "gridPos": {
+    "x": 0,
+    "y": 128,
+    "w": 24,
+    "h": 1
+   }
+  },
+  {
+   "type": "flamegraph",
+   "title": "Flame graph: $source, $thread",
+   "description": "game = the in-game profiler's game-thread stacks (pzopt-stacks.out, 25-100 Hz); lua = the Lua profile (pzopt-lua.out); jfr = --jfr (pzopt.jfr, Java threads); asprof = --asprof (asprof.jfr, every thread with native frames). Root 'all' = every sample in the window; the top table beside it ranks self and total time.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "WITH a AS (SELECT stack_id, sum(samples) AS c FROM stacks WHERE run = ${run:sqlstring} AND source = ${source:sqlstring} AND thread IN (${thread:sqlstring}) AND $__timeFilter(rt) GROUP BY 1),\nf AS (SELECT d.frames, a.c FROM a JOIN stack_defs d ON d.id = a.stack_id),\nn AS (SELECT f.frames[1:i] AS path, sum(f.c) AS value, sum(f.c) FILTER (WHERE i = cardinality(f.frames)) AS self\n      FROM f, generate_series(0, cardinality(f.frames)) AS i GROUP BY 1)\nSELECT cardinality(path) AS level, value, coalesce(self, 0) AS self, coalesce(path[cardinality(path)], 'all') AS label FROM n ORDER BY path",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   },
+   "options": {},
+   "id": 35,
+   "gridPos": {
+    "x": 0,
+    "y": 129,
+    "w": 24,
+    "h": 22
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Samples per second by thread ($source)",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT date_trunc('second', rt) AS time, thread AS metric, sum(samples) AS value FROM stacks WHERE run = ${run:sqlstring} AND source = ${source:sqlstring} AND thread IN (${thread:sqlstring}) AND $__timeFilter(rt) GROUP BY 1, 2 ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 60,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "normal",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 36,
+   "gridPos": {
+    "x": 0,
+    "y": 151,
+    "w": 24,
+    "h": 8
+   }
+  },
+  {
+   "type": "row",
+   "title": "Scheduler (schedmon.txt: --schedmon), memory pressure, frame pacing",
+   "collapsed": false,
+   "panels": [],
+   "id": 37,
+   "gridPos": {
+    "x": 0,
+    "y": 159,
+    "w": 24,
+    "h": 1
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "CPU per OS thread (top 12)",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, thread AS metric, cpu_pct AS value FROM sched WHERE run = ${run:sqlstring} AND thread IN (SELECT thread FROM sched WHERE run = ${run:sqlstring} GROUP BY thread ORDER BY sum(cpu_pct) DESC LIMIT 12) AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 38,
+   "gridPos": {
+    "x": 0,
+    "y": 160,
+    "w": 12,
+    "h": 9
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Run-queue wait per OS thread (runnable, no CPU)",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, thread AS metric, runq_pct AS value FROM sched WHERE run = ${run:sqlstring} AND thread IN (SELECT thread FROM sched WHERE run = ${run:sqlstring} GROUP BY thread ORDER BY sum(cpu_pct) DESC LIMIT 12) AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 39,
+   "gridPos": {
+    "x": 12,
+    "y": 160,
+    "w": 12,
+    "h": 9
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Pressure stall (PSI) and paging",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, key AS metric, value FROM series WHERE run = ${run:sqlstring} AND source = 'psi' AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": ".*_pct"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 40,
+   "gridPos": {
+    "x": 0,
+    "y": 169,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Game process memory by mapping",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, key AS metric, value FROM series WHERE run = ${run:sqlstring} AND source = 'mem' AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "mbytes",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 3,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 41,
+   "gridPos": {
+    "x": 12,
+    "y": 169,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Frame pacing (pzopt-pacing.out)",
+   "description": "sim step = game-frame interval; acquire lag = game frame done -> render thread took it; swap = the swap call; hold = presentPacing's wait; GPU after swap; shown after swap (Mac).",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, sim_step_ms AS \"sim step\", acquire_lag_ms AS \"acquire lag\", swap_ms AS swap, hold_ms AS hold, gpu_after_swap_ms AS \"GPU after swap\", shown_after_swap_ms AS \"shown after swap\" FROM pacing WHERE run = ${run:sqlstring} AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 3,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000,
+      "scaleDistribution": {
+       "type": "log",
+       "log": 2
+      }
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 42,
+   "gridPos": {
+    "x": 0,
+    "y": 177,
+    "w": 24,
+    "h": 9
+   }
+  },
+  {
+   "type": "row",
+   "title": "Inputs sent to the game (pzopt-input.out: every key / mouse / pad change the game thread saw)",
+   "collapsed": false,
+   "panels": [],
+   "id": 43,
+   "gridPos": {
+    "x": 0,
+    "y": 186,
+    "w": 24,
+    "h": 1
+   }
+  },
+  {
+   "type": "state-timeline",
+   "title": "Keys and buttons",
+   "description": "Green = held. Every source counts: a real keyboard / mouse / pad, uinput (pad.py, inputlag-drive.py), xdotool, the in-game VirtualPad.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, device || ' ' || control AS metric, value FROM inputs WHERE run = ${run:sqlstring} AND control NOT IN ('x', 'y', 'wheel', 'lx', 'ly', 'rx', 'ry', 'lt', 'rt', 'hat') AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "fillOpacity": 80,
+      "lineWidth": 0,
+      "spanNulls": true
+     },
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 0.5
+       }
+      ]
+     },
+     "mappings": [
+      {
+       "type": "value",
+       "options": {
+        "0": {
+         "text": "up"
+        },
+        "1": {
+         "text": "down"
+        }
+       }
+      }
+     ]
+    },
+    "overrides": []
+   },
+   "options": {
+    "mergeValues": true,
+    "showValue": "never",
+    "alignValue": "left",
+    "rowHeight": 0.8,
+    "legend": {
+     "showLegend": false
+    },
+    "tooltip": {
+     "mode": "single"
+    }
+   },
+   "id": 44,
+   "gridPos": {
+    "x": 0,
+    "y": 187,
+    "w": 24,
+    "h": 10
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Analog: pointer and sticks",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, device || ' ' || control AS metric, value FROM inputs WHERE run = ${run:sqlstring} AND control IN ('x', 'y', 'lx', 'ly', 'rx', 'ry', 'lt', 'rt') AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "mouse .*"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "suffix: px"
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "right"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 45,
+   "gridPos": {
+    "x": 0,
+    "y": 197,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Mouse wheel and pad hat",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, device || ' ' || control AS metric, value FROM inputs WHERE run = ${run:sqlstring} AND control IN ('wheel', 'hat') AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "custom": {
+      "drawStyle": "bars",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 80,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 46,
+   "gridPos": {
+    "x": 12,
+    "y": 197,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "table",
+   "title": "Every input event",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT round(rel_s::numeric, 3) AS \"s from route start\", device, control, value FROM inputs WHERE run = ${run:sqlstring} AND $__timeFilter(rt) ORDER BY rt LIMIT 5000",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "filterable": false
+     }
+    },
+    "overrides": []
+   },
+   "transformations": [],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false,
+     "reducer": [
+      "sum"
+     ],
+     "fields": ""
+    },
+    "sortBy": []
+   },
+   "id": 47,
+   "gridPos": {
+    "x": 0,
+    "y": 205,
+    "w": 12,
+    "h": 12
+   }
+  },
+  {
+   "type": "table",
+   "title": "Configured by the harness (flags, props, options, env, vmargs, mods, run.opts)",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT kind, key, value FROM run_inputs WHERE run = ${run:sqlstring} ORDER BY CASE kind WHEN 'flag' THEN 0 WHEN 'prop' THEN 1 WHEN 'option' THEN 2 ELSE 3 END, kind, key",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "filterable": false
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "kind"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 90
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "key"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 220
+       }
+      ]
+     }
+    ]
+   },
+   "transformations": [],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false,
+     "reducer": [
+      "sum"
+     ],
+     "fields": ""
+    },
+    "sortBy": []
+   },
+   "id": 48,
+   "gridPos": {
+    "x": 12,
+    "y": 205,
+    "w": 12,
+    "h": 12
+   }
+  },
+  {
+   "type": "row",
+   "title": "Console (pzopt-loadtrace.out: every console line with its epoch)",
+   "collapsed": false,
+   "panels": [],
+   "id": 49,
+   "gridPos": {
+    "x": 0,
+    "y": 217,
+    "w": 24,
+    "h": 1
+   }
+  },
+  {
+   "type": "logs",
+   "title": "Console",
+   "description": "Filter with the 'console search' box at the top; the time range applies (widen it to see the boot and load).",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT rt AS time, category || '  ' || text AS body, CASE WHEN level ILIKE 'err%' THEN 'error' WHEN level ILIKE 'warn%' THEN 'warning' ELSE 'info' END AS level FROM events WHERE run = ${run:sqlstring} AND $__timeFilter(rt) AND (${search:sqlstring} = '' OR text ILIKE '%' || ${search:sqlstring} || '%') ORDER BY rt LIMIT 5000",
+     "hide": false
+    }
+   ],
+   "options": {
+    "showTime": true,
+    "wrapLogMessage": true,
+    "sortOrder": "Ascending",
+    "enableLogDetails": true,
+    "dedupStrategy": "none",
+    "prettifyLogMessage": false,
+    "showLabels": false,
+    "showCommonLabels": false
+   },
+   "id": 50,
+   "gridPos": {
+    "x": 0,
+    "y": 218,
+    "w": 24,
+    "h": 14
+   }
+  },
+  {
+   "type": "row",
+   "title": "Counters",
+   "collapsed": false,
+   "panels": [],
+   "id": 51,
+   "gridPos": {
+    "x": 0,
+    "y": 232,
+    "w": 24,
+    "h": 1
+   }
+  },
+  {
+   "type": "table",
+   "title": "Counters (pzopt-bench.out, bake / batch counters, chunk stats)",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT grp AS group, key, value FROM counters WHERE run = ${run:sqlstring} ORDER BY grp, key",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "filterable": false
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "group"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 220
+       }
+      ]
+     }
+    ]
+   },
+   "transformations": [],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false,
+     "reducer": [
+      "sum"
+     ],
+     "fields": ""
+    },
+    "sortBy": []
+   },
+   "id": 52,
+   "gridPos": {
+    "x": 0,
+    "y": 233,
+    "w": 24,
+    "h": 12
+   }
+  }
+ ]
+}

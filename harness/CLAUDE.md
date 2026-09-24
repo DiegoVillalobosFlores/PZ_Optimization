@@ -95,7 +95,7 @@ Modes:
   as `time_of_day/game_hour/weather/fog/torch/visible/night_strength/precipitation/fog_intensity/fog_fx/
   fog_quality/lightning_strikes/population/zombies_loaded/see_all`, plus `start=` = the route's first square; `torch check` console line every 5 s; the sandbox `MaxFogIntensity` cap
   and `FogCycle` are logged at apply time, a cap other than 1 is a warning).
-  Compare a preset only with runs of the same preset. 2026-09-20 numbers (`docs/results.md`): night
+  Compare a preset only with runs of the same preset. 2026-09-20 numbers (`docs/archive/2026-09-24/results.md`): night
   283 fps = daylight, torch on or off (the beam costs nothing measurable); storm 83 fps, p99 43 ms
   (chunk lighting rebakes ×5). The `--shot-at` captures never show the beam (player held still 2 s
   before the capture); judge lights live or from `--record`, not from the shots.
@@ -298,10 +298,10 @@ utilization comes from `sysmon.sh` (nvidia-smi). See `config/CLAUDE.md` for hook
 Compare runs only with the same: desktop resolution (console.txt "Desktop resolution"),
 renderer ("OpenGL version" line: Mesa = Zink, NVIDIA = GL), `zoom=`, `launcher=`, route and
 speed, dashboard on/off, display server. `compare.py` warns on opengl/desktop mismatch.
-Baselines: `baseline/native/` (native build, use these), `baseline/5120x2160/` and
-`baseline/bench-stock-*.json` are Proton + NVIDIA GL from Sep 15 and are dead for frame time
-(still fine for chunk latency). Noise floor = spread between the two stock runs; a change is
-real above twice that.
+Baselines: started from scratch on 2026-09-24. The frame-time baselines of before (`native/`, Proton `bench-stock-*`,
+`windows/`) are in `harness/archive/2026-09-24/baseline/`, only `baseline/parity-stock.out` (the parity gate's
+reference) stayed. Without `baseline/bench-stock-{1,2}.json`, `compare.py` takes the newest two `*stock-1-*` /
+`*stock-2-*` run dirs as the pair. Noise floor = spread between the two stock runs; a change is real above twice that.
 
 ## Multiplayer runs (harness/mp, 2026-09-21)
 
@@ -316,7 +316,7 @@ server (own fresh world instead, route `E:800`); the server rewrites its ini at 
 stopped, `SpeedLimit` max 150 (default 70 caps every car); `/addvehicle` right at world-ready answers
 "Invalid location" (chunk not loaded), the harness repeats it at 8 s; a killed client stays connected
 (`kickuser`); ufw blocks the ports on diego-flip and the Mac sleeps, hence localhost. Compare runs over the
-same window with `harness/mp/window.py <run>:27 ...`; results in `docs/results.md` (2026-09-21 21:30).
+same window with `harness/mp/window.py <run>:27 ...`; results in `docs/archive/2026-09-24/results.md` (2026-09-21 21:30).
 
 ## Analysis scripts
 
@@ -324,7 +324,7 @@ same window with `harness/mp/window.py <run>:27 ...`; results in `docs/results.m
 |---|---|---|
 | `analyze.py <run>` | pzopt-frames/chunks.out, mangohud CSV, pzopt-overlay.out (in-game overlay log, same shape), pzopt-gamethread.out (the overlay's game-thread stack profile: `game thread:` phases / sub-phases / hot methods / waits over the route, `pzopt.GameThreadProfile`), sysmon | route-window frame stats, chunk latency, per-thread CPU. First check a run is valid (mangohud + sysmon + threads lines present) |
 | `compare.py --baseline <dir> <runs>` | analyze output | deltas vs stock with noise verdict |
-| `dashboard.py` | all runs | `docs/benchmark-progress.html`; regenerate after every run |
+| `grafana/ingest.py <run>...` / `--all` | every file of a run | the run's samples into the Grafana DB (the stack's follower does it by itself ~20 s after a run's files go quiet); see "Grafana" below |
 | `waits.py <run>` | JFR wait events (`--jfr --jfr-setting jdk.JavaMonitorWait#threshold=0ms` etc.) | per-thread blocking sites in the route window |
 | `attribute.py` / `sections.py` | JFR samples / GameProfiler recording (`--game-profiler`) | where slow-frame time goes (`sections.py --thread game\|render`: the game records `MainThread` = game thread and `main` = render thread; the probes themselves cost ~8 % of the game thread; prefer JFR) |
 | `flamegraph.py <run> [--out x.svg] [--folded x.txt] [--all]` | pzopt-stacks.out (the overlay's folded game-thread stacks, one block per second, frame-id dictionary; every harness run with the overrides on) | self-contained SVG flame graph of the game thread over the route window (root `GameWindow.frameStep` at the bottom, hover = share, click = zoom, search box; update green / render blue / lighting amber / pzopt magenta), `<run>/flamegraph.svg` by default; `--folded` = classic `a;b;c count` lines; `--all` = the whole run (boot, load). No JFR needed; safepoint-biased at 100 Hz |
@@ -341,7 +341,7 @@ same window with `harness/mp/window.py <run>:27 ...`; results in `docs/results.m
 | `loadtime.py <runs>` | pzopt-loadtrace.out | load-after-Continue phases side by side |
 | `loadsheet.sh <run>` | recording.mp4 + loadtrace | contact sheet around the load |
 | `parity.py a b` | pzopt-parity.out | square-by-square recalc diff |
-| `pacing.py <run>` | `pzopt-pacing.out` (`--prop instrument=true` or `pacingLog=true`) + `present.txt` / `vrr.txt` (Linux, written by every run.sh run: `presentprobe.c` = X Present CompleteNotify flip times of the game window, built on demand with `-lxcb -lxcb-present`; `vrrprobe.py` = DRM `VRR_ENABLED` per CRTC via libdrm, no DRM master) or Metal `presentedTime` (Mac bridge) | on-screen judder \|flip interval - sim step\|, frames off by > 2 ms, step -> screen latency, VRR on-share; ~1 ms mean is the floor at a fixed refresh (2026-09-24, `docs/findings-vrr-2026-09-24.md`) |
+| `pacing.py <run>` | `pzopt-pacing.out` (`--prop instrument=true` or `pacingLog=true`) + `present.txt` / `vrr.txt` (Linux, written by every run.sh run: `presentprobe.c` = X Present CompleteNotify flip times of the game window, built on demand with `-lxcb -lxcb-present`; `vrrprobe.py` = DRM `VRR_ENABLED` per CRTC via libdrm, no DRM master) or Metal `presentedTime` (Mac bridge) | on-screen judder \|flip interval - sim step\|, frames off by > 2 ms, step -> screen latency, VRR on-share; ~1 ms mean is the floor at a fixed refresh (2026-09-24, `docs/archive/2026-09-24/findings-vrr-2026-09-24.md`) |
 | `blacktiles.py ctrl.png run.png...` | `--shot-at` captures | newly-black pixels and fully black 32 px tiles of a run against a control capture |
 | `blackframes.py <recording.mp4>... [--fps 4] [--csv out]` | `--record` captures | per-frame count of entirely black 8 px blocks (32 px at 5K) over the scene, whole and centre 50 %, worst seconds; compare runs of one route only — downtown interiors and the void beyond the loaded grid are black in stock too (2026-09-22, Louisville black squares), so read it next to frames, not alone |
 | `zoomsteps.py <run> [--window S]` | pzopt-frames.out of a `--flag zoom_cycle=S [zoom_span=N] [zoom_jump=true]` run (the harness marks `zoom-<level>` at every step) | frame times in the window after each camera zoom step vs the rest of the route (max / p99 / >8 >16 >33 ms); the console has a per-step bake trace (`zoom step N trace`) and the `retain:` / `change-frame` counters; `attribute.py --after-mark zoom-:1` and `sections.py --after-mark zoom-2.5:1` profile the change frames |
@@ -403,7 +403,7 @@ comma-joined values (`powershell -File` hands the script one string). The Java h
 the route end by itself when no MangoHud is loaded. `analyze.py` runs on the embeddable Python
 (no installer needed); `analyze-win.ps1` is a PowerShell fallback. The game pauses on focus loss
 (`focusloss=true`), which stops `IsoChunk.update` and with it the frame sampler: keep the window
-focused. Reference numbers in `baseline/windows/`, findings in `docs/windows-test.md`.
+focused. Reference numbers in `archive/2026-09-24/baseline/windows/`, findings in `docs/windows-test.md`.
 
 ## macOS
 
@@ -424,6 +424,65 @@ session's foreground, rsync `harness/runs/mac-*` back and analyze here. Apple's 
 (no `ARB_buffer_storage`: `persistentVbo` falls back). A launch from an ssh session opens the
 window on the logged-in desktop; `open steam://rungameid/108600` from ssh does nothing visible,
 `open "<the .app>"` runs the stock launcher. Reference runs `mac-drive120-*` (2026-09-21).
+
+## Grafana (harness/grafana, 2026-09-24)
+
+Replaces `dashboard.py` / `docs/archive/2026-09-24/benchmark-progress.html`. `harness/grafana/stack.sh up|down|disable|status|psql|logs|reset`:
+rootless podman pod `pzopt-grafana` (postgres:15 at 127.0.0.1:5433, db / user / password `pzopt`; grafana-oss at
+http://127.0.0.1:3000, anonymous viewer, admin password in `~/.config/pzopt/grafana-admin`), data under
+`~/.local/share/pzopt-grafana/`, plus the follower `ingest.py --follow`. Both are enabled systemd user units
+(`pzopt-grafana.service` = the pod, `pzopt-grafana-follow.service`; `up` writes them to `~/.config/systemd/user/`), so the
+stack comes back after a reboot at login (the transient units of the first day did not). No sudo.
+`harness/grafana/check.py [--run R] [--runs A,B] [--source asprof]` runs every dashboard query through Grafana's API
+with the variables filled in: the test after editing `dashboards.py` (0 errors expected).
+- **Every sample, not only summaries** (`schema.sql`): `frames` (pzopt-frames.out), `overlay` (presented frames, GPU ms,
+  thread loads), `sysmon`, `gamethread` (per-second phase / sub-phase / hot-method / wait shares), `chunks`, `gc` pauses,
+  `present` flip intervals, `series` (drive telemetry, VRR, marks), `threads`, `counters` (pzopt-bench.out numbers,
+  `bake_counters=`, `zombie_batches=`), `stacks` + `stack_defs` (every profiler's stacks per second and thread, root first,
+  deduplicated across runs by an md5 id; JVM hidden-class addresses `/0x...` stripped so runs compare): `game` =
+  `pzopt-stacks.out` (the in-game profiler), `lua` = `pzopt-lua.out`, `jfr` = `pzopt.jfr` (`--jfr`), `asprof` = `asprof.jfr`
+  (`--asprof`, every thread, native frames; both through `tools/JfrSamples.java`, cached in `~/.cache/pzopt-grafana/`),
+  `sched` (`schedmon.txt`: per OS thread per second CPU % / run-queue % / major faults; PSI and memory lines into `series`),
+  `series` source `pacing` (`pzopt-pacing.out`), `events` (every console line of `pzopt-loadtrace.out` with level /
+  category), `inputs` (`pzopt-input.out`, `pzopt.InputRecorder`: every key / mouse / pad change the game thread saw) and
+  `run_inputs` (what the harness configured: flag file, `pzopt.properties`, options, env, vmargs, mods, run.opts), and one
+  `runs` row with analyze.py's route-window summary + chunk latency + Jev's verdict. Each sample has `t` (wall clock), `rel_s` (seconds since route start) and `rt` (route time = 2000-01-01 UTC +
+  rel_s: the x axis of the Run / Compare dashboards, 00:00:00 = route start).
+- **Follower**: imports every run dir under `harness/runs/` of this checkout and all its git worktrees ~20 s after its
+  files go quiet (re-imports when `judge.json` etc. change), laptop runs once the queue rsyncs them back; and tails
+  `~/Zomboid/pzopt-overlay.out`, `pzopt-frames.out`, `pzopt-gamethread.out`, `pzopt-stacks.out`, `pzopt-input.out` plus the
+  running run's `sysmon.csv` into the `live_*` tables (desktop only, pruned after 6 h; unreferenced stack definitions hourly). Runs named with a timestamp before `harness/grafana/since` are skipped
+  by the follower and `--all`; `ingest.py <run>` imports any run on purpose. `journalctl --user -u pzopt-grafana-follow`.
+- **Dashboards** (generated by `dashboards.py`, provisioned read-only; edit the generator): *PZ runs* (table with links,
+  trends per label, "below the cap with hardware left over" = the objective's finding), *PZ run* (tails, fps per second,
+  histogram, percentile table incl. presented / GPU / flips, utilization, per-thread CPU, game-thread phases and
+  top tables, chunks, GC, flips, drive, a flame graph with a profiler and thread picker (Grafana's flame graph panel with its
+  top table; it follows the time range, so a drag across any time panel profiles just that window), samples per thread,
+  schedmon CPU / run-queue per OS thread, PSI, memory, pacing, the inputs (keys / buttons timeline, analog axes, every
+  event, the harness configuration), the console as a searchable log, counters), *PZ compare* (runs on one route-time
+  axis, % change vs a base run, percentile bars, phase matrix, a diff flame graph base vs another run), *PZ live* (the game
+  running now, 1 s refresh, with the last 10 s as a flame graph and the live inputs).
+
+## Public dashboard (GCP, 2026-09-24)
+
+https://pzopt-dashboard-20282332834.us-central1.run.app (linked from the README): the same four dashboards, public,
+anonymous read-only, fed live from the desktop. Project `diegov`, us-central1, everything labelled `app=pzopt-dashboard`,
+EUR 5 budget alert (20 / 50 / 100 %) on that label; `harness/grafana/cloud.sh deploy|url|status|seed|tunnel|ssh`.
+- **Postgres** on `pzopt-db`, an e2-micro VM (the always-free tier: e2-micro + 30 GB pd-standard in us-central1), Debian 12,
+  Postgres 15, 1 GB swap file, no external IP (charged since 2024; set up with a temporary one). Roles: `pzopt` (writer,
+  only from the IAP range 35.235.240.0/20) and `grafana` (read-only, only from the VPC, `statement_timeout` 30 s, 10
+  connections). Passwords in `~/.config/pzopt/grafana-remote.env` (0600), nowhere else.
+- **Sync**: the desktop reaches it through IAP TCP forwarding (user unit `pzopt-grafana-tunnel`, localhost:15433; firewall
+  rule `pzopt-db-allow-iap-pg`). `ingest.py` applies every run import and every live batch to both databases; a remote
+  failure goes to `~/.local/state/pzopt-grafana/spool/` and replays in order (`cloud.sh status` counts it). `--no-remote`
+  keeps a write local. After a schema change: apply `schema.sql` on both (`stack.sh up` locally, `cloud.sh seed` copies all).
+- **Grafana** on Cloud Run `pzopt-dashboard`: the image from `harness/grafana/Dockerfile` (dashboards + `cloud/datasource.yaml`
+  baked in, Grafana's own DB migrated at build time for fast cold starts, no login form / basic auth / explore / snapshots /
+  plugin downloads, min refresh 5 s), built by Cloud Build's free default pool into Artifact Registry `pzopt` (the 2 newest
+  images kept, under the free 0.5 GB). Scale to zero, max 2 instances, request-based CPU, 512 MiB, service account with no
+  roles, Direct VPC egress to the VM's internal IP (no connector fee). Dashboard changes need `cloud.sh deploy` (~2 min).
+- Anonymous viewers can post any read-only SQL to `/api/ds/query` (Grafana lets viewers query a datasource they can see):
+  the `grafana` role only has SELECT, a 30 s statement timeout and 10 connections, and the instance cap bounds the cost.
 
 ## Pitfalls that already cost runs
 

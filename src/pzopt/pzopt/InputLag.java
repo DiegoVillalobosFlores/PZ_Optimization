@@ -264,6 +264,7 @@ public final class InputLag {
 
    /** Game thread, GameWindow.logic right after GameInput.updateGameThread: the input this game frame sees. */
    public static void afterGameInput() {
+      InputRecorder.frame(); // every input change of this frame (inputLog), independent of the input-lag probe
       if (!on()) {
          return;
       }

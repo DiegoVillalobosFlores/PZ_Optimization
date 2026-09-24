@@ -740,7 +740,7 @@ local AXIS_TICKS = { -3, -2, 0, 1, 2, 3 }
 local AXIS_TITLE = "load on that part with this setting  (stock game = mid)"
 
 -- How each key changes the load on the parts above against the stock game, -3 .. 3 (0 / absent = no measurable
--- change): -1 a few percent, -2 clearly measurable, -3 the big wins (docs/results.md, docs/findings-*.md). A combo's
+-- change): -1 a few percent, -2 clearly measurable, -3 the big wins (docs/archive/2026-09-24/results.md, docs/archive/2026-09-24/findings-*.md). A combo's
 -- bars describe moving it away from stock in the direction the tab offers.
 local EFFECTS = {
     enabled = { cpu = -3, render = -3, gpu = -1, cores = 2, ram = 1, disk = 1, load = -3, chunks = -2 },
@@ -1151,8 +1151,8 @@ function PzoptPreview:prerender()
     self:text("Effect on your hardware", x, y, C_TEXT, self.fontM)
     y = y + self.hM + 4
     y = self:drawBars(x, y, w, EFFECTS[entry.key] or {})
-    self:drawWrapped("Against the stock game, from the measurements in docs/results.md: green = less load (or a shorter "
         .. "load, chunks sooner), amber = more, blue = idle cores put to work. " .. RESTART_NOTE, x, y + 4, w, C_DIM)
+    self:drawWrapped("Against the stock game, from the measurements in docs/archive/2026-09-24/results.md: green = less load (or a shorter "
 end
 
 -- ---------------------------------------------------------------------------------------------------
@@ -2008,7 +2008,7 @@ end
 
 -- Profiles: one button sets a named group of controls (the rest go back to the build's default),
 -- master on; Apply / Accept saves them like the other buttons. Values are the option strings.
--- The low-end set (2026-09-21, docs/results.md): no chunk worker pool (its threads took the game thread's
+-- The low-end set (2026-09-21, docs/archive/2026-09-24/results.md): no chunk worker pool (its threads took the game thread's
 -- core on four cores), trees baked into chunk textures only while walking, and on the Display page lighting
 -- updates 10/s and the UI redrawn 30/s. The stock Display-page combos go by GameOption name -> combo index
 -- (MainOptions.lua lists): lightingFPS {5, 10, 15, 20, 25, 30, 45, 60}, UIRenderFPS {120, 60, 30, 25, 20, 15, 10}.
@@ -2034,7 +2034,7 @@ local PROFILES = {
            .. "Everything else goes back to the build's default. 120 km/h drive 44 -> 68 fps, walking 49 -> 81 "
            .. "(p99 80 -> 40 ms / 69 -> 30 ms). It also turns on texture compression (Display page), which kept a 4 GB "
            .. "graphics card from filling up and the machine from swapping (worst frame 292 -> 120 ms, 2026-09-23). The G1 "
-           .. "collector these numbers need is now the default (gcMode). See docs/results.md.",
+           .. "collector these numbers need is now the default (gcMode). See docs/archive/2026-09-24/results.md.",
         values = LOW_END_VALUES,
         stock = LOW_END_STOCK,
     },
@@ -2043,7 +2043,7 @@ local PROFILES = {
         tip = "The Low-end hardware set above, plus the world rendered at 67 % of the screen per axis (44 % of the "
            .. "pixels) and scaled back up with AMD FidelityFX Super Resolution 1.0, which runs on any GPU; the "
            .. "interface, text and cursor stay at full resolution. For a machine whose GPU is the wall as well as "
-           .. "its CPU: measured on the same Core i5-6300HQ / GTX 960M at 1920x1080 (2026-09-22, docs/results.md) "
+           .. "its CPU: measured on the same Core i5-6300HQ / GTX 960M at 1920x1080 (2026-09-22, docs/archive/2026-09-24/results.md) "
            .. "the GPU-bound scenes gain the most. Everything else goes back to the build's default; G1 "
            .. "collector these numbers need is now the default (gcMode).",
         values = withValues(LOW_END_VALUES, { upscaler = "fsr1", upscalerQuality = "quality" }),

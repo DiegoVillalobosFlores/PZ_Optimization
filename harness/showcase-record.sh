@@ -40,7 +40,7 @@ case "$side" in
   *) echo "side must be stock or opt" >&2; exit 2 ;;
 esac
 
-drive=(--mode drive --flag route=E:1200 --flag kmh=193 --flag zoom=max --route-seconds 60)
+drive=(--mode drive --flag path=8010,11204.5/9210,11204.5 --flag kmh=120 --flag zoom=max --route-seconds 60)  # the path pilot, KY-60 east (2026-09-24; before: route=E:1200 kmh=193)
 case "$seg" in
   drive120) args=("${drive[@]}") ;;
   fog120)   args=("${drive[@]}" --flag fog=heavy) ;;

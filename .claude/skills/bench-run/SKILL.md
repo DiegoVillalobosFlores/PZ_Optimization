@@ -67,12 +67,12 @@ stock runs need `--option frameRate=240 --option uncappedFPS=false` because stoc
 ```bash
 harness/run.sh --label <name> --mode bench --flag route=S:450 --flag zoom=0.25 --flag zoom_cycle=1.5 --prop uncappedFps=true --prop instrument=true --no-dashboard
 ```
-Drive, 60 km/h A/B route (the comparable one):
+Drive, 60 km/h A/B route (queue bench `drive-60`; `drive-120` = the same at `kmh=120`, `--route-seconds 60`):
 ```bash
-harness/run.sh --label <name> --mode drive --flag route=E:1200 --route-seconds 90 \
-  --prop instrument=true --no-dashboard --record
+harness/run.sh --label <name> --mode drive --flag path=8010,11204.5/9210,11204.5 --flag kmh=60 --flag max_seconds=120 \
+  --route-seconds 90 --option frameRate=240 --option uncappedFPS=false --prop instrument=true --no-dashboard --record
 ```
-Add `--flag kmh=193` for the ~122 km/h route (`--route-seconds 60`, expect retries), `--jfr`
+Add `--jfr`
 plus `--jfr-setting jdk.JavaMonitorWait#threshold=0ms --jfr-setting jdk.ThreadPark#threshold=0ms`
 for wait analysis, `--renderer zink` for the Zink A/B, `--env JAVA_TOOL_OPTIONS=-Dzomboid.wayland=1`
 for native Wayland, `--option uiRenderOffscreen=true` for the offscreen UI, `--gc g1` for a GC A/B.

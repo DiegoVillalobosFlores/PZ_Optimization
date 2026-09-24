@@ -28,14 +28,14 @@
      "what": "slow spinning walk (3 tiles/s, 40 s) with G1 at a 25 ms pause goal: isolated GC / JIT / save hitches, not throughput",
      "args": "--mode bench --flag route=S:120 --flag speed=3 --flag turn=90 --flag zoom=max --route-seconds 40 --gc g1 --vmarg -XX:MaxGCPauseMillis=25 --prop instrument=true --no-dashboard --no-mangohud"},
     {"name": "drive-120", "resources": ["chunk-arrival", "disk", "render-thread", "gpu", "frame-pacing"],
-     "what": "120 km/h highway drive east, 60 s: the heaviest chunk streaming and bake load (steering may leave the road: check route_complete)",
-     "args": "--mode drive --flag route=E:1200 --flag kmh=193 --flag zoom=max --route-seconds 60 --prop instrument=true --no-dashboard"},
+     "what": "120 km/h path drive east on KY-60, 1,200 tiles from 8010 (~43 s, stops at the end): the heaviest chunk streaming and bake load; the path pilot holds the line and the speed, drive_check.py (Jev) says whether the drive was clean",
+     "args": "--mode drive --flag path=8010,11204.5/9210,11204.5 --flag kmh=120 --flag zoom=max --route-seconds 60 --option frameRate=240 --option uncappedFPS=false --prop instrument=true --no-dashboard"},
     {"name": "drive-120-south", "resources": ["chunk-arrival", "disk", "render-thread", "gpu", "frame-pacing"],
      "what": "120 km/h path drive through Rosewood: KY-60 east 96 tiles from 8010,11204.5 (8 tiles past the bench save's own car at 8002,11204), right onto North Main St, south 761 tiles through the town (Jacks Lane), stop before Angel Road; the path pilot holds the line, brakes for the corner, obstacles and the end; drive_check.py (Jev) says whether the drive was clean",
      "args": "--mode drive --flag path=8010,11204.5/8106,11204.5/8106,11965.5 --flag kmh=120 --flag zoom=max --route-seconds 60 --option frameRate=240 --option uncappedFPS=false --prop instrument=true --no-dashboard"},
     {"name": "drive-60", "resources": ["chunk-arrival", "disk"],
-     "what": "60 km/h highway drive, 90 s: the steady streaming A/B route (always completes)",
-     "args": "--mode drive --flag route=E:1200 --route-seconds 90 --prop instrument=true --no-dashboard"},
+     "what": "60 km/h path drive east on KY-60, 1,200 tiles from 8010 (~77 s): the steady streaming A/B route",
+     "args": "--mode drive --flag path=8010,11204.5/9210,11204.5 --flag kmh=60 --flag max_seconds=120 --flag zoom=max --route-seconds 90 --option frameRate=240 --option uncappedFPS=false --prop instrument=true --no-dashboard"},
     {"name": "storm", "resources": ["gpu", "render-thread", "game-thread"],
      "what": "spin route in a pinned thunderstorm with lightning every 6 s: rain particles, puddles, splashes, lightning re-bakes",
      "args": "--preset storm --prop instrument=true --no-dashboard"},
@@ -67,7 +67,7 @@
      "what": "screenshot rig: camera held 8 s into the route, game + desktop captures for blacktiles.py against a control run",
      "args": "--mode bench --flag zoom=max --shot-at 8 --prop instrument=true --no-dashboard"},
     {"name": "load", "resources": ["load-time"],
-     "what": "boot and Continue-to-world timing with a short 8 s drive so the run ends by itself; loadtime.py reads pzopt-loadtrace.out",
-     "args": "--mode drive --flag route=E:60 --route-seconds 8 --launcher direct --prop instrument=true --no-dashboard"}
+     "what": "boot and Continue-to-world timing with a short path drive (60 tiles east on KY-60, stops by itself) so the run ends by itself; loadtime.py reads pzopt-loadtrace.out",
+     "args": "--mode drive --flag path=8010,11204.5/8070,11204.5 --route-seconds 8 --launcher direct --prop instrument=true --no-dashboard"}
   ]
 }

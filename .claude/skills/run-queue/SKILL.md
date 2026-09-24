@@ -68,7 +68,7 @@ harness/queue.sh submit run --name pz-optimization-b9 --intent "baseline of the 
     -- --label <name> --mode bench --flag zoom=max --prop instrument=true --no-dashboard
 # (the examples below leave out --name / --intent / --progress / --resource for brevity; submit refuses them without)
 harness/queue.sh submit run -- --label <name> --preset storm --prop instrument=true --no-dashboard
-harness/queue.sh submit run -- --label <name> --mode drive --flag route=E:1200 --route-seconds 90 --prop instrument=true --no-dashboard --record
+harness/queue.sh submit run -- --label <name> --bench drive-60 --record   # the path drives: drive-60, drive-120, drive-120-south
 
 # with a goal for Jev (uplift verdict against earlier runs / a baseline json) and visual parity
 harness/queue.sh submit run --goal "puddleVbo halves storm frame time" --against storm-stock-1 --parity-against storm-stock-1 \
@@ -76,8 +76,8 @@ harness/queue.sh submit run --goal "puddleVbo halves storm frame time" --against
 
 # a laptop (binds this session to it on first use); --install opt ships this checkout's build/classes there first
 harness/queue.sh submit run --machine flip --install opt -- --label <name> --mode bench --flag zoom=max --prop instrument=true
-harness/queue.sh submit run --machine dell -- --label <name> --mode drive --flag route=E:1200 --route-seconds 90 --prop instrument=true
-harness/queue.sh submit run --machine mac  -- --label <name> --mode drive --flag route=E:1200 --prop instrument=true
+harness/queue.sh submit run --machine dell -- --label <name> --mode drive --flag path=8010,11204.5/9210,11204.5 --flag kmh=60 --flag max_seconds=120 --route-seconds 90 --prop instrument=true
+harness/queue.sh submit run --machine mac  -- --label <name> --mode drive --flag path=8010,11204.5/9210,11204.5 --flag kmh=60 --flag max_seconds=120 --prop instrument=true
 
 # stock comparison on the desktop: uninstall for the job, reinstalled once the desktop queue drains
 harness/queue.sh submit run --install stock -- --label <name>-stock ...      # or keep the classes and pass --prop enabled=false

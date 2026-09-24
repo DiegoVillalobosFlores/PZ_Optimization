@@ -99,11 +99,13 @@ Modes:
   283 fps = daylight, torch on or off (the beam costs nothing measurable); storm 83 fps, p99 43 ms
   (chunk lighting rebakes ×5). The `--shot-at` captures never show the beam (player held still 2 s
   before the capture); judge lights live or from `--record`, not from the shots.
-- `drive`: spawns a car and follows the highway. Default route `--flag route=E:1200`,
-  `--route-seconds 90`, cruise 60 km/h. `--flag kmh=193` gives the ~122 km/h cap
-  (Base.RaceCar12 maxSpeed 120). At 120 km/h the steering oscillates and leaves the road at
-  ~300-400 tiles about every other attempt; check `route complete` in console.txt and retry.
-  A/Bs use the 60 km/h route. `--flag vehicle=none` requires a fixture instead of spawning.
+- `drive`: spawns a car and drives it. **Every drive bench is a path drive since 2026-09-24** (below): `drive-120` /
+  `drive-60` = `--flag path=8010,11204.5/9210,11204.5` (KY-60 east, 1,200 tiles from 8010) at `kmh=120` / `kmh=60`, `load` = 60 tiles of
+  it, `showcase-record.sh` drive120 / fog120 / storm120 = the 120 km/h one. Runs before that date used `route=E:1200`
+  from 8002 with `kmh=193` (flat out, the car caps at ~122) and never stopped at the end: not comparable frame for frame.
+  Without `path=` the old follower still drives `--flag route=E:N` (`roadFollow`, tile scans; at 120 km/h it left the
+  road about every other run); the multiplayer drive (`harness/mp/run.sh`) keeps it, the path pilot does not handle a
+  server-owned car. `--flag vehicle=none` requires a fixture instead of spawning.
   **Path drives** (2026-09-24, `--flag path=x,y/x,y/...`): the car starts on the first point facing the second
   (the player is teleported there first when it is far / not loaded) and `pzopt.DrivePilot` drives the centreline
   instead of `roadFollow`: pure pursuit with analogue steering through `clientControls.steering` (the input picked

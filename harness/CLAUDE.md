@@ -465,8 +465,11 @@ with the variables filled in: the test after editing `dashboards.py` (0 errors e
 
 ## Public dashboard (GCP, 2026-09-24)
 
-https://pzopt-dashboard-20282332834.us-central1.run.app (linked from the README): the same four dashboards, public,
-anonymous read-only, fed live from the desktop. Project `diegov`, us-central1, everything labelled `app=pzopt-dashboard`,
+https://pzo.diegov.dev (linked from the README; Cloud Run domain mapping, `cloud.sh domain`, DNS on Cloudflare: CNAME
+`pzo` -> `ghs.googlehosted.com`, DNS only, or Google's certificate never issues; raw URL
+https://pzopt-dashboard-20282332834.europe-west1.run.app): the same four dashboards, public, anonymous read-only, fed live
+from the desktop. Project `diegov`, Cloud Run + Artifact Registry in europe-west1, the VM in us-central1 (the free tier is
+US-only; the VPC is global and pg_hba's 10.128.0.0/9 covers the europe-west1 subnet, ~0.2 s a query), everything labelled `app=pzopt-dashboard`,
 EUR 5 budget alert (20 / 50 / 100 %) on that label; `harness/grafana/cloud.sh deploy|url|status|seed|tunnel|ssh`.
 - **Postgres** on `pzopt-db`, an e2-micro VM (the always-free tier: e2-micro + 30 GB pd-standard in us-central1), Debian 12,
   Postgres 15, 1 GB swap file, no external IP (charged since 2024; set up with a temporary one). Roles: `pzopt` (writer,

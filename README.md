@@ -18,7 +18,7 @@ line and the game behaves as stock.
 | **Steam Workshop** | [PZ_Optimization (item 3805285544)](https://steamcommunity.com/sharedfiles/filedetails/?id=3805285544) |
 | **Latest release** | [github.com/xD3I/PZ_Optimization/releases/latest](https://github.com/xD3I/PZ_Optimization/releases/latest) (`install.ps1`, `install.sh`, `pzopt-b0bbce05d5-classes.zip`) |
 | **Showcase video** | [youtube.com/watch?v=GCjCYbTE9AQ](https://www.youtube.com/watch?v=GCjCYbTE9AQ), stock vs all optimizations ([See it in action](#see-it-in-action)) |
-| **Live benchmark dashboard** | [pzopt-dashboard-20282332834.us-central1.run.app](https://pzopt-dashboard-20282332834.us-central1.run.app) (Grafana: every harness run since 2026-09-24 frame by frame, CPU / GPU use, profiler flame graphs, run-vs-run diffs, the game being benchmarked right now; the first page load after a quiet spell takes a few seconds) |
+| **Live benchmark dashboard** | [pzo.diegov.dev](https://pzo.diegov.dev) (Grafana: every harness run since 2026-09-24 frame by frame, CPU / GPU use, profiler flame graphs, run-vs-run diffs, the game being benchmarked right now; the first page load after a quiet spell takes a few seconds) |
 | **Every run, in order** | [`docs/results.md`](docs/results.md) (earlier runs: [`docs/archive/2026-09-24/`](docs/archive/2026-09-24/)) |
 
 Single player is what has been measured. The files are client side only (nothing to

@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# The public dashboard on GCP (project diegov, us-central1), built for near-zero cost:
-#   pzopt-db          e2-micro VM (always-free tier), 30 GB pd-standard, Postgres 15, NO external IP; the desktop reaches
+# The public dashboard on GCP (project diegov), built for near-zero cost, at https://pzo.diegov.dev:
+#   pzopt-db          e2-micro VM in us-central1 (always-free tier, US regions only), 30 GB pd-standard, Postgres 15, NO external IP; the desktop reaches
 #                     it through IAP (user unit pzopt-grafana-tunnel: localhost:15433), the follower (ingest.py) writes
 #                     every import and live sample there too (~/.config/pzopt/grafana-remote.env, spool on failure)
-#   pzopt-dashboard   Cloud Run service: Grafana (harness/grafana/Dockerfile), anonymous read-only, scale to zero,
-#                     max 2 instances, request-based CPU; reaches the VM's internal IP over Direct VPC egress
-#   pzopt             Artifact Registry repo, the 2 newest images kept (free 0.5 GB)
+#   pzopt-dashboard   Cloud Run service in europe-west1: Grafana (harness/grafana/Dockerfile), anonymous read-only,
+#                     scale to zero, max 2 instances, request-based CPU; reaches the VM's internal IP over Direct VPC
+#                     egress (same global VPC, the europe-west1 subnet is inside pg_hba's 10.128.0.0/9)
+#   pzopt             Artifact Registry repo in europe-west1, the 2 newest images kept (free 0.5 GB)
 #
 #   harness/grafana/cloud.sh deploy     # build the image on Cloud Build (free tier) and deploy it; prints the URL
 #   harness/grafana/cloud.sh url        # the public URL
+#   harness/grafana/cloud.sh domain     # map pzo.diegov.dev to the service (DNS: CNAME pzo -> ghs.googlehosted.com on
+#                                       # Cloudflare, DNS only / grey cloud, or Google's certificate never issues)
 #   harness/grafana/cloud.sh status     # service, VM, tunnel, spool, remote DB size
 #   harness/grafana/cloud.sh seed       # empty the remote DB and copy the local one over (after a schema change)
 #   harness/grafana/cloud.sh tunnel     # (re)install the desktop's IAP tunnel unit
@@ -19,8 +22,9 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PROJECT=diegov
-REGION=us-central1
-ZONE=us-central1-a
+REGION=europe-west1  # Cloud Run + Artifact Registry (domain mappings exist in europe-west1)
+ZONE=us-central1-a   # the VM
+DOMAIN=pzo.diegov.dev
 SERVICE=pzopt-dashboard
 REPO=pzopt
 IMAGE="$REGION-docker.pkg.dev/$PROJECT/$REPO/grafana"
@@ -88,11 +92,21 @@ UNITEOF
 }
 
 url() {
+  echo "https://$DOMAIN"
   g run services describe "$SERVICE" --region "$REGION" --format 'value(status.url)'
+}
+
+# one-time: diegov.dev is verified for the account (gcloud domains list-user-verified); the certificate follows the DNS record
+domain() {
+  g beta run domain-mappings describe --domain "$DOMAIN" --region "$REGION" >/dev/null 2>&1 ||
+    g beta run domain-mappings create --service "$SERVICE" --domain "$DOMAIN" --region "$REGION"
+  g beta run domain-mappings describe --domain "$DOMAIN" --region "$REGION" \
+    --format 'table(status.resourceRecords[].name,status.resourceRecords[].type,status.resourceRecords[].rrdata,status.conditions[].type,status.conditions[].status)'
 }
 
 status() {
   g run services describe "$SERVICE" --region "$REGION" --format 'value(status.url,status.latestReadyRevisionName)' || true
+  g beta run domain-mappings describe --domain "$DOMAIN" --region "$REGION" --format 'value(metadata.name,status.conditions[0].status)' || true
   g compute instances describe pzopt-db --zone "$ZONE" --format 'value(status,networkInterfaces[0].networkIP)'
   systemctl --user is-active pzopt-grafana-tunnel | sed 's/^/tunnel: /'
   echo "spooled scripts: $(ls "${XDG_STATE_HOME:-$HOME/.local/state}/pzopt-grafana/spool" 2>/dev/null | wc -l)"
@@ -112,9 +126,10 @@ seed() {
 case "${1:-status}" in
   deploy) deploy ;;
   url) url ;;
+  domain) domain ;;
   status) status ;;
   seed) seed ;;
   tunnel) tunnel ;;
   ssh) exec gcloud compute ssh pzopt-db --zone "$ZONE" --project "$PROJECT" --tunnel-through-iap ;;
-  *) sed -n 2,20p "$0"; exit 2 ;;
+  *) sed -n 2,23p "$0"; exit 2 ;;
 esac

@@ -47,7 +47,7 @@ black_t = guess + black / 20
 start = black_t - route_s - pre
 dur = black_t - start - 0.1
 out = subprocess.run(['python3', 'harness/analyze.py', d], capture_output=True, text=True).stdout
-# a stock run (enabled=false) writes no overlay log: its numbers come from the MangoHud line
+# a stock run made with enabled=false before 2026-09-24 wrote no overlay log: its numbers come from the MangoHud line
 key = 'overlay:' if 'overlay:' in out else 'mangohud:'
 ov = out[out.index(key):]
 fps = re.search(r'([\d.]+) fps mean', ov).group(1)

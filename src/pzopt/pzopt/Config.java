@@ -16,7 +16,9 @@ import java.util.Properties;
  * Keys:
  *   enabled     true/false   master switch: false makes every override take its stock path, exactly as a build
  *                            mismatch does (Overrides.enabled() is false); the other keys are then ignored. The
- *                            "Disable all (stock)" / "Enable all" buttons of the Optimizations tab set it (default true)
+ *                            "Disable all (stock)" / "Enable all" buttons of the Optimizations tab set it (default true).
+ *                            The overlay and its profiler (the Profiler tab's keys) keep working with it off
+ *                            (Overlay needs only Overrides.buildMatches(), 2026-09-24)
  *   parallel    true/false   kill switch: false forces the stock single-threaded pass (default true)
  *   workers     int          recalc pool width; clamped to [1, availableProcessors - 1] (default: min(4, cores - 1), 1 on
  *                            4 cores or fewer: there the three workers took the game thread's core, Dell i5-6300HQ 2026-09-21)

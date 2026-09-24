@@ -74,7 +74,12 @@ import zombie.ui.UIFont;
  * with every element on), which cost 12 % of the frame rate on a game-thread-bound laptop (2026-09-23).
  */
 public final class Overlay {
-   private static final boolean ACTIVE = Overrides.enabled();
+   /**
+    * The overlay is a measuring tool, not an optimization: it only needs the build to match, and it works with the
+    * master switch off ({@code enabled=false}) so the stock game can be profiled the same way. The Optimizations tab
+    * has no say over it; its settings are the Profiler tab's alone.
+    */
+   private static final boolean ACTIVE = Overrides.buildMatches();
    /**
     * Whether the overlay measures anything: the presented-frame ring, the GL timer queries and the
     * utilization sampler thread. Off unless {@code overlaySampling=true} (the Profiler tab),

@@ -28,7 +28,7 @@ local RESTART_NOTE = "Takes effect on the next launch."
 
 -- The master switch, drawn before the sections with the two buttons.
 local MASTER = { key = "enabled", label = "Optimizations enabled (master switch)",
-  tip = "Off = the game runs stock: every override takes its original code path and the settings below are ignored. On = the settings below apply." }
+  tip = "Off = the game runs stock: every override takes its original code path and the settings below are ignored. On = the settings below apply. The Profiler tab is not affected: the performance overlay works either way." }
 
 -- Colour names pzopt.Overlay.color knows (a RRGGBB hex typed into options.ini also works).
 local FPS_COLOURS = { "blue", "green", "yellow", "red", "white", "cyan", "lime", "orange", "magenta", "purple" }
@@ -2067,7 +2067,7 @@ local function addAllButtons(self, splitpoint, y)
     on.target = self
     on.onclick = function(target) setAll(target, true) end
     local off = self:addButton(splitpoint, y, "Disable all (stock game)")
-    off.tooltip = "Turns the master switch off: the game runs its original code everywhere, as if the overrides were not installed. The settings below are kept for when you enable them again. " .. RESTART_NOTE
+    off.tooltip = "Turns the master switch off: the game runs its original code everywhere, as if the overrides were not installed. The settings below are kept for when you enable them again; the Profiler tab and the performance overlay are not affected. " .. RESTART_NOTE
     off.target = self
     off.onclick = function(target) setAll(target, false) end
     local profileButtons = {}
@@ -2210,10 +2210,8 @@ local PAGES = {
         tab = PROFILER_TAB, sections = PROFILER_SECTIONS, buttons = addProfilerButtons,
         panel = "pzoptProfilerPanel", options = "pzoptProfilerOptions", search = "pzoptProfilerSearch",
         preview = "pzoptProfilerPreview",
-        headline = function(p)
-            if p:isPzoptEnabled() then return "Performance overlay and game-thread profiler" end
-            return "Performance overlay: unavailable (the optimizations are off since this boot)"
-        end,
+        -- independent of the Optimizations tab: the overlay also runs with the master switch off (stock game)
+        headline = function() return "Performance overlay and game-thread profiler" end,
     },
 }
 

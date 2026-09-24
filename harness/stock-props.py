@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Print the run.sh --prop arguments of a "stock game" run that keeps the overlay and the profiler on.
 
-`--prop enabled=false` is the real stock path, but it also switches the in-game overlay and the game-thread profiler
-off (Overlay.ACTIVE = Overrides.enabled()), and every recorded comparison has to show the profiler on every panel. So
-the stock side keeps the overrides installed and turns every optimization key to its stock value, one by one. The
+`--prop enabled=false` is the real stock path, and since 2026-09-24 it keeps the in-game overlay and the game-thread
+profiler (Overlay.ACTIVE = Overrides.buildMatches(); before, it switched them off and every recorded comparison has to
+show the profiler on every panel). This script is the other stock side: the overrides active, every optimization key
+turned to its stock value, one by one. The
 list used to be kept by hand (72 keys on 2026-09-22) and went stale with every new key; this derives it from the code:
 
 * every boolean key of src/pzopt/pzopt/Config.java -> false, except the keys in KEEP (master switch, harness,

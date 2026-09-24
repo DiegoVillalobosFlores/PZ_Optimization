@@ -143,9 +143,10 @@ end
 
 local function install()
     if not MainScreen or MainScreen.pzoptOverlayItem then return end
-    local ok, on = pcall(function() return getPerformance():hasPzoptOptions() and getPerformance():isPzoptEnabled() end)
+    -- the overlay works with the optimizations switched off (pzopt.Overlay needs only a matching build)
+    local ok, on = pcall(function() return getPerformance():hasPzoptOptions() end)
     if not ok or not on then
-        print("[pzopt] overlay item: PerformanceSettings override not loaded or overrides disabled, item not added")
+        print("[pzopt] overlay item: PerformanceSettings override not loaded or build mismatch, item not added")
         return
     end
     MainScreen.pzoptOverlayItem = true

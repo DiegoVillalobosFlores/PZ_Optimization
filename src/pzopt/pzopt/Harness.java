@@ -27,6 +27,12 @@ import zombie.vehicles.BaseVehicle;
  *   route    legs      e.g. "E:600,S:600,W:600,N:600" — direction and length in tiles (drive: total distance; first leg = spawn heading)
  *   vehicle  script    drive mode: vehicle spawned on the nearest road when the player is on foot (default the race car; "none" = fixture required)
  *   kmh      km/h      drive mode: cruise-control speed (default 60); the route follows the road (roadFollow)
+ *   path     x,y/x,y/… drive mode: drive this centreline instead (DrivePath, corners rounded to corner_radius, 10): the
+ *                      car starts on the first point facing the second (the player is teleported there when it is far
+ *                      or not loaded), DrivePilot steers and plans the speed (corners, obstacles, a stop at the last
+ *                      point), the route is complete when it stops there; route= is ignored. 20 Hz telemetry in
+ *                      pzopt-drive.out, drive_* lines in pzopt-bench.out; harness/drive_check.py judges the drive.
+ *                      Tuning flags: see startPilot(). harness/drive-path.py builds paths from the map's streets.xml
  *   speed    tiles/s   default 18 (about car speed on a road)
  *   start    X,Y       bench/parity: teleport the player to this world square at world-ready, before the settle
  *                      time (the route then begins there). Any distance: IsoChunkMap.ProcessChunkPos unloads the
@@ -94,7 +100,17 @@ public final class Harness {
          || "play".equals(HarnessFlags.get("mode"));
    /** play: a copy of a real save with the scene flags applied (weather, hour, torch) and the player left alone: no god mode, no ghost, no route, no quit. */
    private static final boolean PLAYING = "play".equals(HarnessFlags.get("mode"));
-   private static final int IDLE = 0, WAIT_WORLD = 1, SETTLE = 2, RUN = 3, LINGER = 5, DONE = 4, PLAY = 6, MP_VEHICLE = 7, MP_ALIGN = 8, MP_TELEPORT = 9;
+   private static final int IDLE = 0, WAIT_WORLD = 1, SETTLE = 2, RUN = 3, LINGER = 5, DONE = 4, PLAY = 6, MP_VEHICLE = 7, MP_ALIGN = 8, MP_TELEPORT = 9, PATH_START = 10;
+   /** drive mode with flag path=: the route's centreline, its driver and what it sees (DrivePilot, 2026-09-24). */
+   private static DrivePath drivePath;
+   private static DrivePilot pilot;
+   private static DriveSenses senses;
+   private static String pathError;
+   private static final DrivePilot.Input pilotIn = new DrivePilot.Input();
+   private static final DrivePilot.Output pilotOut = new DrivePilot.Output();
+   private static final org.joml.Vector3f pilotFwd = new org.joml.Vector3f();
+   private static final StringBuilder driveRows = new StringBuilder(DrivePilot.HEADER + "\n");
+   private static long lastDriveRowNs;
    /** Multiplayer client (drive mode): the road square the server was asked to put the vehicle on, and when. */
    private static zombie.iso.IsoGridSquare mpRoad;
    private static zombie.iso.IsoDirections mpDir;
@@ -283,7 +299,17 @@ public final class Harness {
          cruiseKmh = Float.parseFloat(HarnessFlags.get("kmh", "60"));
           parseRoute(HarnessFlags.get("route", DEFAULT_ROUTE));
           driving = "drive".equals(HarnessFlags.get("mode"));
-         Log.info("harness: " + HarnessFlags.get("mode") + " mode, route=" + HarnessFlags.get("route", DEFAULT_ROUTE) + (driving ? " cruise=" + cruiseKmh + " km/h" : " speed=" + speed + " tiles/s") + " settle=" + settle + "s");
+         String pathFlag = HarnessFlags.get("path", "").trim();
+         if (driving && !pathFlag.isEmpty()) {
+            try {
+               drivePath = DrivePath.build(DrivePath.parseWaypoints(pathFlag), Float.parseFloat(HarnessFlags.get("corner_radius", "10")));
+               Log.info(String.format(java.util.Locale.ROOT, "harness: drive path %s: %.0f tiles, %d samples, starts %.1f,%.1f heading %.0f deg",
+                     pathFlag, drivePath.length, drivePath.n, drivePath.x[0], drivePath.y[0], Math.toDegrees(Math.atan2(drivePath.hy[0], drivePath.hx[0]))));
+            } catch (RuntimeException e) {
+               pathError = "bad path flag '" + pathFlag + "': " + e.getMessage(); // rejected once the world is up (the summary needs it)
+            }
+         }
+         Log.info("harness: " + HarnessFlags.get("mode") + " mode, route=" + (drivePath != null ? "path" : HarnessFlags.get("route", DEFAULT_ROUTE)) + (driving ? " cruise=" + cruiseKmh + " km/h" : " speed=" + speed + " tiles/s") + " settle=" + settle + "s");
          state = WAIT_WORLD;
          stateSinceNs = nowNs;
       }
@@ -328,6 +354,10 @@ public final class Harness {
                    reject("scene setup failed: " + e);
                    return;
                 }
+                if (pathError != null) {
+                   reject(pathError);
+                   return;
+                }
                 String startFlag = HarnessFlags.get("start", "").trim();
                 if (!startFlag.isEmpty() && (!driving || zombie.network.GameClient.client)) {
                    // far start (flag start=X,Y): after the scene (population multipliers) so the chunks the jump
@@ -347,7 +377,25 @@ public final class Harness {
                       vehicle.exit(p);
                       vehicle = null;
                    }
+                   if (vehicle != null && drivePath != null && !zombie.network.GameClient.client) {
+                      // a path run always starts from the path's first point in a fresh car
+                      Log.info("harness: path run: leaving the vehicle the character was saved in (" + vehicle.getScriptName() + ")");
+                      vehicle.exit(p);
+                      vehicle = null;
+                   }
                    if (vehicle == null && !"none".equals(HarnessFlags.get("vehicle", DEFAULT_VEHICLE))) {
+                      if (drivePath != null && !zombie.network.GameClient.client) {
+                         // the car goes on the path's first point: bring the player there and wait for the square
+                         // (PATH_START) unless it is loaded and close already
+                         int sx = (int)Math.floor(drivePath.x[0]), sy = (int)Math.floor(drivePath.y[0]);
+                         if (square(sx, sy, 0) == null || Math.abs(p.getX() - sx) > 40f || Math.abs(p.getY() - sy) > 40f) {
+                            Log.info("harness: path run: teleporting from " + p.getXi() + "," + p.getYi() + " to the path start " + sx + "," + sy);
+                            p.teleportTo(sx + 0.5f, sy + 0.5f, 0);
+                            state = PATH_START;
+                            stateSinceNs = nowNs;
+                            return;
+                         }
+                      }
                       if (zombie.network.GameClient.client) {
                          // multiplayer client: vehicles are the server's. First let the start teleport land
                          // (MP_TELEPORT), then ask the server (admin command) and wait for the vehicle to stream
@@ -376,6 +424,16 @@ public final class Harness {
                 if (!worldReady(p, nowNs)) {
                    return;
                 }
+            }
+         }
+         case PATH_START -> {
+            int sx = (int)Math.floor(drivePath.x[0]), sy = (int)Math.floor(drivePath.y[0]);
+            if (p != null && p.getCurrentSquare() != null && square(sx, sy, 0) != null && Math.abs(p.getXi() - sx) <= 2 && Math.abs(p.getYi() - sy) <= 2) {
+               Log.info("harness: path run: the start square " + sx + "," + sy + " is loaded after " + (nowNs - stateSinceNs) / 1_000_000 + " ms");
+               vehicle = spawnAndEnter(p, HarnessFlags.get("vehicle", DEFAULT_VEHICLE));
+               worldReady(p, nowNs);
+            } else if (nowNs - stateSinceNs > 60_000_000_000L) {
+               reject("the path start " + sx + "," + sy + " did not load within 60 s of the teleport");
             }
          }
          case MP_TELEPORT -> {
@@ -478,6 +536,20 @@ public final class Harness {
                    vehicleStartY = vehicle.getY();
                    lastTelemetryNs = 0L;
                 }
+                if (pilot != null) {
+                   // a car standing on the start pins ours (the bench save's own car, saved with the player in it at
+                   // 8002,11204, streams in after the spawn): fail now with the reason instead of a 90 s stall
+                   float reach = vehicle.getScript().getExtents().z() * 0.5f;
+                   for (BaseVehicle o : p.getCell().getVehicles()) {
+                      if (o == vehicle || o.getScript() == null) continue;
+                      float d = (float)Math.hypot(o.getX() - vehicle.getX(), o.getY() - vehicle.getY());
+                      if (d < 0.8f * (reach + o.getScript().getExtents().z() * 0.5f)) {
+                         reject(String.format(java.util.Locale.ROOT, "vehicle %s at %.1f,%.1f overlaps the path start (%.1f tiles away): move the path's first point",
+                               o.getScriptName(), o.getX(), o.getY(), d));
+                         return;
+                      }
+                   }
+                }
                 Log.info("harness: route start" + (Scene.requested() ? " (zombies loaded: " + Scene.zombiesLoaded() + ")" : ""));
                boolean closeCurtains = "true".equals(HarnessFlags.get("close_curtains", "false"));
                if (closeCurtains || "curtains".equals(HarnessFlags.get("find", ""))) {
@@ -521,7 +593,7 @@ public final class Harness {
                 // regulator on and no pedal pressed the controller opens the throttle until the
                 // regulator speed is reached (CarController.update), exactly like the player pressing
                 // the cruise-control key. Re-asserted every frame in case something switched it off.
-                if (!vehicle.isRegulator() || vehicle.getRegulatorSpeed() != cruiseKmh) {
+                if (pilot == null && (!vehicle.isRegulator() || vehicle.getRegulatorSpeed() != cruiseKmh)) {
                    vehicle.setRegulator(true);
                    vehicle.setRegulatorSpeed(cruiseKmh);
                 }
@@ -530,12 +602,21 @@ public final class Harness {
                    vehicle.engineDoRunning();
                 }
                  zoomCycle(p, nowNs);
-                 float steer = roadFollow(dt);
+                 float steer;
+                 if (pilot != null) {
+                    pilotStep(dt, nowNs);
+                    steer = pilotOut.steering;
+                 } else {
+                    steer = roadFollow(dt);
+                 }
                  if (nowNs - lastTelemetryNs >= 1_000_000_000L) {
                     lastTelemetryNs = nowNs;
-                    Log.info(String.format(java.util.Locale.ROOT, "harness: drive t=%.0fs pos=%.1f,%.1f dist=%.1f lateral=%.2f steer=%+.0f speed=%.1fkm/h engine=%s regulator=%s/%.0f throttle=%.2f gear=%s paused=%s zoom=%.2f",
-                          (nowNs - runStartNs) / 1e9, vehicle.getX(), vehicle.getY(), drivenDistance, lateralError(), steer, vehicle.getCurrentSpeedKmHour(), vehicle.isEngineRunning(),
-                          vehicle.isRegulator(), vehicle.getRegulatorSpeed(), vehicle.throttle, vehicle.transmissionNumber, zombie.GameTime.isGamePaused(), Core.getInstance().getZoom(p.getIndex())));
+                    Log.info(String.format(java.util.Locale.ROOT, "harness: drive t=%.0fs pos=%.1f,%.1f dist=%.1f lateral=%.2f steer=%+.2f speed=%.1fkm/h engine=%s regulator=%s/%.0f throttle=%.2f gear=%s paused=%s zoom=%.2f",
+                          (nowNs - runStartNs) / 1e9, vehicle.getX(), vehicle.getY(), drivenDistance, pilot != null ? pilot.xte : lateralError(), steer, vehicle.getCurrentSpeedKmHour(), vehicle.isEngineRunning(),
+                          vehicle.isRegulator(), vehicle.getRegulatorSpeed(), vehicle.throttle, vehicle.transmissionNumber, zombie.GameTime.isGamePaused(), Core.getInstance().getZoom(p.getIndex()))
+                          + (pilot == null ? "" : String.format(java.util.Locale.ROOT, " s=%.0f/%.0f target=%.0fkm/h hdg_err=%+.1f offset=%+.2f obstacles=%d%s brake=%s chunk_ahead=%s gain=%.2f impacts=%d",
+                          pilot.progress(), drivePath.length, pilot.targetTps * pilot.kmhPerTps(), pilot.headingErrDeg, pilot.offsetNow, pilot.obstaclesAhead,
+                          Float.isNaN(pilot.stopAt) ? "" : String.format(java.util.Locale.ROOT, " stop_at=%.0f", pilot.stopAt), pilotOut.brake, pilotIn.chunkAhead, pilot.gain(), pilot.impacts)));
                  }
                  // path length: the road turns, so the distance is accumulated per frame
                  float ddx = vehicle.getX() - x;
@@ -543,7 +624,7 @@ public final class Harness {
                  x = vehicle.getX();
                  y = vehicle.getY();
                  drivenDistance += (float)Math.sqrt(ddx * ddx + ddy * ddy);
-                if (drivenDistance >= routeDistance()) {
+                if (pilot != null ? pilot.done() : drivenDistance >= routeDistance()) {
                    finish(p, 0);
                 } else if ((nowNs - runStartNs) / 1e9f >= maxSeconds) {
                    routeStatus = "timeout";
@@ -727,6 +808,8 @@ public final class Harness {
                  + "\nvehicle=" + (vehicle == null ? "none" : vehicle.getScriptName()) + "\nvehicle_spawned=" + vehicleSpawned
                 + "\nmovement_source=" + (driving ? "vehicle-controller" : "teleport-control")
                 + "\nvehicle_distance=" + drivenDistance + "\ncruise_kmh=" + (driving ? cruiseKmh : 0f)
+                + (drivePath != null ? "\ndrive_path=" + HarnessFlags.get("path", "") : "")
+                + (pilot != null ? "\n" + pilot.describe(secs) : "")
                 + "\nzoom=" + zoom + "\nmax_zoom=" + core.getMaxZoom() + "\nauto_zoom_option=" + autoZoomWasOn
                 + "\noffscreen_width=" + core.getOffscreenWidth(playerIndex) + "\noffscreen_height=" + core.getOffscreenHeight(playerIndex)
                 + "\npan_camera=" + HarnessFlags.get("pan_camera", Boolean.toString(GameKeyboard.isKeyDown("PanCamera")))
@@ -788,6 +871,9 @@ public final class Harness {
          startX = x = vehicleStartX;
          startY = y = vehicleStartY;
          Log.info("harness: driving fixture valid, vehicle=" + vehicle.getScriptName() + " at " + (int)vehicleStartX + "," + (int)vehicleStartY);
+         if (drivePath != null) {
+            startPilot();
+         }
          if (zombie.network.GameClient.client) {
             mpCleanup(p, false); // earlier runs' cars and the world's wrecks on the loaded part of the road
          }
@@ -822,6 +908,74 @@ public final class Harness {
       state = SETTLE;
       stateSinceNs = nowNs;
       return true;
+   }
+
+   /**
+    * The path driver for this vehicle. Flags (all optional): lat_accel (tiles/s^2 of cornering, 5), decel (tiles/s^2
+    * the speed plan brakes with, 6), look_min / look_time / look_max (pure-pursuit look-ahead: tiles + seconds x speed,
+    * capped; 5 / 0.6 / 40), lane (tiles right of the centreline, 0), avoid_slope (tiles sideways per tile along, 0.15),
+    * avoid_margin (tiles of clearance, 0.5), stop_at_end (true), avoid_zombies (true).
+    */
+   private static void startPilot() {
+      zombie.scripting.objects.VehicleScript sc = vehicle.getScript();
+      org.joml.Vector3f ext = sc.getExtents();
+      float zMin = Float.MAX_VALUE, zMax = -Float.MAX_VALUE;
+      for (int i = 0; i < sc.getWheelCount(); i++) {
+         float wz = sc.getWheel(i).getOffset().z();
+         zMin = Math.min(zMin, wz);
+         zMax = Math.max(zMax, wz);
+      }
+      float wheelbase = zMax > zMin ? zMax - zMin : ext.z() * 0.6f;
+      pilot = new DrivePilot(drivePath, cruiseKmh,
+            Float.parseFloat(HarnessFlags.get("lat_accel", "5")), Float.parseFloat(HarnessFlags.get("decel", "6")),
+            Float.parseFloat(HarnessFlags.get("look_min", "5")), Float.parseFloat(HarnessFlags.get("look_time", "0.6")), Float.parseFloat(HarnessFlags.get("look_max", "40")),
+            Float.parseFloat(HarnessFlags.get("lane", "0")), Float.parseFloat(HarnessFlags.get("avoid_slope", "0.15")), Float.parseFloat(HarnessFlags.get("avoid_margin", "0.5")),
+            !"false".equals(HarnessFlags.get("stop_at_end", "true")), ext.x() * 0.5f, ext.z() * 0.5f, wheelbase);
+      senses = new DriveSenses(drivePath, vehicle, !"false".equals(HarnessFlags.get("avoid_zombies", "true")));
+      Log.info(String.format(java.util.Locale.ROOT, "harness: drive pilot: %s %.2f x %.2f tiles, wheelbase %.2f, max %.0f km/h, cruise %.0f km/h, path %.0f tiles",
+            vehicle.getScriptName(), ext.x(), ext.z(), wheelbase, vehicle.getMaxSpeed(), cruiseKmh, drivePath.length));
+   }
+
+   /** One frame of the path driver: read the vehicle, step the pilot, feed the controller (called before IsoPlayer.update). */
+   private static void pilotStep(float dt, long nowNs) {
+      zombie.core.physics.CarController c = vehicle.getController();
+      DrivePilot.Input in = pilotIn;
+      in.x = vehicle.getX();
+      in.y = vehicle.getY();
+      vehicle.getForwardVector(pilotFwd);
+      float fl = (float)Math.hypot(pilotFwd.x, pilotFwd.z);
+      in.fx = fl > 1e-4f ? pilotFwd.x / fl : 1f;
+      in.fy = fl > 1e-4f ? pilotFwd.z / fl : 0f;
+      in.v = vehicle.getSpeed2D();
+      in.kmh = vehicle.getCurrentSpeedKmHour();
+      in.steer = c.getVehicleSteering();
+      in.maxKmh = vehicle.getMaxSpeed();
+      in.steerClamp = vehicle.getScript().getSteeringClamp(in.kmh);
+      in.multiplier = zombie.GameTime.getInstance().getMultiplier();
+      in.dt = dt;
+      in.chunkAhead = vehicle.isInvalidChunkAhead();
+      pilot.step(in, pilotOut, senses);
+      // CarController.update (IsoPlayer.update -> updatePhysics, later this frame) reads these; the keyboard pass after
+      // it (updateControls) overwrites them, so they are set again every frame. The brake switches the cruise control off
+      // (updateRegulator), so the regulator is set every frame too.
+      c.clientControls.steering = pilotOut.steering;
+      c.clientControls.brake = pilotOut.brake;
+      vehicle.setRegulator(pilotOut.regulatorKmh > 0.5f);
+      vehicle.setRegulatorSpeed(pilotOut.regulatorKmh);
+      if (nowNs - lastDriveRowNs >= 50_000_000L) {
+         lastDriveRowNs = nowNs;
+         driveRows.append(pilot.row((nowNs - runStartNs) / 1e9f, in, pilotOut)).append('\n');
+      }
+   }
+
+   /** pzopt-drive.out: the path driver's 20 Hz telemetry (DrivePilot.HEADER columns), for harness/drive_check.py. */
+   private static void writeDriveLog() {
+      File f = new File(ZomboidFileSystem.instance.getCacheDir(), "pzopt-drive.out");
+      try (FileWriter w = new FileWriter(f)) {
+         w.write(driveRows.toString());
+      } catch (IOException e) {
+         Log.warn("harness: could not write " + f + ": " + e);
+      }
    }
 
    /** Multiplayer client: teleport to the nearest road and ask the server (admin) for the vehicle on that square. */
@@ -888,31 +1042,52 @@ public final class Harness {
    private static BaseVehicle spawnAndEnter(IsoPlayer p, String script) {
       try {
          zombie.iso.IsoGridSquare sq = p.getCurrentSquare();
-         // a vehicle driven straight from a field ends in the first tree line (drive-rec-1): put it on
-         // the nearest road, centred, pointing along the longest straight run of street tiles
-         zombie.iso.IsoGridSquare road = findRoad(sq, 40);
-         if (road == null) {
-            Log.warn("harness: no road within 40 tiles of " + sq.x + "," + sq.y + "; spawning where the player stands");
-            road = sq;
+         zombie.iso.IsoGridSquare road;
+         zombie.iso.IsoDirections dir;
+         float angle;
+         if (drivePath != null) {
+            // path run: on the path's first point, facing along its first segment (IsoDirections angles: N = 0, W = pi/2,
+            // S = pi, E = 3 pi / 2, i.e. atan2(-hx, -hy); the body's rotation is that plus pi)
+            road = square((int)Math.floor(drivePath.x[0]), (int)Math.floor(drivePath.y[0]), 0);
+            if (road == null) {
+               Log.warn("harness: the path start " + drivePath.x[0] + "," + drivePath.y[0] + " is not loaded");
+               return null;
+            }
+            float hx = drivePath.hx[0], hy = drivePath.hy[0];
+            headingX = Math.abs(hx) >= Math.abs(hy) ? (int)Math.signum(hx) : 0;
+            headingY = Math.abs(hx) >= Math.abs(hy) ? 0 : (int)Math.signum(hy);
+            float a = (float)Math.atan2(-hx, -hy);
+            if (a < 0f) a += (float)(Math.PI * 2);
+            dir = zombie.iso.IsoDirections.values()[Math.round(a / (float)(Math.PI / 4)) % 8];
+            angle = (float)(a + Math.PI);
+            Log.info(String.format(java.util.Locale.ROOT, "harness: path start at %d,%d, heading %.0f deg (%s)", road.x, road.y, Math.toDegrees(Math.atan2(hy, hx)), dir));
+         } else {
+            // a vehicle driven straight from a field ends in the first tree line (drive-rec-1): put it on
+            // the nearest road, centred, pointing along the longest straight run of street tiles
+            road = findRoad(sq, 40);
+            if (road == null) {
+               Log.warn("harness: no road within 40 tiles of " + sq.x + "," + sq.y + "; spawning where the player stands");
+               road = sq;
+            }
+            int[] heading = bestHeading(road, HarnessFlags.get("heading", "auto"));
+            if (heading == null) {
+               Log.warn("harness: no straight road run from " + road.x + "," + road.y);
+               heading = new int[]{1, 0, 0, 0};
+            }
+            headingX = heading[0];
+            headingY = heading[1];
+            dir = headingX > 0 ? zombie.iso.IsoDirections.E : headingX < 0 ? zombie.iso.IsoDirections.W : headingY > 0 ? zombie.iso.IsoDirections.S : zombie.iso.IsoDirections.N;
+            Log.info("harness: road at " + road.x + "," + road.y + " (player " + sq.x + "," + sq.y + "), heading " + dir + ", straight run " + heading[2] + " tiles" + (heading[3] == 1 ? " to the edge of the loaded map (continues)" : ""));
+            angle = (float)(dir.toAngle() + Math.PI);
          }
-         int[] heading = bestHeading(road, HarnessFlags.get("heading", "auto"));
-         if (heading == null) {
-            Log.warn("harness: no straight road run from " + road.x + "," + road.y);
-            heading = new int[]{1, 0, 0, 0};
-         }
-         headingX = heading[0];
-         headingY = heading[1];
-         zombie.iso.IsoDirections dir = headingX > 0 ? zombie.iso.IsoDirections.E : headingX < 0 ? zombie.iso.IsoDirections.W : headingY > 0 ? zombie.iso.IsoDirections.S : zombie.iso.IsoDirections.N;
-         Log.info("harness: road at " + road.x + "," + road.y + " (player " + sq.x + "," + sq.y + "), heading " + dir + ", straight run " + heading[2] + " tiles" + (heading[3] == 1 ? " to the edge of the loaded map (continues)" : ""));
          // the route length is a path length now (roadFollow keeps the car on the road through curves), so a
          // requested distance longer than the first straight run is fine
          BaseVehicle v = zombie.Lua.LuaManager.GlobalObject.addVehicleDebug(script, dir, 0, road);
          if (v == null || v.getSquare() == null) {
-            Log.warn("harness: could not place " + script + " at " + sq.x + "," + sq.y);
+            Log.warn("harness: could not place " + script + " at " + road.x + "," + road.y);
             return null;
          }
          // addVehicleDebug adds a random +-0.2 rad (11 deg) to the heading; a straight route needs it exact
-         float angle = (float)(dir.toAngle() + Math.PI);
          while (angle > Math.PI * 2) angle -= (float)(Math.PI * 2);
          v.savedRot.setAngleAxis(angle, 0f, 1f, 0f);
          v.jniTransform.setRotation(v.savedRot);
@@ -1180,6 +1355,7 @@ public final class Harness {
    }
 
    private static float routeDistance() {
+      if (drivePath != null) return drivePath.length;
       float distance = 0f;
       for (float[] leg : legs) distance += leg[2];
       return distance;
@@ -1364,6 +1540,9 @@ public final class Harness {
       runEndEpochMs = System.currentTimeMillis();
       Log.info("harness: route " + routeStatus + " in " + secs + "s, vehicle distance=" + drivenDistance + "; quitting");
       writeThreadCpu(secs);
+      if (pilot != null) {
+         writeDriveLog(); // before the summary: run.sh treats pzopt-bench.out as the end of the route
+      }
       writeSummary(secs, chunks);
       Stats.flush();
       if (driving && vehicle != null && vehicle.getController() != null) {

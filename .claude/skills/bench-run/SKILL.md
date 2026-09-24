@@ -79,6 +79,14 @@ for native Wayland, `--option uiRenderOffscreen=true` for the offscreen UI, `--g
 Stock runs: `scripts/pzopt.sh uninstall` first, reinstall after. `--launcher auto` is fine.
 Use the DEFAULT bench save for drive runs (no `--source-save`).
 
+Path drive (2026-09-24, no retries needed): the 120 km/h Rosewood route = queue bench `drive-120-south`
+(`--mode drive --flag path=8010,11204.5/8106,11204.5/8106,11965.5 --flag kmh=120 --flag zoom=max --route-seconds 60 --option frameRate=240 --option uncappedFPS=false`: pins the 240 cap, a peer run once left frameRate=60 in options.ini).
+`pzopt.DrivePilot` follows the centreline, plans corner / obstacle / end braking and stops on the last point; any
+other route: `harness/drive-path.py route --from X,Y --via "Street A>Street B"` or `plan --from X,Y --describe
+"..."` (Jev picks) prints the `path=` flag. Keep the first point clear of parked cars (the bench save's own car sits
+at 8002,11204; an overlap is rejected at route start). Validate with `harness/drive_check.py <run> [--against <run>]`
+(judge.py and so every queue result already carry its `drive=` line; a failed drive makes the verdict invalid).
+
 ## 4. Validate before trusting
 
 ```bash

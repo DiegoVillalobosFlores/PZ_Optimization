@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from analyze import summarize, FPS_TARGET  # noqa: E402
 from compare import METRICS, get  # noqa: E402
 from typesafe_client import ask, choice, noul, fmt  # noqa: E402
+import drive_check  # noqa: E402
 
 RUNS = Path("harness/runs")
 
@@ -141,6 +142,15 @@ def load_against(spec):
 def judge(run_dir, against_specs, goal, cap=FPS_TARGET, quiet=False):
     s = summarize(str(run_dir))
     c = card(s, cap)
+    # path drives (--flag path=): the pilot's own verdict first; a drive that crashed, stalled or left its line is no
+    # measurement, and the facts go into the card so the verdict below can say so
+    drive = drive_check.judge(str(run_dir), use_jev=True, quiet=True, out_json=str(Path(run_dir) / "drive-check.json"))
+    if drive is not None:
+        dc = drive["card"]
+        c["drive"] = {k: dc[k] for k in ("completed", "failed_checks", "seconds", "top_kmh", "cruise_share", "xte_max_tiles",
+                                          "impacts", "unplanned_dips", "stop_for_obstacle_s", "chunk_ahead_s", "streaming_note")}
+        if "answers" in drive:
+            c["drive"]["verdict"] = drive["answers"]["verdict"]["choice"]
     state = {"objective": OBJECTIVE, "goal": goal, "run": c, "against": []}
     for spec in against_specs:
         a, name = load_against(spec)
@@ -159,7 +169,7 @@ def judge(run_dir, against_specs, goal, cap=FPS_TARGET, quiet=False):
              "partial": "some of what the goal asks moved beyond noise in the right direction, but not all of it, or a smaller gain than asked",
              "no_change": "every metric the goal names is within noise of the comparison",
              "regressed": "a metric the goal names, or the frame tail (p99, p99.9, max, frames >33 ms, jitter), is worse beyond noise",
-             "invalid": "the run cannot answer the goal: missing logs (`run.facts.missing`), wrong setup for the goal (cap, props, renderer, route), or no comparison run when the goal needs one"}),
+             "invalid": "the run cannot answer the goal: missing logs (`run.facts.missing`), wrong setup for the goal (cap, props, renderer, route), a path drive that was not clean (`run.drive.failed_checks` not empty or `run.drive.verdict` other than valid), or no comparison run when the goal needs one"}),
         "goal_met": noul("Does `run` achieve what `goal` asks for, relative to `against`, taking the deltas' noise verdicts at face value?"),
         "tail_regressed": noul("Is any frame-tail metric (p99, p99.9, max, frames >33 ms, stdev, jitter) in the deltas 'worse' beyond noise?"),
         "setup_matches_goal": noul("Is the run's setup (`run.props`, `run.environment`, `run.facts.cap_fps`, the comparison runs' props) the right one for `goal`? "
@@ -181,6 +191,8 @@ def judge(run_dir, against_specs, goal, cap=FPS_TARGET, quiet=False):
             rows = (a["presented_frame_deltas"] or {}).get("rows", []) + a["sampler_and_streamer_deltas"]
             real = [d for d in rows if d["verdict"] != "within noise"]
             print(f"  vs {a['name']}: " + ("; ".join(f"{d['metric']} {d['run']}{d['unit']} vs {d['against']} ({d['verdict']})" for d in real) or "everything within noise"))
+        if drive is not None:
+            print("  " + drive_check.line(drive).replace("\n", "\n  "))
         print("jev:")
         print("  " + fmt(answers).replace("\n", "\n  "))
         print(f"  ({log[0]['ms']} ms, {log[0]['model']}; judge.json written)")

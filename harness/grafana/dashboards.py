@@ -630,7 +630,8 @@ SELECT coalesce((SELECT avg(total_w) FROM live_sysmon WHERE {last5}), (SELECT av
 
 def main():
     OUT.mkdir(exist_ok=True)
-    for d in (runs_dashboard(), run_dashboard(), compare_dashboard(), live_dashboard()):
+    from machines import machine_dashboards  # one per test machine, built from this file's panels
+    for d in (runs_dashboard(), run_dashboard(), compare_dashboard(), live_dashboard(), *machine_dashboards()):
         (OUT / f"{d['uid']}.json").write_text(json.dumps(d, indent=1) + "\n")
     print(f"dashboards: {', '.join(sorted(p.name for p in OUT.glob('*.json')))}")
 

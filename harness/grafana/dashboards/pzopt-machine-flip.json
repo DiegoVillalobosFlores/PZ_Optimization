@@ -1,0 +1,4435 @@
+{
+ "uid": "pzopt-machine-flip",
+ "title": "PZ machine: Flip (laptop)",
+ "description": "Every harness run of the flip imported by harness/grafana/ingest.py, stock vs optimized there, its hardware",
+ "tags": [
+  "pzopt",
+  "machine"
+ ],
+ "timezone": "browser",
+ "editable": false,
+ "graphTooltip": 1,
+ "schemaVersion": 41,
+ "version": 1,
+ "refresh": "",
+ "liveNow": false,
+ "time": {
+  "from": "now-7d",
+  "to": "now"
+ },
+ "timepicker": {
+  "refresh_intervals": [
+   "1s",
+   "2s",
+   "5s",
+   "10s",
+   "30s",
+   "1m",
+   "5m"
+  ]
+ },
+ "templating": {
+  "list": [
+   {
+    "type": "constant",
+    "name": "machine",
+    "label": "machine",
+    "query": "flip",
+    "hide": 2,
+    "current": {
+     "text": "flip",
+     "value": "flip"
+    },
+    "options": [
+     {
+      "text": "flip",
+      "value": "flip",
+      "selected": true
+     }
+    ]
+   },
+   {
+    "type": "query",
+    "name": "mode",
+    "label": "mode",
+    "datasource": {
+     "type": "grafana-postgresql-datasource",
+     "uid": "pzopt-pg"
+    },
+    "definition": "SELECT DISTINCT coalesce(mode, '') FROM runs WHERE machine = 'flip' ORDER BY 1",
+    "query": "SELECT DISTINCT coalesce(mode, '') FROM runs WHERE machine = 'flip' ORDER BY 1",
+    "refresh": 2,
+    "multi": true,
+    "includeAll": true,
+    "sort": 0,
+    "hide": 0,
+    "options": [],
+    "allValue": null,
+    "current": {
+     "text": "All",
+     "value": "$__all"
+    }
+   },
+   {
+    "type": "textbox",
+    "name": "label",
+    "label": "label regex",
+    "query": ".*",
+    "current": {
+     "text": ".*",
+     "value": ".*"
+    },
+    "hide": 0
+   },
+   {
+    "type": "constant",
+    "name": "hmachine",
+    "label": "hmachine",
+    "query": "flip",
+    "hide": 2,
+    "current": {
+     "text": "flip",
+     "value": "flip"
+    },
+    "options": [
+     {
+      "text": "flip",
+      "value": "flip",
+      "selected": true
+     }
+    ]
+   }
+  ]
+ },
+ "annotations": {
+  "list": [
+   {
+    "builtIn": 1,
+    "datasource": {
+     "type": "grafana",
+     "uid": "-- Grafana --"
+    },
+    "enable": true,
+    "hide": true,
+    "iconColor": "rgba(0, 211, 255, 1)",
+    "name": "Annotations & Alerts",
+    "type": "dashboard"
+   }
+  ]
+ },
+ "links": [
+  {
+   "title": "PZ Optimization",
+   "type": "dashboards",
+   "tags": [
+    "pzopt"
+   ],
+   "asDropdown": false,
+   "includeVars": false
+  }
+ ],
+ "panels": [
+  {
+   "type": "text",
+   "title": "",
+   "transparent": true,
+   "options": {
+    "mode": "markdown",
+    "content": "## Flip (laptop)\nAMD Ryzen AI 9 HX 370 (Zen 5 + Zen 5c cores) \u00b7 Radeon 890M integrated GPU, Mesa OpenGL \u00b7 1920\u00d71080 \u00b7 runs in the balanced power profile, launched direct\n\nOther machines: [Desktop](/d/pzopt-machine-desktop) \u00b7 [Dell (laptop)](/d/pzopt-machine-dell) \u00b7 [MacBook Pro](/d/pzopt-machine-mac) \u00b7 [every run](/d/pzopt-runs)"
+   },
+   "id": 1,
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 4
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Runs (time range)",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT count(*) AS runs, count(*) FILTER (WHERE valid) AS valid, count(*) FILTER (WHERE NOT enabled) AS stock,\n  count(DISTINCT label) AS labels FROM runs WHERE machine = 'flip' AND $__timeFilter(started)",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     },
+     "noValue": "\u2013"
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "values": false,
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "/.*/"
+    },
+    "colorMode": "none",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 26
+    }
+   },
+   "id": 2,
+   "gridPos": {
+    "x": 0,
+    "y": 4,
+    "w": 6,
+    "h": 4
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Last run",
+   "description": "The newest run of this machine in the database, any time range.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT extract(epoch FROM max(started)) * 1000 AS \"last run\" FROM runs WHERE machine = 'flip'",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "dateTimeFromNow",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     },
+     "noValue": "\u2013"
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "values": false,
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "/.*/"
+    },
+    "colorMode": "none",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 26
+    }
+   },
+   "id": 3,
+   "gridPos": {
+    "x": 6,
+    "y": 4,
+    "w": 4,
+    "h": 4
+   }
+  },
+  {
+   "type": "table",
+   "title": "What the newest runs reported",
+   "description": "Each distinct setup the console reported (desktop resolution, GPU, OpenGL renderer, JVM, launcher). Compare runs only within one row.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT DISTINCT ON (resolution, opengl, gpu, jvm, launcher) resolution, gpu, opengl, jvm, launcher, max(started) OVER\n  (PARTITION BY resolution, opengl, gpu, jvm, launcher) AS \"last seen\"\nFROM runs WHERE machine = 'flip' AND $__timeFilter(started) ORDER BY resolution, opengl, gpu, jvm, launcher",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "filterable": false,
+      "inspect": true,
+      "wrapHeaderText": true
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "last seen"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "dateTimeAsIso"
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "resolution"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 110
+       }
+      ]
+     }
+    ]
+   },
+   "transformations": [],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false,
+     "reducer": [
+      "sum"
+     ],
+     "fields": ""
+    },
+    "sortBy": []
+   },
+   "id": 4,
+   "gridPos": {
+    "x": 10,
+    "y": 4,
+    "w": 14,
+    "h": 4
+   }
+  },
+  {
+   "type": "row",
+   "title": "Stock vs PZ Optimization on the flip",
+   "collapsed": false,
+   "panels": [],
+   "id": 5,
+   "gridPos": {
+    "x": 0,
+    "y": 8,
+    "w": 24,
+    "h": 1
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Stock game",
+   "description": "Medians over the newest 10 runs of the headline scene (named in the middle). Average fps: route mean; 1 % low: the fps of the slowest 1 % of frames; p99 / p99.9: 99 % / 99.9 % of the frames are faster than this (stutter).",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "WITH r0 AS (\n  SELECT r.*, NOT enabled AS stock,\n    coalesce(substring(props from 'frameCapFps=(\\d+)'), substring(opts->>'game_options' from 'frameRate=(\\d+)'))::int AS cap_fps,\n    trim(regexp_replace(coalesce(opts->>'game_options', ''), '(frameRate|uncappedFPS)=\\S*', '', 'g')) AS other_options\n  FROM runs r\n  WHERE machine = 'flip' AND valid AND fps_mean IS NOT NULL\n    AND coalesce(judge #>> '{state,run,facts,valid_measurement}', 'true') = 'true'\n    AND coalesce(judge #>> '{state,run,drive,verdict}', 'valid') = 'valid'\n    -- no profiler attached (run.sh's own launch options, such as the released -Dpzopt.jit=steady, are fine)\n    AND coalesce(opts->>'vmargs', '') !~ '(agentpath|agentlib|javaagent|StartFlightRecording|NativeMemoryTracking)'\n    AND coalesce(opts->>'jfr', '0') = '0'\n    AND NOT EXISTS (SELECT 1 FROM regexp_split_to_table(coalesce(props, ''), '\\s+') t\n                    WHERE t <> '' AND t !~ '^(instrument|overlay|uncappedFps|hdrAuto|frameCapFps|enabled)='\n                      AND t NOT IN ('upscaler=off', 'hotsaveStaged=false'))\n    -- the Optimizations tab file applies too and is not in props: an upscaler renders the world smaller, not a default\n    AND (NOT enabled OR coalesce(substring(scenario->>'settings' from 'upscaler=([a-z0-9]+)'), 'off') = 'off')\n    -- the daily re-measures of older builds (<bench>-<MMDD>-<n>, DAILY_BENCHES) are history: only the newest day's build is \"current\"\n    AND (label !~ '^(daily|dstorm|dspin|dlou|dhorde)-[0-9]{4}-' OR substring(label from '^[a-z]+-([0-9]{4})-')\n         = (SELECT max(substring(label from '^[a-z]+-([0-9]{4})-')) FROM runs WHERE label ~ '^(daily|dstorm|dspin|dlou|dhorde)-[0-9]{4}-'))\n),\nr1 AS (SELECT *, CASE WHEN props ~ 'uncappedFps=true' OR fps_mean < 0.9 * cap_fps THEN 'uncapped'  -- below its cap = uncapped\n                      WHEN cap_fps IS NOT NULL THEN cap_fps || ' fps cap' ELSE 'capped' END AS cap_label FROM r0),\nc AS (\n  SELECT r1.*,\n    concat_ws('|', mode, preset, flags, cap_label, other_options, resolution, opts->>'renderer') AS exact,\n    concat_ws(' \u00b7 ',\n      -- the daily re-measures pass the scene flags instead of the preset: name those scenes by their start square\n      CASE WHEN flags ~ 'start=12450,1280' THEN 'Louisville horde' WHEN flags ~ 'showcase=horde' THEN 'Horde shooting, riverside'\n      ELSE CASE coalesce(nullif(preset, 'none'), mode)\n        WHEN 'louisville' THEN 'Louisville horde' WHEN 'storm' THEN 'Thunderstorm' WHEN 'storm-fog' THEN 'Storm + fog'\n        WHEN 'fog' THEN 'Heavy fog' WHEN 'night-torch' THEN 'Night, torch' WHEN 'night-dark' THEN 'Night'\n        WHEN 'helicopter' THEN 'Helicopter event' WHEN 'bench' THEN 'Rosewood'\n        -- kmh=193 is flat out: the car tops out near 122 km/h\n        WHEN 'drive' THEN 'Driving' || coalesce(' ' || least(substring(flags from 'kmh=(\\d+)')::int, 120) || ' km/h', '')\n        ELSE preset END END,\n      CASE WHEN flags ~ 'weather=storm' AND coalesce(preset, '') NOT LIKE 'storm%' THEN 'thunderstorm' END,\n      CASE WHEN flags ~ 'fog=heavy' AND coalesce(preset, '') NOT IN ('fog', 'storm-fog') THEN 'heavy fog' END,\n      CASE WHEN flags ~ 'turn=' AND flags !~ 'start=12450,1280' AND mode = 'bench' AND coalesce(preset, '') IN ('', 'none') THEN 'spinning walk' END,\n      CASE WHEN flags ~ '(house|car)_alarm=' THEN 'alarms' END,\n      CASE WHEN flags ~ 'gunshots=[1-9]' THEN 'gunfire' END,\n      CASE WHEN flags ~ 'helicopter=true' AND coalesce(preset, '') <> 'helicopter' THEN 'helicopter' END,\n      cap_label) AS scene\n  FROM r1\n),\nm AS (SELECT *, row_number() OVER (PARTITION BY scene, stock ORDER BY started DESC) AS n FROM c\n      WHERE exact IN (SELECT exact FROM c GROUP BY 1 HAVING bool_or(stock) AND bool_or(NOT stock))),\nside AS (SELECT scene, stock, count(*) AS runs, max(started) AS newest,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY fps_mean) AS fps,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY fps_1pct_low) AS low,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY p99_ms) AS p99,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY p99_9_ms) AS p999,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY gpu_pct) AS gpu,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY busiest_core_pct) AS core\n         FROM m WHERE n <= 10 GROUP BY 1, 2),\ns AS (SELECT o.scene, st.runs AS st_runs, o.runs AS o_runs, greatest(st.newest, o.newest) AS newest,\n        st.fps AS st_fps, o.fps AS o_fps, st.low AS st_low, o.low AS o_low, st.p99 AS st_p99, o.p99 AS o_p99,\n        st.p999 AS st_p999, o.p999 AS o_p999, st.gpu AS st_gpu, o.gpu AS o_gpu, st.core AS st_core, o.core AS o_core\n      FROM side o JOIN side st ON st.scene = o.scene AND st.stock AND NOT o.stock),\n-- the headline: the clear 120 km/h drive (the daily chart's main line) when it was run both ways, else the scene with most pairs\nh AS (SELECT * FROM s ORDER BY scene = 'Driving 120 km/h \u00b7 uncapped' DESC, least(st_runs, o_runs) DESC, newest DESC LIMIT 1)\nSELECT st_fps AS \"average fps \u2191\", st_low AS \"1 % low fps \u2191\", st_p99 AS \"p99 frame time \u2193\", st_p999 AS \"p99.9 frame time \u2193\" FROM h",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#8e8e8e",
+        "value": null
+       }
+      ]
+     },
+     "noValue": "\u2013",
+     "decimals": 1
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "p99 frame time \u2193"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "ms"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "p99.9 frame time \u2193"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "ms"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "reduceOptions": {
+     "values": false,
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "/.*/"
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 44
+    }
+   },
+   "id": 6,
+   "gridPos": {
+    "x": 0,
+    "y": 9,
+    "w": 10,
+    "h": 7
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Faster than stock",
+   "description": "Average fps with the mod / average fps of the stock game, in the scene with the most runs both ways (its name above the number). Every scene measured both ways is in the table below.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "WITH r0 AS (\n  SELECT r.*, NOT enabled AS stock,\n    coalesce(substring(props from 'frameCapFps=(\\d+)'), substring(opts->>'game_options' from 'frameRate=(\\d+)'))::int AS cap_fps,\n    trim(regexp_replace(coalesce(opts->>'game_options', ''), '(frameRate|uncappedFPS)=\\S*', '', 'g')) AS other_options\n  FROM runs r\n  WHERE machine = 'flip' AND valid AND fps_mean IS NOT NULL\n    AND coalesce(judge #>> '{state,run,facts,valid_measurement}', 'true') = 'true'\n    AND coalesce(judge #>> '{state,run,drive,verdict}', 'valid') = 'valid'\n    -- no profiler attached (run.sh's own launch options, such as the released -Dpzopt.jit=steady, are fine)\n    AND coalesce(opts->>'vmargs', '') !~ '(agentpath|agentlib|javaagent|StartFlightRecording|NativeMemoryTracking)'\n    AND coalesce(opts->>'jfr', '0') = '0'\n    AND NOT EXISTS (SELECT 1 FROM regexp_split_to_table(coalesce(props, ''), '\\s+') t\n                    WHERE t <> '' AND t !~ '^(instrument|overlay|uncappedFps|hdrAuto|frameCapFps|enabled)='\n                      AND t NOT IN ('upscaler=off', 'hotsaveStaged=false'))\n    -- the Optimizations tab file applies too and is not in props: an upscaler renders the world smaller, not a default\n    AND (NOT enabled OR coalesce(substring(scenario->>'settings' from 'upscaler=([a-z0-9]+)'), 'off') = 'off')\n    -- the daily re-measures of older builds (<bench>-<MMDD>-<n>, DAILY_BENCHES) are history: only the newest day's build is \"current\"\n    AND (label !~ '^(daily|dstorm|dspin|dlou|dhorde)-[0-9]{4}-' OR substring(label from '^[a-z]+-([0-9]{4})-')\n         = (SELECT max(substring(label from '^[a-z]+-([0-9]{4})-')) FROM runs WHERE label ~ '^(daily|dstorm|dspin|dlou|dhorde)-[0-9]{4}-'))\n),\nr1 AS (SELECT *, CASE WHEN props ~ 'uncappedFps=true' OR fps_mean < 0.9 * cap_fps THEN 'uncapped'  -- below its cap = uncapped\n                      WHEN cap_fps IS NOT NULL THEN cap_fps || ' fps cap' ELSE 'capped' END AS cap_label FROM r0),\nc AS (\n  SELECT r1.*,\n    concat_ws('|', mode, preset, flags, cap_label, other_options, resolution, opts->>'renderer') AS exact,\n    concat_ws(' \u00b7 ',\n      -- the daily re-measures pass the scene flags instead of the preset: name those scenes by their start square\n      CASE WHEN flags ~ 'start=12450,1280' THEN 'Louisville horde' WHEN flags ~ 'showcase=horde' THEN 'Horde shooting, riverside'\n      ELSE CASE coalesce(nullif(preset, 'none'), mode)\n        WHEN 'louisville' THEN 'Louisville horde' WHEN 'storm' THEN 'Thunderstorm' WHEN 'storm-fog' THEN 'Storm + fog'\n        WHEN 'fog' THEN 'Heavy fog' WHEN 'night-torch' THEN 'Night, torch' WHEN 'night-dark' THEN 'Night'\n        WHEN 'helicopter' THEN 'Helicopter event' WHEN 'bench' THEN 'Rosewood'\n        -- kmh=193 is flat out: the car tops out near 122 km/h\n        WHEN 'drive' THEN 'Driving' || coalesce(' ' || least(substring(flags from 'kmh=(\\d+)')::int, 120) || ' km/h', '')\n        ELSE preset END END,\n      CASE WHEN flags ~ 'weather=storm' AND coalesce(preset, '') NOT LIKE 'storm%' THEN 'thunderstorm' END,\n      CASE WHEN flags ~ 'fog=heavy' AND coalesce(preset, '') NOT IN ('fog', 'storm-fog') THEN 'heavy fog' END,\n      CASE WHEN flags ~ 'turn=' AND flags !~ 'start=12450,1280' AND mode = 'bench' AND coalesce(preset, '') IN ('', 'none') THEN 'spinning walk' END,\n      CASE WHEN flags ~ '(house|car)_alarm=' THEN 'alarms' END,\n      CASE WHEN flags ~ 'gunshots=[1-9]' THEN 'gunfire' END,\n      CASE WHEN flags ~ 'helicopter=true' AND coalesce(preset, '') <> 'helicopter' THEN 'helicopter' END,\n      cap_label) AS scene\n  FROM r1\n),\nm AS (SELECT *, row_number() OVER (PARTITION BY scene, stock ORDER BY started DESC) AS n FROM c\n      WHERE exact IN (SELECT exact FROM c GROUP BY 1 HAVING bool_or(stock) AND bool_or(NOT stock))),\nside AS (SELECT scene, stock, count(*) AS runs, max(started) AS newest,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY fps_mean) AS fps,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY fps_1pct_low) AS low,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY p99_ms) AS p99,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY p99_9_ms) AS p999,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY gpu_pct) AS gpu,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY busiest_core_pct) AS core\n         FROM m WHERE n <= 10 GROUP BY 1, 2),\ns AS (SELECT o.scene, st.runs AS st_runs, o.runs AS o_runs, greatest(st.newest, o.newest) AS newest,\n        st.fps AS st_fps, o.fps AS o_fps, st.low AS st_low, o.low AS o_low, st.p99 AS st_p99, o.p99 AS o_p99,\n        st.p999 AS st_p999, o.p999 AS o_p999, st.gpu AS st_gpu, o.gpu AS o_gpu, st.core AS st_core, o.core AS o_core\n      FROM side o JOIN side st ON st.scene = o.scene AND st.stock AND NOT o.stock),\n-- the headline: the clear 120 km/h drive (the daily chart's main line) when it was run both ways, else the scene with most pairs\nh AS (SELECT * FROM s ORDER BY scene = 'Driving 120 km/h \u00b7 uncapped' DESC, least(st_runs, o_runs) DESC, newest DESC LIMIT 1)\nSELECT now() AS time, scene AS metric, o_fps / st_fps AS value FROM h",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "suffix:\u00d7",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#56a64b",
+        "value": null
+       }
+      ]
+     },
+     "noValue": "\u2013",
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "values": false,
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": ""
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "vertical",
+    "wideLayout": true,
+    "text": {
+     "titleSize": 16,
+     "valueSize": 64
+    }
+   },
+   "id": 7,
+   "gridPos": {
+    "x": 10,
+    "y": 9,
+    "w": 4,
+    "h": 7
+   }
+  },
+  {
+   "type": "stat",
+   "title": "With PZ Optimization",
+   "description": "Medians over the newest 10 runs of the headline scene (named in the middle). Average fps: route mean; 1 % low: the fps of the slowest 1 % of frames; p99 / p99.9: 99 % / 99.9 % of the frames are faster than this (stutter).",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "WITH r0 AS (\n  SELECT r.*, NOT enabled AS stock,\n    coalesce(substring(props from 'frameCapFps=(\\d+)'), substring(opts->>'game_options' from 'frameRate=(\\d+)'))::int AS cap_fps,\n    trim(regexp_replace(coalesce(opts->>'game_options', ''), '(frameRate|uncappedFPS)=\\S*', '', 'g')) AS other_options\n  FROM runs r\n  WHERE machine = 'flip' AND valid AND fps_mean IS NOT NULL\n    AND coalesce(judge #>> '{state,run,facts,valid_measurement}', 'true') = 'true'\n    AND coalesce(judge #>> '{state,run,drive,verdict}', 'valid') = 'valid'\n    -- no profiler attached (run.sh's own launch options, such as the released -Dpzopt.jit=steady, are fine)\n    AND coalesce(opts->>'vmargs', '') !~ '(agentpath|agentlib|javaagent|StartFlightRecording|NativeMemoryTracking)'\n    AND coalesce(opts->>'jfr', '0') = '0'\n    AND NOT EXISTS (SELECT 1 FROM regexp_split_to_table(coalesce(props, ''), '\\s+') t\n                    WHERE t <> '' AND t !~ '^(instrument|overlay|uncappedFps|hdrAuto|frameCapFps|enabled)='\n                      AND t NOT IN ('upscaler=off', 'hotsaveStaged=false'))\n    -- the Optimizations tab file applies too and is not in props: an upscaler renders the world smaller, not a default\n    AND (NOT enabled OR coalesce(substring(scenario->>'settings' from 'upscaler=([a-z0-9]+)'), 'off') = 'off')\n    -- the daily re-measures of older builds (<bench>-<MMDD>-<n>, DAILY_BENCHES) are history: only the newest day's build is \"current\"\n    AND (label !~ '^(daily|dstorm|dspin|dlou|dhorde)-[0-9]{4}-' OR substring(label from '^[a-z]+-([0-9]{4})-')\n         = (SELECT max(substring(label from '^[a-z]+-([0-9]{4})-')) FROM runs WHERE label ~ '^(daily|dstorm|dspin|dlou|dhorde)-[0-9]{4}-'))\n),\nr1 AS (SELECT *, CASE WHEN props ~ 'uncappedFps=true' OR fps_mean < 0.9 * cap_fps THEN 'uncapped'  -- below its cap = uncapped\n                      WHEN cap_fps IS NOT NULL THEN cap_fps || ' fps cap' ELSE 'capped' END AS cap_label FROM r0),\nc AS (\n  SELECT r1.*,\n    concat_ws('|', mode, preset, flags, cap_label, other_options, resolution, opts->>'renderer') AS exact,\n    concat_ws(' \u00b7 ',\n      -- the daily re-measures pass the scene flags instead of the preset: name those scenes by their start square\n      CASE WHEN flags ~ 'start=12450,1280' THEN 'Louisville horde' WHEN flags ~ 'showcase=horde' THEN 'Horde shooting, riverside'\n      ELSE CASE coalesce(nullif(preset, 'none'), mode)\n        WHEN 'louisville' THEN 'Louisville horde' WHEN 'storm' THEN 'Thunderstorm' WHEN 'storm-fog' THEN 'Storm + fog'\n        WHEN 'fog' THEN 'Heavy fog' WHEN 'night-torch' THEN 'Night, torch' WHEN 'night-dark' THEN 'Night'\n        WHEN 'helicopter' THEN 'Helicopter event' WHEN 'bench' THEN 'Rosewood'\n        -- kmh=193 is flat out: the car tops out near 122 km/h\n        WHEN 'drive' THEN 'Driving' || coalesce(' ' || least(substring(flags from 'kmh=(\\d+)')::int, 120) || ' km/h', '')\n        ELSE preset END END,\n      CASE WHEN flags ~ 'weather=storm' AND coalesce(preset, '') NOT LIKE 'storm%' THEN 'thunderstorm' END,\n      CASE WHEN flags ~ 'fog=heavy' AND coalesce(preset, '') NOT IN ('fog', 'storm-fog') THEN 'heavy fog' END,\n      CASE WHEN flags ~ 'turn=' AND flags !~ 'start=12450,1280' AND mode = 'bench' AND coalesce(preset, '') IN ('', 'none') THEN 'spinning walk' END,\n      CASE WHEN flags ~ '(house|car)_alarm=' THEN 'alarms' END,\n      CASE WHEN flags ~ 'gunshots=[1-9]' THEN 'gunfire' END,\n      CASE WHEN flags ~ 'helicopter=true' AND coalesce(preset, '') <> 'helicopter' THEN 'helicopter' END,\n      cap_label) AS scene\n  FROM r1\n),\nm AS (SELECT *, row_number() OVER (PARTITION BY scene, stock ORDER BY started DESC) AS n FROM c\n      WHERE exact IN (SELECT exact FROM c GROUP BY 1 HAVING bool_or(stock) AND bool_or(NOT stock))),\nside AS (SELECT scene, stock, count(*) AS runs, max(started) AS newest,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY fps_mean) AS fps,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY fps_1pct_low) AS low,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY p99_ms) AS p99,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY p99_9_ms) AS p999,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY gpu_pct) AS gpu,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY busiest_core_pct) AS core\n         FROM m WHERE n <= 10 GROUP BY 1, 2),\ns AS (SELECT o.scene, st.runs AS st_runs, o.runs AS o_runs, greatest(st.newest, o.newest) AS newest,\n        st.fps AS st_fps, o.fps AS o_fps, st.low AS st_low, o.low AS o_low, st.p99 AS st_p99, o.p99 AS o_p99,\n        st.p999 AS st_p999, o.p999 AS o_p999, st.gpu AS st_gpu, o.gpu AS o_gpu, st.core AS st_core, o.core AS o_core\n      FROM side o JOIN side st ON st.scene = o.scene AND st.stock AND NOT o.stock),\n-- the headline: the clear 120 km/h drive (the daily chart's main line) when it was run both ways, else the scene with most pairs\nh AS (SELECT * FROM s ORDER BY scene = 'Driving 120 km/h \u00b7 uncapped' DESC, least(st_runs, o_runs) DESC, newest DESC LIMIT 1)\nSELECT o_fps AS \"average fps \u2191\", o_low AS \"1 % low fps \u2191\", o_p99 AS \"p99 frame time \u2193\", o_p999 AS \"p99.9 frame time \u2193\" FROM h",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#56a64b",
+        "value": null
+       }
+      ]
+     },
+     "noValue": "\u2013",
+     "decimals": 1
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "p99 frame time \u2193"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "ms"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "p99.9 frame time \u2193"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "ms"
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "reduceOptions": {
+     "values": false,
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "/.*/"
+    },
+    "colorMode": "value",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 44
+    }
+   },
+   "id": 8,
+   "gridPos": {
+    "x": 14,
+    "y": 9,
+    "w": 10,
+    "h": 7
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Each day's build on the flip: fps per benchmark, boot and load",
+   "description": "Each day's build (its last release) on one machine (history on: desktop RTX 4090 5120x2160, flip, dell, mac) at default settings, uncapped, route-mean fps, median of the day's runs: the 120 km/h drive east on KY-60 from the Rosewood bench save (clear, and in heavy fog with a thunderstorm), the spinning walk south through Rosewood in fog and storm, the Louisville horde (~2,000 zombies) and the riverside horde shooting. A bench starts on the first day whose harness could run it. Dashed: the stock game, the same every day. Right axis: boot (launch to main menu) and load (Continue to world) in seconds. Hover a day for what it released.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "WITH d AS (SELECT substring(label from '(daily|dstorm|dspin|dlou|dhorde)-') AS b, substring(label from '(?:daily|dstorm|dspin|dlou|dhorde)-([0-9]{4}|stock)-') AS k,\n             to_char(started, 'YYYY') AS y, run, fps_mean FROM runs\n           -- laptop runs come back from the queue as <machine>-<label>\n           WHERE label ~ '^((flip|dell|mac)-)?(daily|dstorm|dspin|dlou|dhorde)-([0-9]{4}|stock)-[0-9]+$' AND machine = ${hmachine:sqlstring}\n             AND valid AND fps_mean IS NOT NULL AND run NOT IN ('')),\ne AS (SELECT run, min(t) AS t0, min(t) FILTER (WHERE text ~ 'continuing latest save') AS tc FROM events\n      WHERE run IN (SELECT run FROM d) GROUP BY run),\nlt AS (SELECT d.k, d.y, extract(epoch FROM e.tc - e.t0) AS boot,\n         extract(epoch FROM (SELECT min(x.t) FROM events x WHERE x.run = e.run AND x.t > e.tc AND x.text ~ 'world ready') - e.tc) AS load\n       FROM e JOIN d USING (run)),\no AS (SELECT to_date(y || k, 'YYYYMMDD') AS day, b, percentile_cont(0.5) WITHIN GROUP (ORDER BY fps_mean) AS fps FROM d WHERE k <> 'stock' GROUP BY 1, 2),\nst AS (SELECT b, percentile_cont(0.5) WITHIN GROUP (ORDER BY fps_mean) AS fps FROM d WHERE k = 'stock' GROUP BY 1),\nlo AS (SELECT to_date(y || k, 'YYYYMMDD') AS day, percentile_cont(0.5) WITHIN GROUP (ORDER BY boot) AS boot, percentile_cont(0.5) WITHIN GROUP (ORDER BY load) AS load FROM lt\n       WHERE k <> 'stock' GROUP BY 1),\nls AS (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY boot) AS boot, percentile_cont(0.5) WITHIN GROUP (ORDER BY load) AS load FROM lt WHERE k = 'stock')\nSELECT o.day::timestamptz + interval '12 hours' AS time,\n  max(o.fps) FILTER (WHERE o.b = 'daily') AS \"120 km/h drive\", (SELECT fps FROM st WHERE st.b = 'daily') AS \"stock \u00b7 120 km/h drive\",\n  max(o.fps) FILTER (WHERE o.b = 'dstorm') AS \"120 km/h drive, fog + storm\", (SELECT fps FROM st WHERE st.b = 'dstorm') AS \"stock \u00b7 120 km/h drive, fog + storm\",\n  max(o.fps) FILTER (WHERE o.b = 'dspin') AS \"spin south, fog + storm\", (SELECT fps FROM st WHERE st.b = 'dspin') AS \"stock \u00b7 spin south, fog + storm\",\n  max(o.fps) FILTER (WHERE o.b = 'dlou') AS \"Louisville horde\", (SELECT fps FROM st WHERE st.b = 'dlou') AS \"stock \u00b7 Louisville horde\",\n  max(o.fps) FILTER (WHERE o.b = 'dhorde') AS \"horde shooting, riverside\", (SELECT fps FROM st WHERE st.b = 'dhorde') AS \"stock \u00b7 horde shooting, riverside\",\n  max(lo.boot) AS \"boot (s)\", (SELECT boot FROM ls) AS \"stock \u00b7 boot (s)\",\n  max(lo.load) AS \"load (s)\", (SELECT load FROM ls) AS \"stock \u00b7 load (s)\",\n  to_char(o.day, 'YYYYMMDD')::int AS \"build\",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022\",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022 \",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022  \",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022   \",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022    \",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022     \",\n  CASE WHEN o.day IN ('2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022      \",\n  CASE WHEN o.day IN ('2026-09-22', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022       \",\n  CASE WHEN o.day IN ('2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022        \"\nFROM o LEFT JOIN lo USING (day) GROUP BY o.day ORDER BY o.day",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 3,
+      "pointSize": 9,
+      "showPoints": "always",
+      "fillOpacity": 0,
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": false
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "decimals": 0
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "120 km/h drive"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#56a64b"
+        }
+       },
+       {
+        "id": "min",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "stock \u00b7 120 km/h drive"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#56a64b"
+        }
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "fill": "dash",
+         "dash": [
+          8,
+          6
+         ]
+        }
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 2
+       },
+       {
+        "id": "custom.pointSize",
+        "value": 5
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "120 km/h drive, fog + storm"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#5794F2"
+        }
+       },
+       {
+        "id": "min",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "stock \u00b7 120 km/h drive, fog + storm"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#5794F2"
+        }
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "fill": "dash",
+         "dash": [
+          8,
+          6
+         ]
+        }
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 2
+       },
+       {
+        "id": "custom.pointSize",
+        "value": 5
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "spin south, fog + storm"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#B877D9"
+        }
+       },
+       {
+        "id": "min",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "stock \u00b7 spin south, fog + storm"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#B877D9"
+        }
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "fill": "dash",
+         "dash": [
+          8,
+          6
+         ]
+        }
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 2
+       },
+       {
+        "id": "custom.pointSize",
+        "value": 5
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Louisville horde"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FF9830"
+        }
+       },
+       {
+        "id": "min",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "stock \u00b7 Louisville horde"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FF9830"
+        }
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "fill": "dash",
+         "dash": [
+          8,
+          6
+         ]
+        }
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 2
+       },
+       {
+        "id": "custom.pointSize",
+        "value": 5
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "horde shooting, riverside"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#F2495C"
+        }
+       },
+       {
+        "id": "min",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "stock \u00b7 horde shooting, riverside"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#F2495C"
+        }
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "fill": "dash",
+         "dash": [
+          8,
+          6
+         ]
+        }
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 2
+       },
+       {
+        "id": "custom.pointSize",
+        "value": 5
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "boot (s)"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "s"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FADE2A"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "right"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "stock \u00b7 boot (s)"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "s"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FADE2A"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "right"
+       },
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "fill": "dash",
+         "dash": [
+          8,
+          6
+         ]
+        }
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 2
+       },
+       {
+        "id": "custom.pointSize",
+        "value": 5
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "load (s)"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "s"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#8AB8FF"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "right"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "stock \u00b7 load (s)"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "s"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#8AB8FF"
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "right"
+       },
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "fill": "dash",
+         "dash": [
+          8,
+          6
+         ]
+        }
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 2
+       },
+       {
+        "id": "custom.pointSize",
+        "value": 5
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "build"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260919": {
+            "text": "build 7d2de4c"
+           },
+           "20260920": {
+            "text": "build 5915b2c"
+           },
+           "20260921": {
+            "text": "build 8bbc11a"
+           },
+           "20260922": {
+            "text": "build da3cdea"
+           },
+           "20260923": {
+            "text": "build d492a26"
+           },
+           "20260924": {
+            "text": "build b3904da"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260919": {
+            "text": "Faster chunk streaming and baking while driving at max zoom"
+           },
+           "20260920": {
+            "text": "Options > Optimizations tab: every setting, one master switch"
+           },
+           "20260921": {
+            "text": "Fog pass: heavy fog in one draw call (220 -> 389 fps)"
+           },
+           "20260922": {
+            "text": "Smooth camera zoom: chunk textures kept, eased zoom"
+           },
+           "20260923": {
+            "text": "Faster Continue: the world builds from the player outwards"
+           },
+           "20260924": {
+            "text": "Input latency: the keyboard reaches the screen a frame sooner"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022 "
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260919": {
+            "text": "Trees and windows baked into the chunk textures"
+           },
+           "20260920": {
+            "text": "In-game performance overlay (F9), no MangoHud or RivaTuner"
+           },
+           "20260921": {
+            "text": "Low-end hardware profile"
+           },
+           "20260922": {
+            "text": "Upscaling: FSR 1.0, bicubic, DLSS"
+           },
+           "20260923": {
+            "text": "Zombie hordes use every core (animation on worker threads)"
+           },
+           "20260924": {
+            "text": "Variable refresh (VRR) on Linux; HDR on Linux and macOS"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022  "
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260919": {
+            "text": "Boot 7.4 -> 5.0 s, loading a save 6.5 -> 4.0 s"
+           },
+           "20260920": {
+            "text": "Game-thread and 400 fps passes: cutaways, lighting, occlusion"
+           },
+           "20260921": {
+            "text": "macOS support"
+           },
+           "20260922": {
+            "text": "Zombie game-thread pass (a horde's share 23 % -> 11 %)"
+           },
+           "20260923": {
+            "text": "Render distance Auto for 4K and ultrawide screens"
+           },
+           "20260924": {
+            "text": "Upscaler fixes, faster DLSS"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022   "
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260919": {
+            "text": "A real Uncapped frame rate, 300-500 fps caps, a separate menu cap"
+           },
+           "20260920": {
+            "text": "Thunderstorm pass: puddle cache, rain tiles, batched drawing (storm 83 -> 131 fps)"
+           },
+           "20260921": {
+            "text": "Smooth moving lights: torch, headlights, lightbars"
+           },
+           "20260922": {
+            "text": "In-game updater in the main menu"
+           },
+           "20260923": {
+            "text": "G1 garbage collector by default (+10 % on a 4-core laptop)"
+           },
+           "20260924": {
+            "text": "Option: zombie detail follows the frame cap"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022    "
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260919": {
+            "text": "Model shader cache (a laptop's load 16 s shorter)"
+           },
+           "20260920": {
+            "text": "Tuned G1 garbage collector settings"
+           },
+           "20260921": {
+            "text": "Game-thread profiler in the F9 overlay"
+           },
+           "20260922": {
+            "text": "Stock vs optimized preview clips in the Optimizations tab"
+           },
+           "20260923": {
+            "text": "Performance overlay nearly free (under 1 %)"
+           },
+           "20260924": {
+            "text": "Power efficiency on hybrid CPUs"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022     "
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260919": {
+            "text": "Fixed: black floor tiles, missing big trees"
+           },
+           "20260920": {
+            "text": "Fixed: objects flickering inside buildings, black chunk squares, missing sound (issue #3)"
+           },
+           "20260921": {
+            "text": "Fixed: Windows micro stutter every 0.5 s, multiplayer join"
+           },
+           "20260922": {
+            "text": "Render distance setting; overlay fits any screen"
+           },
+           "20260923": {
+            "text": "Overlay item in the main and pause menus; Sort by in the Optimizations tab"
+           },
+           "20260924": {
+            "text": "Render distance follows the view upstairs"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022      "
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260922": {
+            "text": "Fewer hitches on 4-core PCs"
+           },
+           "20260923": {
+            "text": "Fixed: parked cars barely spawning, a load hang, the Windows borderless window"
+           },
+           "20260924": {
+            "text": "Clear audio: no clipping under gunfire on stereo"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022       "
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260922": {
+            "text": "Fixed: off-screen zombies thumping doors in bursts"
+           },
+           "20260924": {
+            "text": "Controller: smooth Optimizations tab, L3 + R3 toggles the overlay"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022        "
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260924": {
+            "text": "Fixed: weather and fog flashing indoors, a ragdoll crash"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "none",
+     "maxWidth": 360
+    }
+   },
+   "timeFrom": "9d",
+   "hideTimeOverride": true,
+   "id": 9,
+   "gridPos": {
+    "x": 0,
+    "y": 16,
+    "w": 24,
+    "h": 12
+   }
+  },
+  {
+   "type": "table",
+   "title": "Every scene measured both ways (flip)",
+   "description": "Medians of the newest 10 valid runs per side. Utilization: GPU busy and the busiest CPU core (sysmon) over the route; a side below its cap with neither near 100 % still has hardware left over.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "WITH r0 AS (\n  SELECT r.*, NOT enabled AS stock,\n    coalesce(substring(props from 'frameCapFps=(\\d+)'), substring(opts->>'game_options' from 'frameRate=(\\d+)'))::int AS cap_fps,\n    trim(regexp_replace(coalesce(opts->>'game_options', ''), '(frameRate|uncappedFPS)=\\S*', '', 'g')) AS other_options\n  FROM runs r\n  WHERE machine = 'flip' AND valid AND fps_mean IS NOT NULL\n    AND coalesce(judge #>> '{state,run,facts,valid_measurement}', 'true') = 'true'\n    AND coalesce(judge #>> '{state,run,drive,verdict}', 'valid') = 'valid'\n    -- no profiler attached (run.sh's own launch options, such as the released -Dpzopt.jit=steady, are fine)\n    AND coalesce(opts->>'vmargs', '') !~ '(agentpath|agentlib|javaagent|StartFlightRecording|NativeMemoryTracking)'\n    AND coalesce(opts->>'jfr', '0') = '0'\n    AND NOT EXISTS (SELECT 1 FROM regexp_split_to_table(coalesce(props, ''), '\\s+') t\n                    WHERE t <> '' AND t !~ '^(instrument|overlay|uncappedFps|hdrAuto|frameCapFps|enabled)='\n                      AND t NOT IN ('upscaler=off', 'hotsaveStaged=false'))\n    -- the Optimizations tab file applies too and is not in props: an upscaler renders the world smaller, not a default\n    AND (NOT enabled OR coalesce(substring(scenario->>'settings' from 'upscaler=([a-z0-9]+)'), 'off') = 'off')\n    -- the daily re-measures of older builds (<bench>-<MMDD>-<n>, DAILY_BENCHES) are history: only the newest day's build is \"current\"\n    AND (label !~ '^(daily|dstorm|dspin|dlou|dhorde)-[0-9]{4}-' OR substring(label from '^[a-z]+-([0-9]{4})-')\n         = (SELECT max(substring(label from '^[a-z]+-([0-9]{4})-')) FROM runs WHERE label ~ '^(daily|dstorm|dspin|dlou|dhorde)-[0-9]{4}-'))\n),\nr1 AS (SELECT *, CASE WHEN props ~ 'uncappedFps=true' OR fps_mean < 0.9 * cap_fps THEN 'uncapped'  -- below its cap = uncapped\n                      WHEN cap_fps IS NOT NULL THEN cap_fps || ' fps cap' ELSE 'capped' END AS cap_label FROM r0),\nc AS (\n  SELECT r1.*,\n    concat_ws('|', mode, preset, flags, cap_label, other_options, resolution, opts->>'renderer') AS exact,\n    concat_ws(' \u00b7 ',\n      -- the daily re-measures pass the scene flags instead of the preset: name those scenes by their start square\n      CASE WHEN flags ~ 'start=12450,1280' THEN 'Louisville horde' WHEN flags ~ 'showcase=horde' THEN 'Horde shooting, riverside'\n      ELSE CASE coalesce(nullif(preset, 'none'), mode)\n        WHEN 'louisville' THEN 'Louisville horde' WHEN 'storm' THEN 'Thunderstorm' WHEN 'storm-fog' THEN 'Storm + fog'\n        WHEN 'fog' THEN 'Heavy fog' WHEN 'night-torch' THEN 'Night, torch' WHEN 'night-dark' THEN 'Night'\n        WHEN 'helicopter' THEN 'Helicopter event' WHEN 'bench' THEN 'Rosewood'\n        -- kmh=193 is flat out: the car tops out near 122 km/h\n        WHEN 'drive' THEN 'Driving' || coalesce(' ' || least(substring(flags from 'kmh=(\\d+)')::int, 120) || ' km/h', '')\n        ELSE preset END END,\n      CASE WHEN flags ~ 'weather=storm' AND coalesce(preset, '') NOT LIKE 'storm%' THEN 'thunderstorm' END,\n      CASE WHEN flags ~ 'fog=heavy' AND coalesce(preset, '') NOT IN ('fog', 'storm-fog') THEN 'heavy fog' END,\n      CASE WHEN flags ~ 'turn=' AND flags !~ 'start=12450,1280' AND mode = 'bench' AND coalesce(preset, '') IN ('', 'none') THEN 'spinning walk' END,\n      CASE WHEN flags ~ '(house|car)_alarm=' THEN 'alarms' END,\n      CASE WHEN flags ~ 'gunshots=[1-9]' THEN 'gunfire' END,\n      CASE WHEN flags ~ 'helicopter=true' AND coalesce(preset, '') <> 'helicopter' THEN 'helicopter' END,\n      cap_label) AS scene\n  FROM r1\n),\nm AS (SELECT *, row_number() OVER (PARTITION BY scene, stock ORDER BY started DESC) AS n FROM c\n      WHERE exact IN (SELECT exact FROM c GROUP BY 1 HAVING bool_or(stock) AND bool_or(NOT stock))),\nside AS (SELECT scene, stock, count(*) AS runs, max(started) AS newest,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY fps_mean) AS fps,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY fps_1pct_low) AS low,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY p99_ms) AS p99,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY p99_9_ms) AS p999,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY gpu_pct) AS gpu,\n           percentile_cont(0.5) WITHIN GROUP (ORDER BY busiest_core_pct) AS core\n         FROM m WHERE n <= 10 GROUP BY 1, 2),\ns AS (SELECT o.scene, st.runs AS st_runs, o.runs AS o_runs, greatest(st.newest, o.newest) AS newest,\n        st.fps AS st_fps, o.fps AS o_fps, st.low AS st_low, o.low AS o_low, st.p99 AS st_p99, o.p99 AS o_p99,\n        st.p999 AS st_p999, o.p999 AS o_p999, st.gpu AS st_gpu, o.gpu AS o_gpu, st.core AS st_core, o.core AS o_core\n      FROM side o JOIN side st ON st.scene = o.scene AND st.stock AND NOT o.stock),\n-- the headline: the clear 120 km/h drive (the daily chart's main line) when it was run both ways, else the scene with most pairs\nh AS (SELECT * FROM s ORDER BY scene = 'Driving 120 km/h \u00b7 uncapped' DESC, least(st_runs, o_runs) DESC, newest DESC LIMIT 1)\nSELECT scene, round((o_fps / st_fps)::numeric, 2) AS \"\u00d7\", st_fps AS \"fps stock\", o_fps AS \"fps ours\", st_low AS \"1% low stock\", o_low AS \"1% low ours\",\n  st_p99 AS \"p99 stock\", o_p99 AS \"p99 ours\", st_p999 AS \"p99.9 stock\", o_p999 AS \"p99.9 ours\",\n  st_gpu AS \"GPU % stock\", o_gpu AS \"GPU % ours\", st_core AS \"busiest core % stock\", o_core AS \"busiest core % ours\",\n  st_runs AS \"runs stock\", o_runs AS \"runs ours\", newest\nFROM s ORDER BY least(st_runs, o_runs) DESC, newest DESC",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "filterable": false,
+      "inspect": true,
+      "wrapHeaderText": true
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u00d7"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "suffix:\u00d7"
+       },
+       {
+        "id": "decimals",
+        "value": 2
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#56a64b"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "newest"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "dateTimeAsIso"
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "scene"
+      },
+      "properties": [
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "auto",
+         "wrapText": true
+        }
+       },
+       {
+        "id": "custom.width",
+        "value": 560
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "fps stock"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "fps ours"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "1% low stock"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "1% low ours"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "p99 stock"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "ms"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "p99 ours"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "ms"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "p99.9 stock"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "ms"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "p99.9 ours"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "ms"
+       },
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GPU % stock"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GPU % ours"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "busiest core % stock"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "busiest core % ours"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "fps ours"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#56a64b"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "1% low ours"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#56a64b"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "p99 ours"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#56a64b"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "p99.9 ours"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#56a64b"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "transformations": [],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false,
+     "reducer": [
+      "sum"
+     ],
+     "fields": ""
+    },
+    "sortBy": []
+   },
+   "id": 10,
+   "gridPos": {
+    "x": 0,
+    "y": 28,
+    "w": 24,
+    "h": 6
+   }
+  },
+  {
+   "type": "row",
+   "title": "All runs",
+   "collapsed": false,
+   "panels": [],
+   "id": 11,
+   "gridPos": {
+    "x": 0,
+    "y": 34,
+    "w": 24,
+    "h": 1
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Runs",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT count(*) AS runs, count(*) FILTER (WHERE valid) AS valid, count(*) FILTER (WHERE verdict = 'invalid' OR NOT valid) AS invalid FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring}",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     },
+     "noValue": "\u2013"
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "values": false,
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "/.*/"
+    },
+    "colorMode": "none",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 26
+    }
+   },
+   "id": 12,
+   "gridPos": {
+    "x": 0,
+    "y": 35,
+    "w": 6,
+    "h": 4
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Newest run",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT run, fps_mean AS fps, p99_ms AS \"p99 ms\", p99_9_ms AS \"p99.9 ms\", gpu_pct AS \"GPU %\", busiest_core_pct AS \"busiest core %\" FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} ORDER BY started DESC LIMIT 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     },
+     "noValue": "\u2013",
+     "decimals": 1
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "values": false,
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "/.*/"
+    },
+    "colorMode": "none",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 20
+    }
+   },
+   "id": 13,
+   "gridPos": {
+    "x": 6,
+    "y": 35,
+    "w": 18,
+    "h": 4
+   }
+  },
+  {
+   "type": "table",
+   "title": "Runs",
+   "description": "Frame times in ms over the route window (pzopt-frames.out); CPU / GPU from sysmon, game thread from pzopt-threads.out. Click a run for its dashboard, 'previous' to compare with the last run of the same label.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT started, run, fps_mean AS fps, fps_1pct_low AS \"1% low\", p50_ms AS p50, p99_ms AS p99, p99_9_ms AS \"p99.9\", max_ms AS max,\n  over_33ms AS \">33ms\", jitter_ms AS jitter, cpu_pct AS \"CPU %\", busiest_core_pct AS \"busiest core %\", gpu_pct AS \"GPU %\",\n  game_thread_pct AS \"game thread %\", total_w AS \"W\", j_per_frame AS \"J/frame\", CASE\n  WHEN gpu_pct >= 90 THEN 'GPU-bound'\n  WHEN game_thread_pct >= 90 OR game_load_pct >= 90 THEN 'game thread'\n  WHEN fps_mean >= 235 AND props NOT LIKE '%uncappedFps=true%' THEN 'at 240 cap'\n  WHEN fps_mean IS NULL THEN NULL\n  ELSE 'headroom left' END AS bound, verdict, round(verdict_confidence::numeric, 2) AS conf, valid,\n  variant, machine, mode, preset, chunk_p99_ms AS \"chunk p99\", gc_events AS gc, zoom, resolution, label,\n  lag(run) OVER (PARTITION BY label ORDER BY started) AS previous\nFROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} ORDER BY started DESC",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "filterable": false,
+      "inspect": true,
+      "wrapHeaderText": true
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "run"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Run dashboard",
+          "url": "/d/pzopt-run/run?var-run=${__value.raw}"
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 300
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "previous"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Compare with this run",
+          "url": "/d/pzopt-compare/compare?var-runs=${__data.fields.previous}&var-runs=${__data.fields.run}&var-base=${__data.fields.previous}"
+         }
+        ]
+       },
+       {
+        "id": "custom.width",
+        "value": 260
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "started"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "dateTimeAsIso"
+       },
+       {
+        "id": "custom.width",
+        "value": 160
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "fps"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 1
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "red",
+           "value": null
+          },
+          {
+           "color": "orange",
+           "value": 60
+          },
+          {
+           "color": "#EAB839",
+           "value": 144
+          },
+          {
+           "color": "green",
+           "value": 235
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background",
+         "mode": "basic"
+        }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "special",
+          "options": {
+           "match": "null",
+           "result": {
+            "text": "-",
+            "color": "transparent"
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "1% low"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "p50"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "ms"
+       },
+       {
+        "id": "decimals",
+        "value": 2
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "green",
+           "value": null
+          },
+          {
+           "color": "#EAB839",
+           "value": 4.167
+          },
+          {
+           "color": "orange",
+           "value": 10
+          },
+          {
+           "color": "red",
+           "value": 16.7
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background",
+         "mode": "basic"
+        }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "special",
+          "options": {
+           "match": "null",
+           "result": {
+            "text": "-",
+            "color": "transparent"
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "p99"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "ms"
+       },
+       {
+        "id": "decimals",
+        "value": 2
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "green",
+           "value": null
+          },
+          {
+           "color": "#EAB839",
+           "value": 4.167
+          },
+          {
+           "color": "orange",
+           "value": 10
+          },
+          {
+           "color": "red",
+           "value": 16.7
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background",
+         "mode": "basic"
+        }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "special",
+          "options": {
+           "match": "null",
+           "result": {
+            "text": "-",
+            "color": "transparent"
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "p99.9"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "ms"
+       },
+       {
+        "id": "decimals",
+        "value": 2
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "green",
+           "value": null
+          },
+          {
+           "color": "#EAB839",
+           "value": 4.167
+          },
+          {
+           "color": "orange",
+           "value": 10
+          },
+          {
+           "color": "red",
+           "value": 16.7
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background",
+         "mode": "basic"
+        }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "special",
+          "options": {
+           "match": "null",
+           "result": {
+            "text": "-",
+            "color": "transparent"
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "max"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "ms"
+       },
+       {
+        "id": "decimals",
+        "value": 2
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "green",
+           "value": null
+          },
+          {
+           "color": "#EAB839",
+           "value": 4.167
+          },
+          {
+           "color": "orange",
+           "value": 10
+          },
+          {
+           "color": "red",
+           "value": 16.7
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background",
+         "mode": "basic"
+        }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "special",
+          "options": {
+           "match": "null",
+           "result": {
+            "text": "-",
+            "color": "transparent"
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "jitter"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "ms"
+       },
+       {
+        "id": "decimals",
+        "value": 2
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "CPU %"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "red",
+           "value": null
+          },
+          {
+           "color": "orange",
+           "value": 50
+          },
+          {
+           "color": "#EAB839",
+           "value": 75
+          },
+          {
+           "color": "green",
+           "value": 90
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background",
+         "mode": "basic"
+        }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "special",
+          "options": {
+           "match": "null",
+           "result": {
+            "text": "-",
+            "color": "transparent"
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "busiest core %"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "red",
+           "value": null
+          },
+          {
+           "color": "orange",
+           "value": 50
+          },
+          {
+           "color": "#EAB839",
+           "value": 75
+          },
+          {
+           "color": "green",
+           "value": 90
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background",
+         "mode": "basic"
+        }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "special",
+          "options": {
+           "match": "null",
+           "result": {
+            "text": "-",
+            "color": "transparent"
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GPU %"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "red",
+           "value": null
+          },
+          {
+           "color": "orange",
+           "value": 50
+          },
+          {
+           "color": "#EAB839",
+           "value": 75
+          },
+          {
+           "color": "green",
+           "value": 90
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background",
+         "mode": "basic"
+        }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "special",
+          "options": {
+           "match": "null",
+           "result": {
+            "text": "-",
+            "color": "transparent"
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "game thread %"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "red",
+           "value": null
+          },
+          {
+           "color": "orange",
+           "value": 50
+          },
+          {
+           "color": "#EAB839",
+           "value": 75
+          },
+          {
+           "color": "green",
+           "value": 90
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background",
+         "mode": "basic"
+        }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "special",
+          "options": {
+           "match": "null",
+           "result": {
+            "text": "-",
+            "color": "transparent"
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "chunk p99"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "ms"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "W"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "watt"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "J/frame"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "joule"
+       },
+       {
+        "id": "decimals",
+        "value": 3
+       }
+      ]
+     }
+    ]
+   },
+   "transformations": [],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false,
+     "reducer": [
+      "sum"
+     ],
+     "fields": ""
+    },
+    "sortBy": []
+   },
+   "id": 14,
+   "gridPos": {
+    "x": 0,
+    "y": 39,
+    "w": 24,
+    "h": 14
+   }
+  },
+  {
+   "type": "row",
+   "title": "Trends (one point per run, series = label)",
+   "collapsed": false,
+   "panels": [],
+   "id": 15,
+   "gridPos": {
+    "x": 0,
+    "y": 53,
+    "w": 24,
+    "h": 1
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "fps (route mean)",
+   "description": "One point per run over the dashboard's time range, one series per run label (the legend lists them): the route-window value from analyze.py.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT started AS time, label AS metric, fps_mean AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND fps_mean IS NOT NULL ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 7,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000,
+      "thresholdsStyle": {
+       "mode": "dashed"
+      }
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 240
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 16,
+   "gridPos": {
+    "x": 0,
+    "y": 54,
+    "w": 12,
+    "h": 9
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "p99 frame time",
+   "description": "One point per run over the dashboard's time range, one series per run label (the legend lists them): the route-window value from analyze.py.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT started AS time, label AS metric, p99_ms AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND p99_ms IS NOT NULL ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 7,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000,
+      "scaleDistribution": {
+       "type": "log",
+       "log": 2
+      },
+      "thresholdsStyle": {
+       "mode": "dashed"
+      }
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 10
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 17,
+   "gridPos": {
+    "x": 12,
+    "y": 54,
+    "w": 12,
+    "h": 9
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "p99.9 frame time",
+   "description": "One point per run over the dashboard's time range, one series per run label (the legend lists them): the route-window value from analyze.py.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT started AS time, label AS metric, p99_9_ms AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND p99_9_ms IS NOT NULL ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 7,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000,
+      "scaleDistribution": {
+       "type": "log",
+       "log": 2
+      },
+      "thresholdsStyle": {
+       "mode": "dashed"
+      }
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 16.7
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 18,
+   "gridPos": {
+    "x": 0,
+    "y": 63,
+    "w": 12,
+    "h": 9
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "GPU busy (route mean)",
+   "description": "One point per run over the dashboard's time range, one series per run label (the legend lists them): the route-window value from analyze.py.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT started AS time, label AS metric, gpu_pct AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND gpu_pct IS NOT NULL ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 7,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0,
+     "max": 100
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 19,
+   "gridPos": {
+    "x": 12,
+    "y": 63,
+    "w": 12,
+    "h": 9
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Busiest core (route mean)",
+   "description": "One point per run over the dashboard's time range, one series per run label (the legend lists them): the route-window value from analyze.py.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT started AS time, label AS metric, busiest_core_pct AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND busiest_core_pct IS NOT NULL ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 7,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0,
+     "max": 100
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 20,
+   "gridPos": {
+    "x": 0,
+    "y": 72,
+    "w": 12,
+    "h": 9
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Chunk latency p99 (enqueue \u2192 publish)",
+   "description": "One point per run over the dashboard's time range, one series per run label (the legend lists them): the route-window value from analyze.py.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT started AS time, label AS metric, chunk_p99_ms AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND chunk_p99_ms IS NOT NULL ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "ms",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 7,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 21,
+   "gridPos": {
+    "x": 12,
+    "y": 72,
+    "w": 12,
+    "h": 9
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Power (route mean, whole machine)",
+   "description": "runs.total_w: sysmon's total_w (battery on battery, else CPU package or APU socket + discrete GPU), else the game's pzopt-power.out, else the Mac's macpower system_w. Empty without a CPU reading (scripts/power-access.sh for RAPL).",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT started AS time, label AS metric, total_w AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND total_w IS NOT NULL ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "watt",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 7,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 22,
+   "gridPos": {
+    "x": 0,
+    "y": 81,
+    "w": 12,
+    "h": 9
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Energy per frame (route)",
+   "description": "route-mean total watts / route-mean fps",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT started AS time, label AS metric, j_per_frame AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND j_per_frame IS NOT NULL ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "joule",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 7,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 23,
+   "gridPos": {
+    "x": 12,
+    "y": 81,
+    "w": 12,
+    "h": 9
+   }
+  },
+  {
+   "type": "row",
+   "title": "Objective findings",
+   "collapsed": false,
+   "panels": [],
+   "id": 24,
+   "gridPos": {
+    "x": 0,
+    "y": 90,
+    "w": 24,
+    "h": 1
+   }
+  },
+  {
+   "type": "table",
+   "title": "Below the cap with hardware left over",
+   "description": "The objective: fps below the 240 cap with neither the GPU (\u2265 90 %) nor the game thread (\u2265 90 %) saturated is itself a finding.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT started, run, fps_mean AS fps, p99_ms AS p99, gpu_pct AS \"GPU %\", busiest_core_pct AS \"busiest core %\",\n  game_thread_pct AS \"game thread %\", headroom_finding AS \"Jev headroom\"\nFROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND CASE\n  WHEN gpu_pct >= 90 THEN 'GPU-bound'\n  WHEN game_thread_pct >= 90 OR game_load_pct >= 90 THEN 'game thread'\n  WHEN fps_mean >= 235 AND props NOT LIKE '%uncappedFps=true%' THEN 'at 240 cap'\n  WHEN fps_mean IS NULL THEN NULL\n  ELSE 'headroom left' END = 'headroom left' ORDER BY started DESC",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "filterable": false,
+      "inspect": true,
+      "wrapHeaderText": true
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "run"
+      },
+      "properties": [
+       {
+        "id": "links",
+        "value": [
+         {
+          "title": "Run dashboard",
+          "url": "/d/pzopt-run/run?var-run=${__value.raw}"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "started"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "dateTimeAsIso"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "GPU %"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "red",
+           "value": null
+          },
+          {
+           "color": "orange",
+           "value": 50
+          },
+          {
+           "color": "#EAB839",
+           "value": 75
+          },
+          {
+           "color": "green",
+           "value": 90
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background",
+         "mode": "basic"
+        }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "special",
+          "options": {
+           "match": "null",
+           "result": {
+            "text": "-",
+            "color": "transparent"
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "busiest core %"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "red",
+           "value": null
+          },
+          {
+           "color": "orange",
+           "value": 50
+          },
+          {
+           "color": "#EAB839",
+           "value": 75
+          },
+          {
+           "color": "green",
+           "value": 90
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background",
+         "mode": "basic"
+        }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "special",
+          "options": {
+           "match": "null",
+           "result": {
+            "text": "-",
+            "color": "transparent"
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "game thread %"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "red",
+           "value": null
+          },
+          {
+           "color": "orange",
+           "value": 50
+          },
+          {
+           "color": "#EAB839",
+           "value": 75
+          },
+          {
+           "color": "green",
+           "value": 90
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background",
+         "mode": "basic"
+        }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "special",
+          "options": {
+           "match": "null",
+           "result": {
+            "text": "-",
+            "color": "transparent"
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "fps"
+      },
+      "properties": [
+       {
+        "id": "decimals",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "p99"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "ms"
+       },
+       {
+        "id": "decimals",
+        "value": 2
+       }
+      ]
+     }
+    ]
+   },
+   "transformations": [],
+   "options": {
+    "showHeader": true,
+    "cellHeight": "sm",
+    "footer": {
+     "show": false,
+     "reducer": [
+      "sum"
+     ],
+     "fields": ""
+    },
+    "sortBy": []
+   },
+   "id": 25,
+   "gridPos": {
+    "x": 0,
+    "y": 91,
+    "w": 24,
+    "h": 8
+   }
+  },
+  {
+   "type": "row",
+   "title": "Hardware use (one point per run, series = label)",
+   "collapsed": false,
+   "panels": [],
+   "id": 26,
+   "gridPos": {
+    "x": 0,
+    "y": 99,
+    "w": 24,
+    "h": 1
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Game thread busy (route mean)",
+   "description": "pzopt-threads.out: the game thread's CPU share; \u2265 90 % means the game thread is the wall.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT started AS time, label AS metric, game_thread_pct AS value FROM runs WHERE $__timeFilter(started) AND machine = 'flip' AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND game_thread_pct IS NOT NULL ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 7,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0,
+     "max": 100
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 27,
+   "gridPos": {
+    "x": 0,
+    "y": 100,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Cores used by the game process",
+   "description": "The game process's CPU time over the route in cores (sysmon).",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT started AS time, label AS metric, process_cores AS value FROM runs WHERE $__timeFilter(started) AND machine = 'flip' AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND process_cores IS NOT NULL ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 7,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 28,
+   "gridPos": {
+    "x": 12,
+    "y": 100,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "GPU temperature",
+   "description": "sysmon's GPU temperature, route mean (empty where the machine has no reading).",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT started AS time, label AS metric, gpu_c AS value FROM runs WHERE $__timeFilter(started) AND machine = 'flip' AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND gpu_c IS NOT NULL ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "celsius",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 7,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 29,
+   "gridPos": {
+    "x": 0,
+    "y": 108,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "GPU power",
+   "description": "sysmon's GPU board power, route mean (discrete GPUs; the Mac's from IOReport).",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT started AS time, label AS metric, gpu_w AS value FROM runs WHERE $__timeFilter(started) AND machine = 'flip' AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND gpu_w IS NOT NULL ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "watt",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 7,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 30,
+   "gridPos": {
+    "x": 12,
+    "y": 108,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "VRAM in use",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT started AS time, label AS metric, vram_mib AS value FROM runs WHERE $__timeFilter(started) AND machine = 'flip' AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND vram_mib IS NOT NULL ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "mbytes",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 7,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 31,
+   "gridPos": {
+    "x": 0,
+    "y": 116,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Chunks streamed per second",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT started AS time, label AS metric, chunks_per_s AS value FROM runs WHERE $__timeFilter(started) AND machine = 'flip' AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND chunks_per_s IS NOT NULL ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 7,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 32,
+   "gridPos": {
+    "x": 12,
+    "y": 116,
+    "w": 12,
+    "h": 8
+   }
+  }
+ ]
+}

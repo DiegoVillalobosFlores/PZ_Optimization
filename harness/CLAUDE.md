@@ -507,7 +507,10 @@ with the variables filled in: the test after editing `dashboards.py` (0 errors e
   schedmon CPU / run-queue per OS thread, PSI, memory, pacing, the inputs (keys / buttons timeline, analog axes, every
   event, the harness configuration), the console as a searchable log, counters), *PZ compare* (runs on one route-time
   axis, % change vs a base run, percentile bars, phase matrix, a diff flame graph base vs another run), *PZ live* (the game
-  running now, 1 s refresh, with the last 10 s as a flame graph and the live inputs).
+  running now, 1 s refresh, with the last 10 s as a flame graph and the live inputs), *PZ machine: <m>* (one per machine,
+  `machines.py`, uids `pzopt-machine-desktop|flip|dell|mac`, written by `dashboards.py`: the hardware, the setups its runs
+  reported, the hero / daily chart / scene table / runs part of *PZ runs* pinned to that machine by a hidden constant
+  `machine` / `hmachine`, and per-run hardware use: game thread, process cores, GPU temperature / power, VRAM, chunks/s).
 
 ## Public dashboard (GCP, 2026-09-24)
 

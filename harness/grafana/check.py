@@ -60,7 +60,7 @@ def main():
     errors = 0
     for path in sorted((HERE / "dashboards").glob("*.json")):
         d = json.loads(path.read_text())
-        frm, to = RANGES.get(d["uid"], ROUTE)
+        frm, to = RANGES.get("pzopt-runs" if d["uid"].startswith("pzopt-machine-") else d["uid"], ROUTE)
         items = [(p["title"], t) for p in d["panels"] for t in p.get("targets", [])]
         items += [("annotation " + x["name"], x["target"]) for x in d["annotations"]["list"] if "target" in x]
         items += [("variable " + v["name"], {"rawSql": v["query"], "format": "table"}) for v in d["templating"]["list"] if v["type"] == "query"]

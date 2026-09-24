@@ -173,6 +173,14 @@ HDR (2026-09-24): the game's `hdrAuto` (default on) turns HDR on by itself on an
 `hdrAuto=false` into every run's pzopt.properties unless the run passes `--prop hdrAuto=...`; HDR runs pass
 `--prop hdr=true` (forced) or `--prop hdrAuto=true` (the player's default path).
 
+Ambient occlusion (2026-09-24, `pzopt.ChunkAo`): `--prop ambientOcclusion=true` (off by default). `--prop devAoView=1`
+shows the AO term alone (chunk textures baked grey), with the Rosewood-house shot rig `--flag start=8147,11507 --flag
+zoom=1 --flag route=S:30 --flag speed=1 --shot-at 3`; an on / off pair at the same shot point gives the AO as a brightness
+ratio (seams show as lines along the chunk diamonds). `--prop devAoTiming=true` logs `chunk ao gpu us/frame=... | us/job:
+...` every 200 jobs (timestamp queries; weight by frames over the route window, and multiply by fps for ms/s: a faster run
+dilutes us/frame). `--prop devAoDumpFrame=N` writes the Nth computed texture's raw AO (screen mode: the scene depth and
+colour) to `~/Zomboid/pzopt-*ao*` for offline work on the kernel.
+
 ## Run queue (harness/queue.sh, 2026-09-21)
 
 The game dirs, displays and Steam clients of the desktop and the three laptops are shared resources;

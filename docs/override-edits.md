@@ -3461,3 +3461,46 @@ balanced power profile as close to 12 W as the game can get. Findings in `docs/f
   on a context of its own on the render node (no root; released by the kernel when the context closes).
 - `GcChoice` also writes `jitSteady` (`-XX:PerMethodTrapLimit=0 -XX:PerBytecodeTrapLimit=0`, marker
   `-Dpzopt.jit=steady`) into the launcher JSON; scripts/pzopt.sh, install.sh and install.ps1 remove them with the G1 switch.
+
+## Ambient occlusion (`ambientOcclusion`, `aoMode`, `ao*`, 2026-09-24; pzopt.ChunkAo, pzopt.AmbientOcclusion)
+
+New visual feature, off by default: soft occlusion where surfaces meet (wall bases, room corners, furniture, stairs,
+fences, bushes). The FBO renderer's depth is linear in world space (`IsoDepthHelper`: `C - (x + y + 2z) *
+SQUARE_DEPTH / 2`) under an orthographic 2:1 projection, so a depth texel gives an exact view-space position (a
+square is `32 sqrt(2) tileScale / zoom` screen pixels across, a unit of depth is 424.27 squares along the view). The
+kernel is ground-truth-style horizon AO with 32-sector visibility bitmasks (Therrien et al. 2023: each sample covers
+the sectors between its front and an assumed back `aoThicknessPct` behind it, so thin posts occlude as little as they
+cover), in trig-free form (sector index from `sin(angle - n)` by dot products), with normals snapped to the three
+planes tiles are made of (ground, east-facing wall, south-facing wall), a 0.04-square height bias and pit filling for
+the one-row depth steps tile edges have, a 4x4 Bayer rotation of two slices and a 4x4 depth-aware box over it.
+
+### zombie.iso.fboRenderChunk.FBORenderCell
+
+- At the end of a chunk-level bake (top level, after the tree pass, before `endRenderChunkLevel(..., true)`):
+  `pzopt.ChunkAo.bakeEnd(renderChunk, c, playerIndex, zoom, geometryDirty)`, while the texture's framebuffer is still
+  bound. A new texture, or a bake whose dirty flags change the depth (all but lighting, blood and redraw), computes its
+  AO there (up to `aoBakeBudget` a frame) and multiplies it in; a lighting-only re-bake multiplies the kept R8 AO in.
+  The kernel reads the texture's depth and its eight neighbours' of the same level pair and zoom (each at its composite
+  offset and chunk depth offset). The stock mipmap build at the bake's end then carries the AO into every level.
+- Before the composite, after the tree appends: `pzopt.ChunkAo.flush(playerIndex)` runs at most `aoComputeBudget` (4)
+  deferred computes (over the bake budget, or neighbour refreshes) and applies `new / old` onto the texture (blend
+  `DST_COLOR, SRC_COLOR` = 2 src dst, so it darkens and lightens) with the mip levels the current zoom / render scale
+  samples (`glGenerateMipmap` costs ~65 us per 1024 texture on NVIDIA); zooming out past those re-bakes the textures
+  (lighting only). A texture's first compute queues a refresh of the neighbours computed without it, when something
+  but floor stands on its border squares facing them. The first multiply after a compute runs under an occlusion
+  query; a texture with no occlusion skips its later multiplies.
+  Under a frame cap the computes per frame follow the last frame's slack (`FrameCap.lastStepNs` against the cap, ~60 us
+  a compute), with none in bakes after a frame that missed the cap (`aoSkipSlowFrames`): fixed budgets added ~1.4 ms at
+  p99 on the capped 120 km/h drive, the gated version is at parity. A chunk whose texture's levels hold nothing but floor
+  (no attached sprites either: grass and bushes hang off the floor object) and whose neighbours' facing borders are bare
+  is skipped.
+- `aoMode=screen` (the first version, kept for comparison): right after `FBORenderChunkManager.endFrame()`,
+  `pzopt.AmbientOcclusion.queue(playerIndex)` runs the same kernel on the scene depth every frame (when the static scene
+  changed) and multiplies the scene. It cost 90-140 us a frame on the desktop, which is why the chunk mode exists.
+- `changed()` markers on the bake and the tree appends feed the screen mode's reuse; the periodic stats line prints
+  both modes' counters.
+
+### pzopt.FogPass.sceneDepthAsTexture
+
+The offscreen depth becomes a texture also when `ambientOcclusion` with `aoMode=screen` is on (the screen mode reads
+it in place like the fog pass).

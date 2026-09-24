@@ -411,6 +411,14 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   `audioLimiter` (FMOD's limiter at the master's head, stereo fold ahead of it on stereo devices, -2 dBFS) -> 0. Sound
   code on the game thread 5.3 -> 2.7 % in the horde (`emitterIdleSkip`, `soundTickHz` 60); FMOD's threads 0.1 core. The
   harness fades the mix out before quitting in sound runs (`exit_fade_ms`; the quit stops every sound at once).
+- Ambient occlusion (2026-09-24, `docs/findings-ambient-occlusion-2026-09-24.md`, off by default, tab section "Ambient
+  occlusion"): `pzopt.ChunkAo` bakes ground-truth-style horizon AO with 32-sector visibility bitmasks into the chunk
+  textures at bake time (the FBO depth is an exact ortho view space: 424.27 squares per unit of depth), context from the
+  eight neighbour textures, lighting-only re-bakes multiply the kept R8 AO, computes budgeted in-bake / deferred (ratio
+  blend 2·src·dst). Cost on the desktop: 0 standing, ~4 us/frame walking, ~1.3 % of GPU time in the worst streaming
+  (storm route, 120 km/h drive at max zoom). The per-frame screen mode (`aoMode=screen`) cost 90-140 us/frame: fixed
+  per-pass cost dominates on NVIDIA (~8 us for an empty pass, `glGenerateMipmap` of a 1024 chunk texture ~65 us).
+  macOS (GL 2.1 context) rejects GLSL 1.40: AO switches itself off there. Rigs: `devAoView=1`, `devAoTiming`, `devAoDumpFrame`.
 - Open plans: `docs/plan-game-load.md`, `docs/plan-vulkan-renderer.md`, `docs/plan-resource-use.md`,
   `docs/plan-zombie-multithread.md` (2026-09-22: the rest of the zombie simulation on all cores, phased).
   The game-thread optimization plans were dropped on 2026-09-21 at the maintainer's request.

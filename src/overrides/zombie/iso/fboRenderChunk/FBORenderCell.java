@@ -1540,9 +1540,11 @@ public final class FBORenderCell {
       FBORenderCorpses.getInstance().update();
       FBORenderItems.getInstance().update();
       this.pzoptFlushTreeAppends(playerIndex, Core.getInstance().getZoom(playerIndex)); // pzopt: treeAppend, before the textures are composited
+      pzopt.ChunkAo.flush(playerIndex); // pzopt: ambient occlusion, this frame's budget of AO computes, before the textures are composited
       pzopt.GpuSections.begin("composite"); /* pzopt: GPU section: chunk textures into the combined FBO and onto the screen */
       FBORenderChunkManager.instance.endFrame();
       pzopt.GpuSections.end("composite");
+      pzopt.AmbientOcclusion.queue(playerIndex); // pzopt: ambient occlusion on the static world, before anything else is drawn over it
       FBORenderShadows.getInstance().clear();
       boolean pzoptFloorOnly = pzopt.ResumeShot.noMoving; // pzopt: resumeShot's exit capture (below "full"): no players, shadows, corpses
       if (!pzoptFloorOnly) {
@@ -2039,6 +2041,7 @@ public final class FBORenderCell {
          boolean canRender = true;
          boolean isDirty = FBORenderChunkManager.instance.beginRenderChunkLevel(c, level, zoom, canRender, true);
          if (isDirty && canRender) pzopt.GpuSections.begin("bake"); // pzopt: GPU section
+         if (isDirty && canRender) pzopt.AmbientOcclusion.changed(); // pzopt: ambient occlusion, a chunk texture changes: recompute
          if (DebugOptions.instance.delayObjectRender.getValue()) {
             canRender = frameNo == c.loadedFrame || frameNo >= c.renderFrame;
          }
@@ -2598,6 +2601,9 @@ public final class FBORenderCell {
                      && FBORenderChunkManager.instance.renderChunk.isTopLevel(level)) {
                   this.pzoptBakeTrees(c, playerIndex, zoom);
                }
+               if (pzopt.ChunkAo.enabled() && FBORenderChunkManager.instance.renderChunk != null && FBORenderChunkManager.instance.renderChunk.isTopLevel(level)) { // pzopt: ambient occlusion baked into the texture
+                  pzopt.ChunkAo.bakeEnd(FBORenderChunkManager.instance.renderChunk, c, playerIndex, zoom, pzopt.ChunkAo.geometryDirty(renderLevels, level, zoom)); // pzopt
+               } // pzopt
                FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, true);
                pzopt.GpuSections.end("bake"); // pzopt: GPU section
                return;
@@ -3428,6 +3434,7 @@ public final class FBORenderCell {
       if (this.pzoptTreeAppends.isEmpty()) {
          return;
       }
+      pzopt.AmbientOcclusion.changed(); // pzopt: ambient occlusion, trees drawn into finished textures
       for (int i = 0; i < this.pzoptTreeAppends.size(); i++) {
          Object[] entry = this.pzoptTreeAppends.get(i);
          FBORenderChunk rcE = (FBORenderChunk)entry[0];
@@ -4879,6 +4886,8 @@ public final class FBORenderCell {
       if (pzopt.RainSplashes.enabled()) { sb.append(" | ").append(pzopt.RainSplashes.stats()); } // pzopt
       if (pzopt.RainTiles.enabled()) { sb.append(" | ").append(pzopt.RainTiles.stats()); } // pzopt
       if (pzopt.FogPass.enabled()) { sb.append(" | ").append(pzopt.FogPass.stats()); } // pzopt: one-pass fog
+      if (pzopt.AmbientOcclusion.enabled()) { sb.append(" | ").append(pzopt.AmbientOcclusion.stats()); } // pzopt: ambient occlusion
+      if (pzopt.ChunkAo.enabled()) { sb.append(" | ").append(pzopt.ChunkAo.stats()); } // pzopt: ambient occlusion baked into the chunk textures
       if (pzopt.Config.TREES_IN_CHUNK_TEXTURE && pzopt.Config.TREE_BAKE_PASS) { sb.append(" | ").append(pzopt.TreeBake.stats()); } // pzopt: issue #5
       if (pzopt.Config.TREE_BAKE_MAX_CHUNKS_PER_SEC > 0) { sb.append(" | trees per-frame frames: ").append(pzoptTreesPerFrameFrames).append(" chunks/s now ").append(String.format(java.util.Locale.ROOT, "%.0f", pzopt.ChunkRate.perSecond())); } // pzopt: treeBakeMaxChunksPerSec
       sb.append(" | ").append(pzopt.AnimBatch.describe()); // pzopt: the zombies' bone-math batch

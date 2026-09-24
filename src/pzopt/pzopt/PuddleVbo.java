@@ -114,13 +114,16 @@ public final class PuddleVbo {
          it = new Item();
       }
       it.batch = b;
-      it.count = b.count;
+      // a chunk level holds at most MAX_SQUARES squares, which is all the index buffer and the upload arrays cover;
+      // a longer batch (duplicate entries in the level's square list, 2026-09-24) draws its first MAX_SQUARES, as
+      // Gl.draw always did, instead of throwing out of the world pass
+      it.count = Math.min(b.count, MAX_SQUARES);
       if (snapshot) {
          float[] u = uploadPool.poll();
          if (u == null || u.length < MAX_SQUARES * FLOATS) {
             u = new float[MAX_SQUARES * FLOATS];
          }
-         System.arraycopy(b.data, 0, u, 0, b.count * FLOATS);
+         System.arraycopy(b.data, 0, u, 0, it.count * FLOATS);
          it.upload = u;
       } else {
          it.upload = null;

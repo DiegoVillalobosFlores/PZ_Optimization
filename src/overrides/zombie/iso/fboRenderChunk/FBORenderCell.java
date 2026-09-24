@@ -2062,6 +2062,9 @@ public final class FBORenderCell {
                if (level == renderLevels.getMinLevel(level)) {
                   renderLevels.clearCachedSquares(level);
                   pzopt.PuddleCache.invalidate(c, level); // pzopt: the puddle square list is rebuilt below
+               } else if (pzoptKeepPerFrameLists()) { // pzopt: an upper level rebuilt without its group's lower level
+                  pzoptDropLevelSquares(renderLevels, level); // pzopt: drops its own entries first (see pzoptDropLevelSquares)
+                  pzopt.PuddleCache.invalidate(c, level); // pzopt
                }
 
                if (level == 0) {
@@ -4526,6 +4529,46 @@ public final class FBORenderCell {
       return pzopt.Overrides.enabled() && (pzopt.Config.LIGHTING_REBAKE_MS > 0 || pzopt.Config.REBAKE_BUDGET > 0 || pzopt.Config.BAKE_BUDGET > 0);
    }
 
+   /**
+    * pzopt: the per-frame square lists belong to a group of two levels (FBORenderLevels.NLevels) and stock clears
+    * them only when the group's lower level is rebuilt. With the lists kept across invalidations, an upper level
+    * rebuilt without its lower level (a held or budgeted lower level, a zoom plan step) appended its squares a
+    * second time: 84 puddle squares on one 64-square level overflowed PuddleVbo and the thrown exception skipped
+    * the rest of the world pass (water, splashes, translucent objects, fog) on those frames (run uiz-storm240,
+    * 2026-09-24, the Workshop "weather layer / fog flashing" reports). Drop the level's own entries first, so its
+    * rebuild replaces them and the other level's stay.
+    */
+   private static void pzoptDropLevelSquares(FBORenderLevels renderLevels, int level) {
+      pzoptDupSquaresDropped += pzoptDropLevel(renderLevels.getCachedSquares_AnimatedAttachments(level), level)
+         + pzoptDropLevel(renderLevels.getCachedSquares_Corpses(level), level)
+         + pzoptDropLevel(renderLevels.getCachedSquares_CutawayWindowFrames(level), level)
+         + pzoptDropLevel(renderLevels.getCachedSquares_Flies(level), level)
+         + pzoptDropLevel(renderLevels.getCachedSquares_Items(level), level)
+         + pzoptDropLevel(renderLevels.getCachedSquares_Puddles(level), level)
+         + pzoptDropLevel(renderLevels.getCachedSquares_TranslucentFloor(level), level)
+         + pzoptDropLevel(renderLevels.getCachedSquares_TranslucentNonFloor(level), level)
+         + pzoptDropLevel(renderLevels.getCachedSquares_Water(level), level)
+         + pzoptDropLevel(renderLevels.getCachedSquares_WaterShore(level), level)
+         + pzoptDropLevel(renderLevels.getCachedSquares_WaterAttach(level), level);
+   }
+
+   private static int pzoptDropLevel(List<IsoGridSquare> squares, int level) {
+      int n = squares.size();
+      int kept = 0;
+      for (int i = 0; i < n; i++) {
+         IsoGridSquare square = squares.get(i);
+         if (square.getZ() != level) {
+            squares.set(kept++, square);
+         }
+      }
+      for (int i = n - 1; i >= kept; i--) {
+         squares.remove(i);
+      }
+      return n - kept;
+   }
+
+   private static long pzoptDupSquaresDropped; // pzopt: entries pzoptDropLevelSquares removed (bake counters)
+
    // pzopt: bake budget — chunk-level textures (re)baked per frame; the rest keep their previous texture for a frame
    private int pzoptBakesThisFrame;
    private int pzoptRebakesThisFrame; // pzopt: re-bake budget (Config.REBAKE_BUDGET)
@@ -4748,7 +4791,7 @@ public final class FBORenderCell {
       return "bakes=" + pzoptBakesCumulative + " deferred=" + pzoptDeferredTotal + " lightingRebakesHeld=" + pzoptLightingRebakesHeld + " strongNow=" + pzoptStrongRebakes
             + " strongPastBudget=" + pzoptStrongHeld + " strongMarks=" + pzopt.LightDirt.strongMarks + " globalLightEvents=" + pzopt.LightDirt.globalEvents
             + " flushed=" + pzoptLightingFlushed + " budgetedRebakes=" + pzoptRebakesTotal + " rebakesHeld=" + pzoptRebakesHeld + " creationsDeferred=" + pzoptCreatesStarved
-            + " strongBudgetCuts=" + pzoptStrongBudgetCuts;
+            + " strongBudgetCuts=" + pzoptStrongBudgetCuts + " dupSquaresDropped=" + pzoptDupSquaresDropped;
    }
    public static long pzoptBakesCumulative; // pzopt: never reset; the harness zoom trace reads the per-frame delta
    public static long pzoptDeferredCumulative; // pzopt: never reset; deferred (budgeted / held) levels

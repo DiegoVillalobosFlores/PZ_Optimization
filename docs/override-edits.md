@@ -3164,3 +3164,24 @@ writes the `pzopt-pacing.out` row. No change to what is drawn.
   presented with `afterMinimumDuration` = the cap interval; `presentedTime` goes back into `pzopt-pacing.out`. Any
   failure removes the layer and falls back to glfwSwapBuffers. Rig `devMacPresentCheck`: compares IOSurface rows
   with the GL back buffer and logs `mac present check: frame N upright|UPSIDE DOWN|MISMATCH`.
+
+## zombie.iso.fboRenderChunk.FBORenderCell (edit of 2026-09-24, an upper level's rebuild replaces its own list entries)
+
+Found while chasing the Workshop / issue #13 reports of the weather layer and the fog flashing when entering a
+building and zooming (run `uiz-storm240`: storm, a 3 tiles/s walk through the Rosewood houses south of the bench
+save, a zoom step every second): seven consecutive frames threw `ArrayIndexOutOfBoundsException` from
+`pzopt.PuddleVbo.add` (a batch of 84 puddle squares on one chunk level, 64 at most) out of `renderInternal`, right
+after a zoom step. The exception skips the rest of `performRenderTiles` for the frame: water, translucent floors,
+rain splashes, translucent objects and the fog. It is in one run of the 1,148 on the desktop.
+
+Cause: stock keeps the per-frame square lists per group of two levels (`FBORenderLevels.NLevels`) and clears them
+only when the group's lower level is rebuilt (`clearCachedSquares(level)` under `level == getMinLevel(level)`).
+With the lists kept across invalidations (`pzoptKeepPerFrameLists`, the 2026-09-20 entry above), an upper level
+rebuilt without its lower level appended its squares to the entries it already had. Stock never meets this: its
+invalidate() empties the lists before every rebuild.
+
+Edit: after the stock lower-level clear, an upper level (`else if (pzoptKeepPerFrameLists())`) first drops its own
+entries (`square.getZ() == level`) from the group's eleven lists (`pzoptDropLevelSquares`) and invalidates its
+puddle batch, so its rebuild replaces them and the lower level's stay. The count goes into
+`pzoptBakeCounters()` as `dupSquaresDropped`. `pzopt.PuddleVbo.add` also clamps a batch to 64 squares, as its draw
+always did, so a long list can no longer throw out of the world pass.

@@ -8,7 +8,9 @@ https://github.com/xD3I/PZ_Optimization
 [url=https://github.com/xD3I/PZ_Optimization#readme][img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/00-showcase-thumbnail.gif[/img][/url]
 [i]Uncapped at 5120x2160, the in-game overlay (F9 / L3 + R3) live at the bottom; video on the repository page.[/i]
 
-[h1]New! Zombie detail follows the frame cap[/h1]
+[h1]New! HDR output (Linux)[/h1]
+[img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/24-hdr.jpg[/img]
+
 [img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/23-zombie-detail.jpg[/img]
 
 [img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/22-vrr.jpg[/img]
@@ -23,7 +25,7 @@ https://github.com/xD3I/PZ_Optimization
 
 [img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/17-upscaler.jpg[/img]
 The world renders smaller (Quality 67 %, Performance 50 % per axis) and is scaled up under the full-resolution UI. FSR 1.0: any GPU, ~0.1 ms; DLSS: RTX (see the README), also accumulates detail across frames.
-Turn it on: Options > Optimizations > Upscaling > Upscaler = fsr1, pick the quality, restart (console.txt: "[pzopt] upscaler: fsr1 at 50 %").
+Turn it on: Options > Optimizations > Upscaling > Upscaler = fsr1, pick the quality, restart.
 
 [h1]What it does[/h1]
 Project Zomboid loads and bakes the map in chunks; on stock, the loading, baking and lighting work of a busy screen lands in the same frame and shows as stutter while driving or turning. These overrides move that work off the game thread, spread it over frames, and cache what stock recomputes every frame (puddles, rain, cutaways, lights, sound zones). At 5120x2160 on an RTX 4090: driving p99 frame time 19 -> 8 ms, uncapped ~270 -> ~500 fps, thunderstorms 83 -> 188 fps.

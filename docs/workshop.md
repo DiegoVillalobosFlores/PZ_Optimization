@@ -122,7 +122,10 @@ card lost its `[h1]`, the upscaler caption was shortened (page 7,891 substituted
 VRR work; 2026-09-24): the low-latency card lost its `[h1]`, the upscaler caption was shortened again. `23` the "New! Zombie detail follows the frame cap" card
 (`docs/media/zombie-lod-card.png` from `harness/zombie-lod-card.py`: the Louisville horde at a 144 and a 240 fps cap, `zombieLodDynamic`
 off vs on, runs `lod-144-off` / `lod2-144-off` / `lod2-144-on` / `lod-240-off` / `lod2-240-on`; 2026-09-24, release eb305b6): the VRR card
-lost its `[h1]`, the upscaler card's "Helps when ..." line went (page 7,890 substituted characters).
+lost its `[h1]`, the upscaler card's "Helps when ..." line went (page 7,890 substituted characters). `24` the "New! HDR output (Linux)" card
+(`docs/media/hdr-card.png` from `harness/hdr-card.py`: stock SDR vs HDR at the defaults, panel nits of the panes of
+`docs/media/hdr-stock-vs-hdr-vs-enhanced.mp4` (runs `hdrvid-*`) and the frame cost of `hdrperf-off` / `hdrperf-enc-false`; 2026-09-24,
+release ecc868d): the zombie-detail card lost its `[h1]`, the upscaler caption lost its console line (page 7,847 substituted characters).
 `description.txt` embeds them with `[img]` from the raw GitHub URL of `master`,
 so they render only after the folder is pushed. The same files go in the item's own carousel:
 on the Workshop page, "Add/edit images & videos" takes the JPGs (upload `00` first, it becomes

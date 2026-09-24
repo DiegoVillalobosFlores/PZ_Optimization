@@ -49,8 +49,32 @@ public final class Hdr {
 
    // Linux and macOS (HdrMac ran on a MacBook Pro XDR panel, 2026-09-24); Windows (HdrWin) is native interop written without
    // the hardware, hdrUntestedPlatforms=true lets a test run use it
-   public static final boolean REQUESTED = Overrides.enabled() && Config.HDR
-         && (Config.HDR_UNTESTED_PLATFORMS || System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("linux") || HdrMac.MAC);
+   private static final boolean PLATFORM = Config.HDR_UNTESTED_PLATFORMS
+         || System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("linux") || HdrMac.MAC;
+   /** HDR is on because hdrAuto found an HDR screen, not because hdr=true asked for it. */
+   public static final boolean AUTO = Overrides.enabled() && PLATFORM && !Config.HDR && Config.HDR_AUTO && autoDetect();
+   public static final boolean REQUESTED = Overrides.enabled() && PLATFORM && (Config.HDR || AUTO);
+
+   /**
+    * hdrAuto (default on): turn HDR on when the screen is HDR. Linux: a Wayland session with an output in HDR mode
+    * (HdrWayland.probeHdrOutput, before GLFW, so SDR desktops keep XWayland). macOS: decided in windowCreated (AppKit is
+    * asked on the main thread once GLFW is up); asking for the alpha bits costs nothing on an SDR display.
+    */
+   private static boolean autoDetect() {
+      if (HdrMac.MAC) {
+         return true;
+      }
+      if (System.getenv("WAYLAND_DISPLAY") == null) {
+         autoNote = "hdr: auto: off (not a Wayland session)";
+         return false;
+      }
+      boolean hdr = HdrWayland.probeHdrOutput();
+      autoNote = "hdr: auto: " + (hdr ? "HDR screen found, HDR on" : "no HDR screen, HDR off") + " (" + HdrWayland.probeResult + ")";
+      return hdr;
+   }
+
+   /** The auto decision, logged from windowCreated: Hdr is initialised in Display.init, before the game log exists. */
+   private static String autoNote;
 
    /** Output is really HDR (FP16 back buffer + an attached image description). Render thread writes it once. */
    public static volatile boolean active;
@@ -302,6 +326,9 @@ public final class Hdr {
    /** Display.create(), context current: check the back buffer really is float and tag the surface. */
    public static void windowCreated(long window) {
       addWaylandExitHook();
+      if (autoNote != null) {
+         Log.info(autoNote);
+      }
       if (!REQUESTED) {
          return;
       }
@@ -314,6 +341,15 @@ public final class Hdr {
             return;
          }
          if (HdrMac.MAC) {
+            if (AUTO) {
+               double potential = HdrMac.screenPotentialHeadroom();
+               if (potential < 4.0) { // XDR panels: 16; ordinary panels only have a little backlight headroom
+                  state = String.format("auto: the display has no HDR headroom (EDR %.2f), HDR off", potential);
+                  Log.info("hdr: " + state);
+                  return;
+               }
+               Log.info(String.format("hdr: auto: EDR display (potential headroom %.1f), HDR on", potential));
+            }
             int alphaBits = GL11.glGetInteger(GL11.GL_ALPHA_BITS);
             if (alphaBits < 8) {
                state = "no alpha channel in the back buffer (" + alphaBits + " bits): the world gain has nowhere to go";

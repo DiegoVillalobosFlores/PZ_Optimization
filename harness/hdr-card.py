@@ -41,7 +41,7 @@ def text(x, y, s, size=15, color=INK, weight="normal", ha="left", va="center", f
     ax.text(x, y, s, fontsize=size, color=color, fontweight=weight, ha=ha, va=va, family=family)
 
 X0 = PAD + 48
-text(X0, 86, "New! HDR output (Linux)", 30, OPT, "bold")
+text(X0, 86, "New! HDR output (Linux, macOS)", 30, OPT, "bold")
 text(W - X0, 86, DATE, 16, MUTED, ha="right", family=MONO)
 text(X0, 134, "On an HDR screen the menus and the HUD stay at your desktop's white, while lamps, torches, headlights, fires, sunlight"
      " on water and lightning", 14, INK2)
@@ -75,10 +75,10 @@ for name, detail, a, b, unit, top in ROWS:
     y += ROW_H
     ax.plot([X0, W - X0], [y, y], color=RULE, lw=0.8)
 
-text(X0, H - PAD - 86, "Needs an HDR screen with HDR on in a Wayland desktop with colour management (tested on KDE Plasma 6); the game then runs"
-     " as a native Wayland window.", 12.5, INK2)
-text(X0, H - PAD - 58, "Off by default. Strengths for light, sunlight, water sparkle, glow, world brightness and the peak are on the same tab."
-     " Windows and macOS HDR come later.", 12.5, INK2)
+text(X0, H - PAD - 86, "On by itself on an HDR screen: Linux with HDR on in a Wayland desktop with colour management (tested on KDE Plasma 6; the game"
+     " then runs as a native Wayland window), and Macs with an XDR display (lights and lightning).", 12.5, INK2)
+text(X0, H - PAD - 58, "SDR screens are unchanged. \"HDR output: automatic\" can be unticked; strengths for light, sunlight, water sparkle, glow and"
+     " the peak are on the same tab. Windows HDR comes later.", 12.5, INK2)
 text(X0, H - PAD - 28, "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, docs/findings-hdr-2026-09-24.md"
      " (video: docs/media/hdr-stock-vs-hdr-vs-enhanced-1080.mp4).", 11.5, MUTED)
 fig.savefig(OUT, dpi=100, facecolor=BG)

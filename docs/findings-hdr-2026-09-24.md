@@ -252,6 +252,17 @@ SDR decode), so the HDR container at expansion 0 reproduces the SDR window exact
   through MPSImageBilinearScale, headroom 16, upright in all dumps, torch indoors 3.7x SDR white, 59.5 fps at the
   60 cap, p99 41.1 ms, GPU 63 % (54 % windowed at 1920x1200 without the upscale). Not checked: lightning and headlights.
 
+- **13:40-13:50 `hdrAuto` (default on): HDR by itself on an HDR screen.** `hdr=true` stays the manual "always on".
+  Linux: `HdrWayland.probeHdrOutput` opens its own libwayland connection in `Display.init` (before GLFW picks the
+  platform, so SDR desktops keep XWayland), binds wp_color_manager_v1 and asks every wl_output for its image
+  description (~100 ms incl. the FFM warm-up). KWin describes an HDR output as gamma 2.2 too (tf 2: the desktop reads
+  reference 505 / peak 1307 nits) and gives an SDR laptop panel backlight headroom (the flip: reference 64, peak 200), so
+  the rule is PQ / HLG, or a peak of at least 400 nits (DisplayHDR 400) and 1.5x the reference. Probe: desktop HDR, flip
+  SDR. macOS: potential EDR headroom of at least 4 (XDR panels 16; ordinary panels only have some backlight headroom),
+  asked in windowCreated. The decision is logged from windowCreated (`hdr: auto: ...`): Hdr is initialised before the game
+  log exists. Runs `mac-hdrmac5-auto` (EDR 16 -> HDR on, upright, 3.3x) and `hdrauto-desk` / `-desk2` (Wayland picked,
+  HDR on, clean exit). The harness writes `hdrAuto=false` unless a run asks, so baselines on this HDR desktop stay SDR.
+
 ## State (2026-09-24 10:10)
 
 `hdr=true` on KDE Plasma 6 with HDR on gives: UI at the desktop's white, the world as SDR in daylight, lamp / torch /

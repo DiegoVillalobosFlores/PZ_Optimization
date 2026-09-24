@@ -177,6 +177,8 @@ printf '%s\r\n%s\r\n' "$(basename "$BENCH_SAVE")" "$(dirname "$BENCH_SAVE")" > "
   printf '%s\n' "${extra_flags[@]:-}" | grep -q '^settle=' || echo "settle=5"
   for f in "${extra_flags[@]:-}"; do [[ -n "$f" ]] && echo "$f"; done
 } > "$FLAG_FILE"
+# hdrAuto (default on in the game) would turn HDR on for every run on the XDR panel: runs stay SDR unless they ask
+printf '%s\n' "${props[@]:-}" | grep -q '^hdrAuto=' || props+=("hdrAuto=false")
 printf '%s\n' "${props[@]:-}" | grep . > "$PZ_DIR/pzopt.properties" || : > "$PZ_DIR/pzopt.properties"
 for kv in "${game_options[@]:-}"; do
   [[ -n "$kv" ]] || continue

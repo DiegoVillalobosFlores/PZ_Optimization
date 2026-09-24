@@ -97,6 +97,7 @@ PzoptOptionClasses = {
     gridStackInterval = { "FBORenderCell" },
     guardedCallbacks = { "pzopt.ActionEval" },
     hdr = { "pzopt.Hdr" },
+    hdrAuto = { "pzopt.Hdr" },
     hdrBloomPct = { "pzopt.Hdr" },
     hdrDumpAt = { "pzopt.Hdr" },
     hdrEncode = { "pzopt.Hdr" },

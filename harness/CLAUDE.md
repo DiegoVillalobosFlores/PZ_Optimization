@@ -155,6 +155,11 @@ Flags that must be on every measured run: `--prop instrument=true` (else no
 20-28 ms frame). Use the DEFAULT bench save for drive runs; `--source-save
 Apocalypse/2026-09-18_12-18-03` starts off the highway and the car crashes.
 
+HDR (2026-09-24): the game's `hdrAuto` (default on) turns HDR on by itself on an HDR screen, and this desktop's is one
+(KDE HDR on, reference 505 / peak 1307 nits; the MacBook's XDR panel too). run.sh and run-mac.sh therefore write
+`hdrAuto=false` into every run's pzopt.properties unless the run passes `--prop hdrAuto=...`; HDR runs pass
+`--prop hdr=true` (forced) or `--prop hdrAuto=true` (the player's default path).
+
 ## Run queue (harness/queue.sh, 2026-09-21)
 
 The game dirs, displays and Steam clients of the desktop and the three laptops are shared resources;

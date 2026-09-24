@@ -306,8 +306,10 @@ local SECTIONS = {
     {
         title = "HDR output (Linux with HDR on under Wayland, macOS)", clip = "nightdrive",
         entries = {
-            { key = "hdr", label = "HDR output",
-              tip = "The game is shown as HDR: the menus and the HUD stay at your desktop's white, lamps, torches, headlights, fires and lightning go above it up to your screen's peak. Needs an HDR screen with HDR switched on in the desktop settings; on Linux the game then runs as a native Wayland window. On a Mac the lights and lightning go above the screen's white (the other HDR settings below are Linux only for now); an XDR display (MacBook Pro 14/16, Pro Display XDR) has the most room above it. Without an HDR screen, or on Windows for now, nothing changes. Applies on the next launch." },
+            { key = "hdrAuto", label = "HDR output: automatic",
+              tip = "On by default: when the game starts on an HDR screen it is shown as HDR by itself (Linux: a Wayland desktop with HDR switched on; macOS: a display with HDR headroom, e.g. a MacBook Pro's XDR screen), on an SDR screen nothing changes. Untick it to keep the SDR picture on an HDR screen. Applies on the next launch." },
+            { key = "hdr", label = "HDR output: always on",
+              tip = "Turns HDR on even when the automatic check finds no HDR screen. The game is shown as HDR: the menus and the HUD stay at your desktop's white, lamps, torches, headlights, fires and lightning go above it up to your screen's peak. Needs an HDR screen with HDR switched on in the desktop settings; on Linux the game then runs as a native Wayland window. On a Mac the lights and lightning go above the screen's white (the other HDR settings below are Linux only for now); an XDR display (MacBook Pro 14/16, Pro Display XDR) has the most room above it. Without an HDR screen, or on Windows for now, nothing changes. Applies on the next launch." },
             { key = "hdrLightPct", label = "HDR: how bright light sources make things (%)",
               choices = { "0", "50", "100", "150", "200" }, note = { ["0"] = "off: the SDR picture in an HDR container", ["100"] = "recommended (default)" },
               tip = "What makes it HDR: every square the game lights with a lamp, a torch, a headlight or a fire is shown brighter in proportion to how much light falls on it, up to the screen's peak, with its colours intact; the dark stays dark." },
@@ -891,6 +893,7 @@ local EFFECTS = {
     fsrSharpnessPct = { gpu = 0 },
     upscalerObjectMv = { gpu = 1, render = 1 },
     hdr = { gpu = 1, render = 1, vram = 1 },
+    hdrAuto = { gpu = 1, render = 1, vram = 1 },
     hdrLightPct = { cpu = 1 },
     hdrBloomPct = { gpu = 1 },
     hdrGlintPct = { gpu = 1 },

@@ -70,7 +70,7 @@ public final class HdrWayland {
    private static int infoTf, infoPrimaries;
    private static int cmGlobalName, cmGlobalVersion;
 
-   private static final int TF_EXT_LINEAR = 5, TF_ST2084_PQ = 11, PRIMARIES_SRGB = 1, PRIMARIES_BT2020 = 6;
+   private static final int TF_EXT_LINEAR = 5, TF_ST2084_PQ = 11, TF_HLG = 13, PRIMARIES_SRGB = 1, PRIMARIES_BT2020 = 6;
    private static final int FEATURE_PARAMETRIC = 1, FEATURE_SET_LUMINANCES = 4, FEATURE_MASTERING = 5, FEATURE_SCRGB = 7;
 
    /**
@@ -184,9 +184,109 @@ public final class HdrWayland {
 
    // ------------------------------------------------------------------------------------------------------------
 
-   private static boolean init(long wlDisplay) throws Throwable {
-      if (manager != null) {
-         return true;
+   // ---- hdrAuto: is any output in HDR mode? (before GLFW exists, on a connection of our own) ----
+
+   private static final double AUTO_MIN_PEAK_NITS = 400;
+   private static boolean probing;
+   private static final java.util.List<int[]> probeOutputs = new java.util.ArrayList<>(); // {global name, version}
+   /** What the probe saw, for the log and the Options tab. */
+   public static volatile String probeResult = "not probed";
+
+   /**
+    * hdrAuto: connects to the session's compositor, binds wp_color_manager_v1 and asks every wl_output for its image
+    * description. HDR = a PQ / HLG output, or one whose peak is at least 400 nits and 1.5x its reference white. No
+    * colour manager, no connection or any failure = false.
+    */
+   public static boolean probeHdrOutput() {
+      MemorySegment conn = MemorySegment.NULL;
+      boolean hdr = false;
+      try {
+         loadLibrary();
+         MethodHandle connect = down("wl_display_connect", FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS));
+         conn = (MemorySegment)connect.invokeExact(MemorySegment.NULL);
+         if (conn.address() == 0L) {
+            probeResult = "no Wayland connection";
+            return false;
+         }
+         probing = true;
+         probeOutputs.clear();
+         display = conn;
+         queue = (MemorySegment)createQueue.invokeExact(display);
+         MemorySegment wrapper = (MemorySegment)createWrapper.invokeExact(display);
+         setQueue.invokeExact(wrapper, queue);
+         registry = marshal(wrapper, 1, lib.find("wl_registry_interface").orElseThrow(), "n", MemorySegment.NULL);
+         wrapperDestroy.invokeExact(wrapper);
+         listen(registry, "wl_registry");
+         roundtrip();
+         if (cmGlobalName == 0) {
+            probeResult = "compositor has no wp_color_manager_v1";
+            return false;
+         }
+         MemorySegment cm = marshalBind(registry, cmGlobalName, ARENA.allocateFrom("wp_color_manager_v1"), Math.min(cmGlobalVersion, 2),
+               IFACE.get("wp_color_manager_v1"));
+         StringBuilder seen = new StringBuilder();
+         MemorySegment outputIface = lib.find("wl_output_interface").orElseThrow();
+         for (int[] o : probeOutputs) {
+            MemorySegment output = marshalBind(registry, o[0], ARENA.allocateFrom("wl_output"), 1, outputIface);
+            MemorySegment cmOut = marshal(cm, 1, IFACE.get("wp_color_management_output_v1"), "no", MemorySegment.NULL, output);
+            MemorySegment desc = marshal(cmOut, 1, IFACE.get("wp_image_description_v1"), "n", MemorySegment.NULL);
+            descState = 0;
+            listen(desc, "wp_image_description_v1");
+            for (int i = 0; i < 20 && descState == 0; i++) {
+               roundtrip();
+            }
+            if (descState == 1) {
+               infoDone = false;
+               infoTf = 0;
+               infoMax = 80;
+               infoRef = 80;
+               infoTMax = 0;
+               MemorySegment info = marshal(desc, 1, IFACE.get("wp_image_description_info_v1"), "n", MemorySegment.NULL);
+               listen(info, "wp_image_description_info_v1");
+               for (int i = 0; i < 20 && !infoDone; i++) {
+                  roundtrip();
+               }
+               double peak = infoTMax > 0 ? infoTMax : infoMax;
+               // KWin describes HDR outputs as gamma 2.2 too (the desktop: reference 505, peak 1307), and gives SDR laptop
+               // panels backlight headroom (the flip: reference 64, peak 200): an HDR screen is one that reaches the
+               // DisplayHDR 400 floor with room above the SDR white
+               boolean outHdr = infoTf == TF_ST2084_PQ || infoTf == TF_HLG || peak >= AUTO_MIN_PEAK_NITS && peak >= 1.5 * infoRef;
+               hdr |= outHdr;
+               seen.append(String.format(java.util.Locale.ROOT, "%soutput %d: tf %d, reference %.0f, peak %.0f nits%s", seen.length() > 0 ? "; " : "",
+                     o[0], infoTf, infoRef, peak, outHdr ? " (HDR)" : ""));
+            } else {
+               seen.append(seen.length() > 0 ? "; " : "").append("output ").append(o[0]).append(": no description (").append(descFailure).append(')');
+            }
+         }
+         probeResult = seen.length() == 0 ? "no outputs" : seen.toString();
+         return hdr;
+      } catch (Throwable t) {
+         probeResult = "probe failed: " + t;
+         return false;
+      } finally {
+         probing = false;
+         try {
+            if (conn.address() != 0L) {
+               MethodHandle disconnect = down("wl_display_disconnect", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
+               disconnect.invokeExact(conn); // the probe's proxies go with the connection's memory; nothing else holds them
+            }
+         } catch (Throwable ignored) {
+         }
+         // the real session (GLFW's display) starts from scratch in init()
+         display = null;
+         queue = null;
+         registry = null;
+         cmGlobalName = 0;
+         cmGlobalVersion = 0;
+         features = 0;
+         tfMask = 0;
+         primariesMask = 0;
+      }
+   }
+
+   private static void loadLibrary() {
+      if (lib != null) {
+         return;
       }
       lib = SymbolLookup.libraryLookup("libwayland-client.so.0", ARENA);
       createQueue = down("wl_display_create_queue", FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS));
@@ -200,7 +300,13 @@ public final class HdrWayland {
       proxyDestroy = down("wl_proxy_destroy", FunctionDescriptor.ofVoid(ValueLayout.ADDRESS));
       displayFlush = down("wl_display_flush", FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
       buildInterfaces();
+   }
 
+   private static boolean init(long wlDisplay) throws Throwable {
+      if (manager != null) {
+         return true;
+      }
+      loadLibrary();
       display = MemorySegment.ofAddress(wlDisplay);
       queue = (MemorySegment)createQueue.invokeExact(display);
       displayWrapper = (MemorySegment)createWrapper.invokeExact(display);
@@ -304,6 +410,8 @@ public final class HdrWayland {
                   if ("wp_color_manager_v1".equals(name)) {
                      cmGlobalName = (Integer)args[0];
                      cmGlobalVersion = (Integer)args[2];
+                  } else if (probing && "wl_output".equals(name)) {
+                     probeOutputs.add(new int[] {(Integer)args[0], (Integer)args[2]});
                   }
                }
                break;

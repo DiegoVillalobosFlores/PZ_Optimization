@@ -274,8 +274,37 @@ public final class HdrMac {
 
    // --- setup --------------------------------------------------------------------------------------------------------
 
+   /**
+    * hdrAuto: the main screen's potential EDR headroom (1.0 = an SDR display; the MacBook Pro XDR panel: 16). Render
+    * (main) thread, after glfwInit; 1.0 when AppKit cannot be asked.
+    */
+   static double screenPotentialHeadroom() {
+      try {
+         loadObjc();
+         return sendD(sendP(cls("NSScreen"), "mainScreen"), "maximumPotentialExtendedDynamicRangeColorComponentValue");
+      } catch (Throwable t) {
+         Log.warn("hdr mac: EDR headroom unavailable: " + t);
+         return 1.0;
+      }
+   }
+
+   private static void loadObjc() {
+      if (linker != null) {
+         return;
+      }
+      SymbolLookup objc = SymbolLookup.libraryLookup("/usr/lib/libobjc.A.dylib", Arena.global());
+      SymbolLookup.libraryLookup("/System/Library/Frameworks/AppKit.framework/AppKit", Arena.global());
+      Linker l = Linker.nativeLinker();
+      msgSendAddr = objc.find("objc_msgSend").orElseThrow();
+      getClass = l.downcallHandle(objc.find("objc_getClass").orElseThrow(), FunctionDescriptor.of(P, P));
+      selRegister = l.downcallHandle(objc.find("sel_registerName").orElseThrow(), FunctionDescriptor.of(P, P));
+      poolPush = l.downcallHandle(objc.find("objc_autoreleasePoolPush").orElseThrow(), FunctionDescriptor.of(P));
+      poolPop = l.downcallHandle(objc.find("objc_autoreleasePoolPop").orElseThrow(), FunctionDescriptor.ofVoid(P));
+      linker = l;
+   }
+
    private static void init(long glfwWindow) throws Throwable {
-      linker = Linker.nativeLinker();
+      loadObjc();
       Arena g = Arena.global();
       SymbolLookup objc = SymbolLookup.libraryLookup("/usr/lib/libobjc.A.dylib", g);
       SymbolLookup metal = SymbolLookup.libraryLookup("/System/Library/Frameworks/Metal.framework/Metal", g);
@@ -284,11 +313,6 @@ public final class HdrMac {
       SymbolLookup cg = SymbolLookup.libraryLookup("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics", g);
       SymbolLookup.libraryLookup("/System/Library/Frameworks/QuartzCore.framework/QuartzCore", g);
       SymbolLookup.libraryLookup("/System/Library/Frameworks/MetalPerformanceShaders.framework/MetalPerformanceShaders", g);
-      msgSendAddr = objc.find("objc_msgSend").orElseThrow();
-      getClass = linker.downcallHandle(objc.find("objc_getClass").orElseThrow(), FunctionDescriptor.of(P, P));
-      selRegister = linker.downcallHandle(objc.find("sel_registerName").orElseThrow(), FunctionDescriptor.of(P, P));
-      poolPush = linker.downcallHandle(objc.find("objc_autoreleasePoolPush").orElseThrow(), FunctionDescriptor.of(P));
-      poolPop = linker.downcallHandle(objc.find("objc_autoreleasePoolPop").orElseThrow(), FunctionDescriptor.ofVoid(P));
       ioSurfaceCreate = linker.downcallHandle(ios.find("IOSurfaceCreate").orElseThrow(), FunctionDescriptor.of(P, P));
       cglTexImageIOSurface = linker.downcallHandle(ogl.find("CGLTexImageIOSurface2D").orElseThrow(), FunctionDescriptor.of(I, P, I, I, I, I, I, I, P, I));
       cglGetCurrentContext = linker.downcallHandle(ogl.find("CGLGetCurrentContext").orElseThrow(), FunctionDescriptor.of(P));

@@ -392,6 +392,9 @@ write_flags
 
 # runtime settings for this run; the previous pzopt.properties comes back afterwards (or at the next
 # run's start via recover_props, when this one dies without reaching the EXIT trap)
+# hdrAuto (default on in the game) would switch every run on an HDR desktop (this one) to HDR + native Wayland: runs
+# stay SDR unless they ask (--prop hdr=true, or --prop hdrAuto=true)
+printf '%s\n' "${props[@]}" | grep -q '^hdrAuto=' || props+=("hdrAuto=false")
 if [[ -f "$PZ_DIR/pzopt.properties" ]]; then cp "$PZ_DIR/pzopt.properties" "$PZ_DIR/pzopt.properties.pzopt-orig"; fi
 printf '%s\n' "${props[@]}" > "$PZ_DIR/pzopt.properties"
 cp "$PZ_DIR/pzopt.properties" "$RUNS/.last-props" 2>/dev/null || true

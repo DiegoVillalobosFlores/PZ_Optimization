@@ -7,10 +7,11 @@ this loop asks TypeSafe's Jev which action the character takes next and writes "
 game's own (movement keys, the aim / fire buttons, the reload action). Every decision goes to the log with Jev's
 probabilities and latency.
 
-    harness/showcase-director.py [--log /tmp/showcase-director.log] [--wait 900]
+    harness/showcase-director.py [--log /tmp/showcase-director.log] [--wait 900] [--runs N]
 
 Start it before the run (it waits for a state file newer than itself) and it exits when the state goes stale for 15 s
-(the run ended).
+(the run ended); with --runs N it then waits for the next run's state, N runs in all (a queued series such as the
+horde-shoot bench, harness/ragdoll-judge.py).
 """
 import argparse
 import json
@@ -50,9 +51,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--log", default="/tmp/showcase-director.log")
     ap.add_argument("--wait", type=float, default=900, help="seconds to wait for the game's first state")
+    ap.add_argument("--runs", type=int, default=1, help="runs to direct one after the other")
     a = ap.parse_args()
     t0 = time.time()
-    seq, last_t, seen, decisions = 0, None, False, 0
+    seq, last_t, seen, decisions, runs = 0, None, False, 0, 0
     log = open(a.log, "a", buffering=1)
     log.write(f"# director started {time.strftime('%Y-%m-%d %H:%M:%S')}, waiting for {STATE}\n")
     while True:
@@ -69,8 +71,12 @@ def main():
             time.sleep(0.2)
             continue
         if seen and now * 1000 - st["t"] > 15000:
-            log.write(f"# state stale for 15 s: the run ended; {decisions} decisions\n")
-            return 0
+            runs += 1
+            log.write(f"# state stale for 15 s: the run ended; {decisions} decisions (run {runs} of {a.runs})\n")
+            if runs >= a.runs:
+                return 0
+            t0, seen, last_t, decisions = time.time(), False, None, 0  # the next run's state must be newer than this
+            continue
         if st["t"] == last_t:
             time.sleep(0.05)
             continue

@@ -63,7 +63,7 @@ public final class Showcase {
       if (k > 0 && k < heldKeys.length) heldKeys[k] = true;
    }
 
-   private static boolean on, powerOff;
+   private static boolean on, powerOff, burn = true, fireLine = true, noAttack;
    private static int horde, hordeGap, hordeFires, lightbar, fireMs, mags;
    private static float pierX, pierY;
    private static String gunType, ambulanceType, hordeDir;
@@ -99,6 +99,11 @@ public final class Showcase {
       powerOff = "off".equalsIgnoreCase(HarnessFlags.get("power", "").trim());
       pitchBlack = "pitch".equalsIgnoreCase(HarnessFlags.get("darkness", "").trim());
       director = "jev".equalsIgnoreCase(HarnessFlags.get("director", "").trim());
+      burn = !"false".equalsIgnoreCase(HarnessFlags.get("burn", "true").trim()); // false: a plain horde (the ragdoll bench, horde-shoot)
+      fireLine = !"false".equalsIgnoreCase(HarnessFlags.get("fire_line", "true").trim()); // false: light_fire_line only marks the line lit
+      // true: zombies never attack (stock's SystemDisabler switch; GOD_MODE is a cheat and needs Core.debug, so without it the
+      // horde bit the player to death at the pier in hs-stock-1): the horde crowds the player, who keeps shooting
+      noAttack = "true".equalsIgnoreCase(HarnessFlags.get("no_attack", "false").trim());
       java.io.File z = new java.io.File(zombie.ZomboidFileSystem.instance.getCacheDir());
       stateFile = new java.io.File(z, "pzopt-showcase-state.json");
       cmdFile = new java.io.File(z, "pzopt-showcase-cmd.txt");
@@ -126,6 +131,7 @@ public final class Showcase {
    static void worldReady(IsoPlayer p) {
       if (!on) return;
       p.getCheats().set(zombie.characters.CheatType.GOD_MODE, true); // setGodMod(true, true) left the player mortal (cine-2)
+      if (noAttack) zombie.SystemDisabler.zombiesDontAttack = true;
       p.setInvisible(true, true);
       if (powerOff) IsoWorld.instance.setHydroPowerOn(false);
       if (pitchBlack) {
@@ -151,6 +157,7 @@ public final class Showcase {
          equip(p);
          parkAmbulance();
          spawnHorde(p);
+         RagdollWatch.start(); // pzopt-ragdoll.out: every ragdoll episode of the scene
          if (director) {
             enter(Phase.WAIT); // the director (Jev) decides from the first state on
          } else {
@@ -277,7 +284,7 @@ public final class Showcase {
       for (IsoZombie z : zombies) {
          try {
             z.doZombieSpeed(2); // fast shamblers: a chase the player wins
-            z.SetOnFire();
+            if (burn) z.SetOnFire();
             burning += z.isOnFire() ? 1 : 0;
             z.pathToCharacter(p);
          } catch (Throwable t) {
@@ -292,6 +299,11 @@ public final class Showcase {
       IsoCell cell = IsoWorld.instance.currentCell;
       float lx = -dirY, ly = dirX;
       fireSquares.clear();
+      if (!fireLine) {
+         firesLit = true;
+         Log.info("harness: showcase: fire line off (fire_line=false), the fight starts");
+         return;
+      }
       for (int i = 0; i < hordeFires; i++) {
          float off = (i - (hordeFires - 1) / 2F) * 1.5F;
          IsoGridSquare sq = cell.getGridSquare(Math.round(pierX + dirX * 7 + lx * off), Math.round(pierY + dirY * 7 + ly * off), 0);
@@ -334,6 +346,7 @@ public final class Showcase {
       if (!started) {
          return;
       }
+      RagdollWatch.tick(nowNs);
       lights();
       if (zombie.input.Mouse.isCursorVisible()) zombie.input.Mouse.setCursorVisible(false); // no pointer in the shot
       p.getCheats().set(zombie.characters.CheatType.GOD_MODE, true);
@@ -347,7 +360,7 @@ public final class Showcase {
          }
       }
       if (gun != null && gun.isJammed()) gun.setJammed(false);
-      if (nowNs - lastIgniteNs >= 2_000_000_000L) {
+      if (burn && nowNs - lastIgniteNs >= 2_000_000_000L) {
          lastIgniteNs = nowNs;
          for (IsoZombie z : zombies) {
             if (!z.isDead() && !z.isOnFire()) {

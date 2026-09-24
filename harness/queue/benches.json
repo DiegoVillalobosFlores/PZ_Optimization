@@ -66,6 +66,9 @@
     {"name": "shot", "resources": ["visual-parity"],
      "what": "screenshot rig: camera held 8 s into the route, game + desktop captures for blacktiles.py against a control run",
      "args": "--mode bench --flag zoom=max --shot-at 8 --prop instrument=true --no-dashboard"},
+    {"name": "horde-shoot", "resources": ["other-cores", "game-thread", "visual-parity"],
+     "what": "stability + ragdolls: Jev (showcase-director.py, start it with --runs N before the jobs) directs a player (zombies never attack: no_attack=true) shooting a horde of 150 fast zombies with an M16 at the Riverside pier in daylight, no fire; pzopt.RagdollWatch logs every ragdoll episode (pzopt-ragdoll.out), harness/ragdoll-judge.py compares stock (--prop enabled=false) with optimized: crashes, exceptions, off-thread ragdolls, flying / sliding / spinning / sunken bodies",
+     "args": "--mode bench --flag start=6445,5195 --flag pier=6436,5186 --flag horde_dir=SE --flag time_of_day=12 --flag weather=clear --flag showcase=horde --flag director=jev --flag burn=false --flag fire_line=false --flag no_attack=true --flag horde=150 --flag mags=20 --flag route=S:1 --flag speed=0.02 --flag hold=10 --flag zoom=1 --record --launcher direct --no-dashboard --no-mangohud --prop overlay=false --option focusloss=false --option panCameraWhileAiming=false"},
     {"name": "load", "resources": ["load-time"],
      "what": "boot and Continue-to-world timing with a short path drive (60 tiles east on KY-60, stops by itself) so the run ends by itself; loadtime.py reads pzopt-loadtrace.out",
      "args": "--mode drive --flag path=8010,11204.5/8070,11204.5 --route-seconds 8 --launcher direct --prop instrument=true --no-dashboard"}

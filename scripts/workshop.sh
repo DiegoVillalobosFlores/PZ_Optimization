@@ -9,11 +9,13 @@
 #   scripts/workshop.sh --tag win-b0bbce05d5-cc99c05   # stage the asset of that GitHub release (exact mirror)
 #   scripts/workshop.sh --zip build/pzopt-b0bbce05d5-classes.zip [--commit cc99c05]
 #   scripts/workshop.sh --out /tmp/ws         # somewhere other than ~/Zomboid/Workshop/PZ_Optimization
+#   scripts/workshop.sh --tag win-<rev>-<commit> --upload "Release <commit> (game revision <rev>). ..."
 #
-# Upload is done in the game (launched through Steam, logged in): Main menu > Workshop >
-# Create/Update item > PZ_Optimization > Upload. The first upload writes the item id into
-# workshop.txt; keep it (commit docs/workshop/workshop.txt) so later uploads update the same
-# item. See docs/workshop.md.
+# --upload stages, then uploads with scripts/workshop-upload.py: the Steamworks API through the
+# game's libsteam_api.so and the running, logged-on Steam client, a few seconds, no game launch.
+# The item id comes from workshop.txt (docs/workshop/workshop.txt); only the very first upload of a
+# new item needed the game (Main menu > Workshop > Create/Update item), which wrote the id back.
+# See docs/workshop.md.
 #
 # The uploader's validator (zombie.core.znet.SteamWorkshopItem) refuses anything but
 # mods/ buildings/ creative/ under Contents/, any file named *.exe *.dll *.bat *.app *.dylib
@@ -25,14 +27,15 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 source scripts/pz-env.sh
 
-zip=""; tag=""; commit=""; out="$ZOMBOID/Workshop/PZ_Optimization"
+zip=""; tag=""; commit=""; out="$ZOMBOID/Workshop/PZ_Optimization"; upload=0; notes=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --zip) zip="$2"; shift ;;
     --tag) tag="$2"; shift ;;
     --commit) commit="$2"; shift ;;
     --out) out="$2"; shift ;;
-    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
+    --upload) upload=1; notes="$2"; shift ;;
+    -h|--help) sed -n '2,23p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
@@ -93,8 +96,8 @@ else
   echo "warning: no $src_img or no ffmpeg; put a square preview.png in $out and poster.png in $MOD" >&2
 fi
 
-# the animated preview (harness/showcase-thumbnail-gif.py); the in-game uploader only takes
-# preview.png, so this one goes up with steamcmd (item.vdf below)
+# the animated preview (harness/showcase-thumbnail-gif.py); workshop-upload.py sends it when it is
+# <= 1,000,000 bytes (the in-game uploader could only send preview.png)
 [[ -f docs/workshop/images/00-showcase-thumbnail.gif ]] && cp docs/workshop/images/00-showcase-thumbnail.gif "$out/preview.gif"
 
 # workshop.txt: keep the id= of an earlier upload (the game writes it back after the first one)
@@ -122,23 +125,14 @@ if [[ -f "$out/preview.png" ]]; then
   [[ $psz -le 1024000 ]] || { echo "preview.png is $psz bytes, the limit is 1024000" >&2; exit 1; }
 fi
 
-# steamcmd item file: same content folder, the GIF as preview, text left to the in-game upload
-# (steamcmd only touches the fields present).  steamcmd +login <user> +workshop_build_item <vdf> +quit
-if [[ -n "$id" ]]; then
-  cat > "$out/item.vdf" <<VDF
-"workshopitem"
-{
-	"appid"		"108600"
-	"publishedfileid"	"$id"
-	"contentfolder"		"$out/Contents"
-	"previewfile"		"$out/preview.gif"
-	"changenote"		"$(date -u +%Y-%m-%d): revision $rev, commit ${commit:-?}, animated preview"
-}
-VDF
-fi
+rm -f "$out/item.vdf"   # the old steamcmd route for the GIF; workshop-upload.py sends it now
 
 echo "staged $out"
 echo "  classes: $CLASSES ($nfiles files, revision $rev, from $zip)"
 echo "  id: ${id:-<none yet; the first in-game upload writes it into workshop.txt>}"
-echo "next: launch the game through Steam, Main menu > Workshop > Create/Update item > PZ_Optimization > Upload"
-[[ -f "$out/preview.gif" && -n "$id" ]] && echo "animated preview: steamcmd +login <steam user> +workshop_build_item $out/item.vdf +quit"
+if (( upload )); then
+  [[ -n "$id" ]] || { echo "no item id in workshop.txt: the first upload of a new item goes through the game" >&2; exit 1; }
+  python3 scripts/workshop-upload.py --dir "$out" --notes "$notes"
+else
+  echo "next: scripts/workshop-upload.py --dir $out --notes \"<change notes>\" (Steam running and logged on; no game)"
+fi

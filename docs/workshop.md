@@ -10,11 +10,10 @@ page states the commit and the zip sha256 so the two can be checked against each
 ## Layout (`scripts/workshop.sh` writes it)
 
 ```
-~/Zomboid/Workshop/PZ_Optimization/          staging folder the in-game uploader reads
+~/Zomboid/Workshop/PZ_Optimization/          staging folder scripts/workshop-upload.py sends
 ├── workshop.txt                             title / description= lines / tags=Build 42; / visibility
 ├── preview.png                              512x512 (256 or 512 square, <= 1 MB) from the showcase thumbnail
-├── preview.gif                              animated preview (steamcmd route, see Images)
-├── item.vdf                                 steamcmd workshop_build_item file (written once id= is known)
+├── preview.gif                              animated preview, sent when <= 1,000,000 bytes (see Images)
 └── Contents/mods/PZ_Optimization/42/        B42 versioned mod layout
     ├── mod.info                             id=PZ_Optimization, modversion=<commit>, versionMin
     ├── poster.png
@@ -52,21 +51,24 @@ checked by the script before the in-game screen has to refuse:
    the zip into `build/workshop/<tag>/`, the commit for `modversion` comes from the tag).
    `--zip <file> [--commit <sha>]` stages a local zip; with neither, the script runs
    `scripts/release.sh` (build + test + zip) and stages that as HEAD.
-3. Launch the game **through Steam, logged in** (the uploader is SteamAPI; `run.sh --launcher
-   direct` cannot upload). Main menu > Workshop > Create/Update item > `PZ_Optimization`.
-   The screen shows the validation result, the title, the description and the tags read from
-   `workshop.txt`; Upload. The first upload opens the Steam Workshop legal agreement in the
-   overlay and writes `id=<number>` back into `workshop.txt`.
+3. Upload: `scripts/workshop-upload.py --notes "<change notes>"` (or step 2 with `--upload "<notes>"`).
+   It loads the game's `natives/libsteam_api.so` with `SteamAppId=108600`, attaches to the running,
+   logged-on Steam client and sends what the game's own uploader sends from `workshop.txt` (title,
+   description + `Workshop ID:` / `Mod ID:` lines, visibility, tags, `Contents/`), the preview and the
+   notes; Steam's `SubmitItemUpdateResult_t` is the verdict. No game, no screen, a few seconds;
+   `--check` stops before the submit. Creating a *new* item is the only step that needs the game:
+   Main menu > Workshop > Create and update items > `PZ_Optimization` > Upload; it opens the Workshop
+   legal agreement in the overlay and writes `id=<number>` back into `workshop.txt`.
 4. Copy that `workshop.txt` to `docs/workshop/workshop.txt` and commit it: the script reads the
    `id=` from there on every later staging, so updates go to the same item, and the
    description's install commands carry the real path.
 5. After the first upload, re-stage (step 2) and upload once more so the description no longer
    says `<item id>` in the install command.
 
-Updating after a new release is steps 1-3 again; the game keeps the id and the visibility.
-Hands-off version of step 3 (xdotool click sequence, the Steam connection preflight, log-based
-verification): `.claude/skills/release-windows`, "Steam Workshop deploy". A `result=2` failure in the
-game is a dead Steam session ("Session Replaced" in `connection_log.txt`); restart Steam.
+Updating after a new release is steps 1-3 again (`scripts/workshop.sh --tag <tag> --upload "<notes>"`);
+the id and the visibility come from `workshop.txt`. Preflight and verification:
+`.claude/skills/release-windows`, "Steam Workshop deploy". EResult 2 is a dead Steam session
+("Session Replaced" in `connection_log.txt`); restart Steam.
 
 ## Images
 
@@ -155,17 +157,10 @@ source into `~/.local/bin`). `GIF_END=x:y:w` gives the older zoom-into-the-overl
 `09-performance-overlay.jpg` is the overlay panel cropped
 from the 25 s frame for the carousel and the "Performance overlay" section.
 
-The game's uploader hard-codes `preview.png` and rejects anything that is not a PNG, so the GIF
-cannot go up from the in-game screen. Steam's own tool takes it: install `steamcmd` (AUR), then
-
-```sh
-steamcmd +login <steam user> +workshop_build_item ~/Zomboid/Workshop/PZ_Optimization/item.vdf +quit
-```
-
-`item.vdf` (written by `workshop.sh` once `id=` is known) names the same `Contents/` folder and
-`preview.gif`; it carries no title or description, so the page text stays what the in-game
-upload set. Steam Guard asks for the code on the first login. Any later in-game upload
-sends `preview.png` again and replaces the GIF, so re-run the steamcmd line after one.
+The game's uploader hard-codes `preview.png` and rejects anything that is not a PNG, so every in-game
+upload replaced the GIF. `scripts/workshop-upload.py` calls `SetItemPreview` itself and sends
+`preview.gif` whenever it is staged and <= 1,000,000 bytes (`--preview png|<file>` overrides); the
+steamcmd `item.vdf` route is gone (2026-09-24).
 
 ## What the item cannot do
 

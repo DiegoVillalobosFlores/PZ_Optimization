@@ -84,25 +84,23 @@ Order, all hands-off except the login: commit + push → `scripts/release.sh --p
 (tag `win-<rev>-<commit>`, zip + installers) → note the release in `docs/windows-test.md` (manifest
 line count) → `scripts/workshop.sh --tag win-<rev>-<commit>` (stages item 3805285544 under
 `~/Zomboid/Workshop/PZ_Optimization/`, regenerates `workshop.txt`; copy it to `docs/workshop/workshop.txt`
-and commit "workshop: stage the <commit> release") → upload → verify. Full click sequence, xdotool
-coordinates and pitfalls: `.claude/skills/release-windows` ("Steam Workshop deploy").
+and commit "workshop: stage the <commit> release") → upload → verify. The upload is one Steamworks API call
+since 2026-09-24, no game and no OCR: `scripts/workshop.sh --tag <tag> --upload "<notes>"` stages and uploads in
+seconds (`scripts/workshop-upload.py`: the game's `libsteam_api.so` + the running Steam client). Details and pitfalls:
+`.claude/skills/release-windows` ("Steam Workshop deploy").
 
 - **The upload needs a really connected Steam client.** Before uploading run
   `tail -3 ~/.local/share/Steam/logs/connection_log.txt`: it must end in `[Logged On` with no
   `Session Replaced` after it. The client UI looks logged in and launches the game even when the same
-  account logged in elsewhere (laptop) replaced its session; every upload then ends in the game's
-  `failed to update workshop item, result=2` (three times on 2026-09-21) and Steam's
+  account logged in elsewhere (laptop) replaced its session; every upload then ends in EResult 2
+  (the game's `failed to update workshop item, result=2`, three times on 2026-09-21) and Steam's
   `workshop_log.txt` says `Failed to initialize build on server (No Connection)`. Fix: `steam -shutdown`,
   start Steam again (cached login reconnects), re-check the log, upload.
-- **Verify the upload from the logs, not the in-game text**: `grep 3805285544
-  ~/.local/share/Steam/logs/workshop_log.txt | tail -3` must show `Upload finished ... : OK`, and the
+- **Verify the upload**: `workshop-upload.py` prints Steam's own result (`upload OK: EResult 1`); `grep 3805285544
+  ~/.local/share/Steam/logs/workshop_log.txt | tail -3` shows `Upload finished ... : OK`, and the
   public change-notes page `steamcommunity.com/sharedfiles/filedetails/changelog/3805285544` must list
-  the new entry (fetch it; the in-game page prints "finished" after a failure too).
-- Driving the in-game uploader with xdotool is fine but **re-screenshot before every click**: if the
-  game loses focus the clicks and the typed change notes go to whatever is focused. `steamcmd` has no
-  cached login on this machine; never type the maintainer's password. An in-game upload replaces the
-  animated `preview.gif` with `preview.png`; restoring it is the maintainer's steamcmd line
-  (`docs/workshop.md`, Images).
+  the new entry. The upload sends the animated `preview.gif` itself (the in-game uploader could only send
+  `preview.png`). `steamcmd` has no cached login on this machine and is not needed; never type the maintainer's password.
 - **No native libraries in a release** (maintainer's decision, 2026-09-22): `scripts/release.sh` defaults
   `PZOPT_DLSS=0`, so the zip carries no `natives/` (the DLSS shim would add NVIDIA's 58 MB library, Windows cannot
   use the .so, and `workshop.sh` refuses `*.so` because Steam bans the extension); `upscaler=dlss` without the shim

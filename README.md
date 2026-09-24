@@ -1286,8 +1286,7 @@ nothing saturated") — into `<run>/judge.json`, exit 0 only for `achieved`. `ha
 <A> <B>` does the same for visual parity between two recordings (transient px/frame, black
 squares, luma pops, per screen cell with the HUD corners named): `parity=parity|hud_only|flicker|
 black_tiles|lighting_pops|...` and whether a person should look. `harness/ui-drive.py` drives the
-game's own menus the same way (screenshot → OCR → Jev picks the control; the Workshop upload runs
-through it as a `workshop` queue job). Jev never sees pixels or raw logs, only the numbers the
+game's own menus the same way (screenshot → OCR → Jev picks the control). Jev never sees pixels or raw logs, only the numbers the
 scripts computed. The key comes from `$TYPESAFE_API_KEY` or `~/.config/pzopt/typesafe.key`; without
 one the queue still runs and the result carries the card without a verdict.
 

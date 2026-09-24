@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Drive the game's own UI with OCR + TypeSafe (Jev) instead of an LLM looking at screenshots.
 
-  harness/ui-drive.py workshop --notes "Release <commit> (game revision <rev>). ..." [--dry-run]
-  harness/ui-drive.py workshop --notes "..." --screens s0.png,s1.png,...   # replay: one stored screen per step, no clicks
   harness/ui-drive.py step "<expected screen>" "<control to click>" [--screen shot.png] [--dry-run]
   harness/ui-drive.py read [--screen shot.png]          # OCR lines with screen coordinates
 
@@ -17,11 +15,8 @@ finds no line (native dialogs, unreadable buttons) but only when the expected sc
 Jev never sees pixels; it sees the OCR text and positions. A step that cannot be confirmed
 stops the sequence (exit 2) with the screenshot path printed; nothing is retried blindly.
 
-Workshop sequence (release-windows skill, "Steam Workshop deploy"): main menu -> WORKSHOP ->
-Create and update items -> the PZ_Optimization row -> NEXT -> NEXT -> Edit Change Notes -> type
-the notes -> ACCEPT -> Upload -> native confirm Ok -> CLOSE -> QUIT -> Yes. Preflight (Steam
-session really logged on, no game / run.sh running, workshop.txt staged) stays in the skill; the
-upload itself is verified from ~/.local/share/Steam/logs/workshop_log.txt, never from the game.
+The Workshop upload no longer goes through here (2026-09-24): scripts/workshop-upload.py calls the
+Steamworks API directly, no game and no OCR. The pad checks use `read`.
 """
 import json
 import os
@@ -37,28 +32,11 @@ from typesafe_client import ask, choice, noul  # noqa: E402
 SHOT = Path("/tmp/ui-drive.png")
 TESSDATA = Path.home() / ".local/share/tessdata"
 WINDOW_TITLE = "Project Zomboid"
-WORKSHOP_ID = "3805285544"
 
 
 def screenshot(path=SHOT):
     subprocess.run(["spectacle", "-b", "-n", "-f", "-o", str(path)], check=True, capture_output=True, timeout=20)
     return path
-
-
-def quiet_notifications(reason):
-    """Plasma's Do Not Disturb for as long as this process lives (the inhibition belongs to our D-Bus
-    connection). A popup over the native confirm dialog put its lines into the OCR and Jev judged the
-    screen 0.34 (job 1776, 2026-09-24: the queue's own "job started" toast for a Mac job). Critical
-    notifications still show (the queue's repeated overrun); the step re-check covers those."""
-    try:
-        import dbus
-        bus = dbus.SessionBus()
-        dbus.Interface(bus.get_object("org.freedesktop.Notifications", "/org/freedesktop/Notifications"),
-                       "org.freedesktop.Notifications").Inhibit("pzopt-ui-drive", reason, {})
-        return bus
-    except Exception as e:  # no session bus / no dbus-python: run anyway, the re-check still applies
-        print(f"notifications not inhibited ({e})")
-        return None
 
 
 def active_window():
@@ -67,8 +45,6 @@ def active_window():
     except subprocess.SubprocessError:
         return ""
 
-
-STEP_RECHECK = 12  # s; Plasma shows a normal notification ~5 s, longer while the pointer is over it
 
 OCR_UP = 2  # the game's UI text is ~20 px tall at 5120x2160: inverted (dark on light) and doubled it reads cleanly
 
@@ -206,56 +182,6 @@ def find_window(title, timeout):
         time.sleep(0.5)
 
 
-def type_text(text, opts):
-    if opts["dry_run"]:
-        print(f"  dry run: would type {len(text)} chars")
-        return
-    subprocess.run(["xdotool", "type", "--delay", "12", text], check=True)
-
-
-def workshop_steps(notes, log_start=0):
-    """Expectations are written the way the OCR sees the screen (the title line at the top centre,
-    the button labels) and kept short: every extra detail is one more claim Jev can fail to find
-    (the main menu scored 0.78 with six entries named, 0.38 with all eleven and the version line).
-    Fallbacks are the release-windows table's 1280-wide coordinates x 4."""
-    return [
-        {"name": "main menu", "expect": "the Project Zomboid main menu (CONTINUE / LOAD / WORKSHOP / MODS / OPTIONS / QUIT down the left)", "click": "WORKSHOP", "fallback": (628, 1868)},
-        {"name": "workshop menu", "expect": "title 'Steam Workshop' with the buttons 'Open Steam Overlay to Spiffo's Workshop', 'Open Steam Overlay to items I created', 'Create and update items' and BACK", "click": "Create and update items", "fallback": (2560, 892)},
-        # the item list sits top-left under the performance overlay, so its row is usually not in the OCR: the fallback clicks it
-        {"name": "item row", "expect": "title 'Choose item directory' with BACK and NEXT at the bottom", "click": "the PZ_Optimization row of the item list", "fallback": (432, 296)},
-        {"name": "choose directory", "expect": "title 'Choose item directory' with BACK and NEXT at the bottom", "click": "NEXT", "fallback": (4796, 2028)},
-        {"name": "item details", "expect": "title 'Edit item details' with Title:, Preview image:, Description:, Tags: fields and NEXT at the bottom", "click": "NEXT", "fallback": (4796, 2028)},
-        {"name": "prepare to publish", "expect": "title 'Prepare to publish item' with Title:, 'Workshop ID:', the buttons 'Edit Change Notes' and 'Upload to Steam Workshop now!' and the workshop terms line", "click": "Edit Change Notes", "fallback": (2560, 1200)},
-        {"name": "change notes box", "expect": "title 'Edit Change Notes' with CANCEL and ACCEPT at the bottom (the empty text box itself has no OCR text)", "click": None, "then_type": notes, "type_at": (2000, 750)},
-        {"name": "accept notes", "expect": "title 'Edit Change Notes' with the typed change-notes text and CANCEL / ACCEPT at the bottom", "click": "ACCEPT", "fallback": (2624, 2012)},
-        {"name": "upload", "expect": "title 'Prepare to publish item' with 'Edit Change Notes' and 'Upload to Steam Workshop now!'", "click": "Upload to Steam Workshop now!", "fallback": (2560, 1272)},
-        {"name": "confirm", "expect": "a native dialog with 'Steam Workshop upload requested' / a WARNING line about a popup box, and Ok / Cancel buttons, over the 'Prepare to publish item' screen", "click": "Ok", "fallback": (2984, 1204), "wait_before": 1.0, "focus_any": True,
-         "native_dialog": "Steam Workshop upload requested", "dialog_key": "Return"},  # a native dialog, not the game window; Ok is its default button
-        # CLOSE appears only when the upload has finished (~6 s); the step polls for it, the log lines OCR as noise
-        # CLOSE has never been OCR'd (no deploy screenshot caught it), so its coordinates are allowed once Steam's
-        # own log says the upload finished: a blind CLOSE mid-upload is the one click that must never happen
-        {"name": "publishing log", "expect": "title 'Publishing item to Steam Workshop' at the top; the log lines under it OCR as noise", "click": "CLOSE", "wait_before": 6.0, "poll": 45,
-         "fallback": (2560, 2012), "fallback_when": lambda: verify_upload(log_start)[0]},
-        {"name": "quit", "expect": "the Project Zomboid main menu (CONTINUE / LOAD / WORKSHOP / MODS / OPTIONS / QUIT down the left)", "click": "QUIT", "fallback": (584, 1996)},
-        {"name": "quit confirm", "expect": "a 'Quit to desktop?' dialog with Yes and No", "click": "Yes", "fallback": (2504, 1112), "wait_before": 1.0},
-    ]
-
-
-WORKSHOP_LOG = Path.home() / ".local/share/Steam/logs/workshop_log.txt"
-
-
-def log_lines():
-    return WORKSHOP_LOG.read_text(errors="replace").splitlines() if WORKSHOP_LOG.exists() else []
-
-
-def verify_upload(since=0):
-    """Steam's own verdict: an `Upload finished ... : OK` line for the item written after line
-    `since` (the log length when the sequence started; an earlier upload's OK must not count)."""
-    tail = [l for l in log_lines()[since:] if WORKSHOP_ID in l][-3:]
-    ok = any("Upload finished" in l and ": OK" in l for l in tail)
-    return ok, "\n".join(tail) if tail else "no new workshop_log.txt lines for the item"
-
-
 def main(argv):
     if not argv:
         sys.exit(__doc__)
@@ -263,18 +189,12 @@ def main(argv):
             # replays of the 2026-09-21 deploy screens: right screens 0.55-0.9 (+-0.1 between runs), wrong screens 0.01-0.09
             "screen_threshold": 0.5, "target_threshold": 0.5}
     screen = None
-    screens = None
-    notes = None
     args = []
     i = 0
     while i < len(argv):
         a = argv[i]
         if a == "--screen":
             screen = argv[i + 1]; i += 2
-        elif a == "--screens":
-            screens = argv[i + 1].split(","); opts["dry_run"] = True; i += 2
-        elif a == "--notes":
-            notes = argv[i + 1]; i += 2
         elif a == "--pointer-scale":
             opts["scale"] = float(argv[i + 1]); i += 2
         elif a.startswith("--"):
@@ -290,47 +210,6 @@ def main(argv):
         ok, detail = run_step({"name": "step", "expect": args[1], "click": args[2] if len(args) > 2 else None}, opts, screen)
         print(detail)
         return 0 if ok else 2
-    if cmd == "workshop":
-        if not notes:
-            sys.exit("workshop needs --notes")
-        failed = []
-        dnd = None if screens is not None else quiet_notifications("Steam Workshop upload driven by OCR")  # noqa: F841 (held)
-        log_start = len(log_lines())
-        steps = workshop_steps(notes, log_start)
-        for n, step in enumerate(steps):
-            if screens is not None:  # replay of stored screens: every step runs, failures are tallied
-                screen = screens[n] if n < len(screens) else None
-                if screen is None:
-                    print(f"[{step['name']}] no stored screen for this step; skipped")
-                    continue
-            if step.get("wait_before") and not screen:
-                time.sleep(step["wait_before"])
-            # every failed check returns before its click, so looking again is safe: a popup or a
-            # slow redraw gets STEP_RECHECK seconds to clear before the sequence stops
-            deadline = time.time() + step.get("poll", STEP_RECHECK)
-            while True:
-                ok, detail = run_step(step, opts, screen)
-                print(detail)
-                if ok or time.time() >= deadline or screen:
-                    break
-                time.sleep(2)
-            if not ok:
-                if screens is not None:
-                    failed.append(step["name"]); continue
-                return 2
-            if step.get("then_type"):
-                time.sleep(0.3)
-                type_text(step["then_type"], opts)
-            time.sleep(0.8 if not screen else 0)
-        if screens is not None:
-            print(f"replay: {len(failed)} of {len(steps)} steps would have stopped the sequence" + (f": {', '.join(failed)}" if failed else ""))
-            return 2 if failed else 0
-        if opts["dry_run"]:
-            return 0
-        time.sleep(2)
-        ok, tail = verify_upload(log_start)
-        print(("upload OK:\n" if ok else "upload NOT confirmed in workshop_log.txt:\n") + tail)
-        return 0 if ok else 3
     sys.exit(__doc__)
 
 

@@ -8,7 +8,7 @@ description: Schedule any game run (bench, drive, preset, verify, multiplayer, W
 One queue for every session and every computer. You submit; a worker runs your job when the
 machine is free; the result lands in a file; you get an event when it ends or when your machine
 disconnects. Never launch `harness/run.sh`, `harness/mp/run.sh`, `harness/showcase-record.sh`,
-`harness/ui-drive.py workshop`, an ssh wrapper, or an encode (`ffmpeg`, `harness/encode-av1-hdr.sh`,
+an ssh wrapper, or an encode (`ffmpeg`, `harness/encode-av1-hdr.sh`,
 `harness/stitch-*.sh`) yourself while the queue exists: an encode running beside a benchmark corrupts
 its readings and the benchmark stretches the encode.
 

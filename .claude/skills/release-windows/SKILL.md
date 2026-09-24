@@ -85,7 +85,7 @@ numbered after the last image in `docs/workshop/images/` and listed in `docs/wor
    `[img]` URLs are raw GitHub links to `master`, so the page shows a broken image until the
    push is public.
 4. `scripts/workshop.sh --zip <the release zip>` re-stages `workshop.txt` from the description,
-   copy it to `docs/workshop/workshop.txt`, commit, then the click sequence below. Verify on
+   copy it to `docs/workshop/workshop.txt`, commit, then the upload below. Verify on
    the item page, not only the changelog: `curl -s
    https://steamcommunity.com/sharedfiles/filedetails/?id=3805285544 | grep -c 'New!'` must be
    1 and the page must contain the image's raw URL. Re-staging usually re-encodes
@@ -93,69 +93,45 @@ numbered after the last image in `docs/workshop/images/` and listed in `docs/wor
    "Page update ..."); when it does not (`No content change detected`), the page check is the
    only proof.
 
-**Queued form (preferred, 2026-09-21):** `harness/queue.sh submit workshop --wait --notes "<change notes>" -- --tag
-win-<rev>-<commit>` does the whole block below (Steam session check with one client restart, stale flag file,
-`workshop.sh --tag`, `steam -applaunch`, `ui-drive.py workshop`, `workshop_log.txt` + change-notes page verification,
-`workshop.txt` copied to `docs/workshop/`) after whatever runs are ahead in the queue, and writes the verification
-into the job's `result.txt`; a failure keeps `failure.png` and quits the game. Commit `docs/workshop/workshop.txt`
-afterwards. By hand:
-
-Preflight, in this order; stop at the first failure:
+**Upload = one Steamworks API call (2026-09-24), no game, no OCR:** `scripts/workshop-upload.py --notes "<change
+notes>"` loads the game's `natives/libsteam_api.so` with `SteamAppId=108600`, attaches to the running, logged-on
+Steam client (no password, no steamcmd) and does what the in-game uploader did with the same `workshop.txt` (title,
+description + `Workshop ID:` / `Mod ID:` lines, visibility, tags, `Contents/`), plus the animated `preview.gif`
+(≤ 1,000,000 bytes; else `preview.png`), then `SubmitItemUpdate` with the notes. Its own `SubmitItemUpdateResult_t` is the
+verdict (`upload OK: EResult 1`), with the `workshop_log.txt` lines printed beside it; a few seconds end to end.
+Nothing touches the game dir or the display, so it can run while a benchmark is going. `--check` does everything but
+the submit (Steam session, fields, paths). Stage and upload in one command:
 
 ```bash
-pgrep -fa '[P]rojectZomboid64'; pgrep -fa '[h]arness/run.sh'        # nothing running, no run.sh
-tail -3 ~/.local/share/Steam/logs/connection_log.txt                  # ends in "[Logged On", no "Session Replaced"
-ls ~/Zomboid/Lua/pzopt-harness.txt 2>/dev/null                        # must not exist (a stale flag file arms a run)
-grep -E '^(id|title)=' ~/Zomboid/Workshop/PZ_Optimization/workshop.txt   # id=3805285544, staged by workshop.sh
+tail -3 ~/.local/share/Steam/logs/connection_log.txt       # ends in "[Logged On", no "Session Replaced"
+scripts/workshop.sh --tag win-<rev>-<commit> --upload "<change notes>"
+cp ~/Zomboid/Workshop/PZ_Optimization/workshop.txt docs/workshop/workshop.txt   # then commit it
 ```
 
-If the connection log shows `Session Replaced` / `Logged Off`: `steam -shutdown`, wait for `pgrep -x steam`
-to clear, `setsid steam &`, wait ~20 s, re-check (the cached login reconnects on its own; if it asks
-for a password or Steam Guard, hand over to the maintainer).
+Queued form (a `result.txt` with the verification): `harness/queue.sh submit workshop --wait --notes "<change notes>"
+-- --tag win-<rev>-<commit>`: Steam session check with one client restart, `workshop.sh`, `workshop-upload.py`,
+`workshop_log.txt` + change-notes page, `workshop.txt` copied to `docs/workshop/`. It skips the game / run / locked
+screen preflight, since the upload uses neither.
 
-Launch and drive (announce it first; the game boots to the main menu, no save is loaded). xdotool
-coordinates are screen pixels / 1.25 on this KDE/XWayland desktop (5120x2160); a plain `xdotool click`
-only hovers the game's buttons, use mousedown / sleep 0.15 / mouseup. `/tmp/wsclick.sh X Y SLEEP` did
-exactly that on 2026-09-21; recreate it if gone. `harness/ui-drive.py workshop --notes "<change notes>"` runs the
-whole table below by itself (screenshot → OCR → TypeSafe judges the screen and picks the control → press; the
-table's coordinates are its fallbacks; it stops with exit 2 on any unconfirmed screen and verifies the upload from
-`workshop_log.txt`); first live run 2026-09-21 23:16 went 13/13 by OCR in 56 s; hide the overlay with F9 first if it covers the title line. By hand:
-take `spectacle -b -n -f -o` before every click and
-downscale it (`ffmpeg -vf scale=1280:-1`) to check the expected screen is up and has focus — the
-2026-09-21 retry clicked and typed into the desktop after the game lost focus.
+If the connection log shows `Session Replaced` / `Logged Off` (or the upload ends in EResult 2 / 3 / 21 / 34):
+`steam -shutdown`, wait for `pgrep -x steam` to clear, `setsid steam &`, wait ~20 s, re-check (the cached login
+reconnects on its own; if it asks for a password or Steam Guard, hand over to the maintainer).
 
-| step | screen (1280-wide screenshot) | xdotool |
-|---|---|---|
-| `setsid steam -applaunch 108600 &`, wait for `[P]rojectZomboid64` + ~25 s | main menu | |
-| WORKSHOP | (157, 467) | 502 1494 |
-| Create and update items | (640, 223) | 2048 714 |
-| the `PZ_Optimization` row (only entry; under the overlay graph) | (108, 74) | 346 238 |
-| NEXT (Choose item directory) | (1199, 507) | 3837 1622 |
-| NEXT (Edit item details: title/description/tags/Public from workshop.txt) | (1199, 507) | 3837 1622 |
-| Edit Change Notes (Prepare to publish, Workshop ID 3805285544 shown) | (640, 300) | 2048 960 |
-| click into the text box, `xdotool type --delay 12 "<notes>"`, ACCEPT | (656, 503) | 1600 600 / 2099 1610 |
-| Upload to Steam Workshop now! | (640, 318) | 2048 1018 |
-| native confirm dialog "WARNING: Steam Workshop upload requested!" → Ok | (746, 301) | 2387 963 |
-| CLOSE on the "Publishing item" log (returns to the main menu) | (640, 503) | 2048 1610 |
-| QUIT the game from the main menu | (146, 499) | 467 1597 |
-| "Quit to desktop?" → Yes (dialog over the TV, appeared 2026-09-21 22:18) | Yes at (626, 278) | 2006 890 |
+The game is only needed to *create* a new item (Main menu > Workshop > Create and update items; it writes `id=`
+into `workshop.txt`). The OCR-driven click sequence through the game's wizard (`ui-drive.py workshop`, 2026-09-21
+to 09-24) is gone; `git show c6c0ac1:harness/ui-drive.py` has it.
 
 Change notes: one paragraph, "Release <commit> (game revision <rev>). <what changed for users>.
 Everything else is unchanged from the previous upload (...)". The upload is ~6 s.
 
-Verify, never trust the in-game log (it prints "finished" after a failure too):
+Verify the page too:
 
 ```bash
 grep 3805285544 ~/.local/share/Steam/logs/workshop_log.txt | tail -3   # "Uploaded new content (ManifestID ...)" + "Upload finished ... : OK"
 ```
 and fetch `https://steamcommunity.com/sharedfiles/filedetails/changelog/3805285544`: the new entry
 must be the first one. A description-only update (same files) gets no changelog entry at all (`No content
-change detected`): verify it on the item page instead. `result=8` / `Invalid Parameter` = the description
-is over Steam's 8,000 characters (the game appends ~50 for Workshop ID / Mod ID): trim
-`docs/workshop/description.txt`, re-stage, CLOSE the log and start the click sequence again from WORKSHOP
-(the game re-reads workshop.txt on the way). `failed to update workshop item, result=2` in the game = `Failed to initialize
-build on server (No Connection)` in `workshop_log.txt` = the Steam session is dead (see preflight).
-
-Afterwards the animated `preview.gif` is gone (the in-game uploader sends `preview.png`); restoring it
-is the maintainer's `steamcmd +login <user> +workshop_build_item ~/Zomboid/Workshop/PZ_Optimization/item.vdf +quit`
-(`docs/workshop.md`, Images). `steamcmd` has no cached login here; never type the password.
+change detected`): verify it on the item page instead. EResult 8 (`InvalidParam`) = the description
+is over Steam's 8,000 characters (`workshop-upload.py` prints the length it sends, `Workshop ID` / `Mod ID` lines
+included): trim `docs/workshop/description.txt`, re-stage, upload again. EResult 2 with `Failed to initialize build
+on server (No Connection)` in `workshop_log.txt` = the Steam session is dead (restart Steam, above).

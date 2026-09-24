@@ -98,7 +98,7 @@ WS_DIR="$ZOMBOID_DIR/Workshop/PZ_Optimization"
 # anchored on argv[0]/argv[1]: the game binary itself and a shell executing one of the run scripts, never a
 # tool shell whose command text merely mentions them (a peer's `grep harness/run.sh` must not block the queue)
 GAME_PATTERN='^([^ ]*/)?ProjectZomboid64( |$)'
-BUSY_PATTERN='^(([^ ]*/)?(bash|sh|zsh) )?([^ ]*/)?harness/(mp/run|run|showcase-record)\.sh( |$)|^([^ ]*/)?python3? ([^ ]*/)?harness/ui-drive\.py workshop'
+BUSY_PATTERN='^(([^ ]*/)?(bash|sh|zsh) )?([^ ]*/)?harness/(mp/run|run|showcase-record)\.sh( |$)'
 ENCODE_PATTERN='^([^ ]*/)?(ffmpeg|gpu-screen-recorder|av1an|x265|SvtAv1EncApp)( |$)'   # an encode outside the queue skews a run, a run skews an encode's time
 MONITOR_PERIOD=${PZQ_MONITOR_PERIOD:-5}
 JEV_FALLBACK=${PZQ_JEV_FALLBACK:-block}   # Jev unreachable: block (retry every 30 s) or fifo (oldest pending job)
@@ -162,7 +162,7 @@ default_size() { # <job dir>: an estimate from the arguments alone
       else case "$mode" in drive) secs=90 ;; bench) secs=100 ;; *) secs=60 ;; esac; fi   # run.sh's route_seconds defaults; verify quits on its own
       echo $(( 40 + secs )) ;;                     # launch → world, quit, analyze.py + Jev
     mp) echo 240 ;;
-    workshop) echo 90 ;;
+    workshop) echo 20 ;;
     cmd) echo 60 ;;
     media) echo 120 ;;
     *) echo 120 ;;
@@ -644,6 +644,7 @@ foreign_encode() { pgrep -f "$ENCODE_PATTERN" >/dev/null; }
 
 wait_until_free() { # <job> [media]: nothing else uses this computer; 1 when the worker was asked to stop meanwhile
   local d="$1" kind="${2:-}" reason
+  [[ "$kind" == workshop ]] && { rm -f "$d/blocked"; return 0; }   # a Steam API call: no game, no display
   while :; do
     [[ -f "$Q/stop" ]] && return 1
     reason=""
@@ -918,25 +919,13 @@ changelog_first_entry() { # the public change-notes page; the newest entry comes
     | tr -d '\r' | sed -n '/changelog_header\|changelog_body\|detailBox/p' | sed 's/<[^>]*>//g;s/&quot;/"/g;s/&amp;/\&/g' | sed 's/^[[:space:]]*//' | grep -v '^$' | head -6
 }
 
-workshop_job() {
+workshop_job() { # stage, then the Steamworks API upload (scripts/workshop-upload.py): no game, no screen, seconds
   local d="$1" cwd="$2" notes="$3"; shift 3
-  local argv=("$@") rc i
-  if [[ -f "$ZOMBOID_DIR/Lua/pzopt-harness.txt" ]]; then   # nothing of ours runs: a leftover flag file would arm a run
-    echo "[$(ts)] removing the stale $ZOMBOID_DIR/Lua/pzopt-harness.txt" >> "$d/output.log"; rm -f "$ZOMBOID_DIR/Lua/pzopt-harness.txt"
-  fi
-  [[ -f "$HOME/.config/pzopt/typesafe.key" || -n "${TYPESAFE_API_KEY:-}" ]] || { echo "[$(ts)] ui-drive.py needs the TypeSafe key (~/.config/pzopt/typesafe.key)" >> "$d/output.log"; return 1; }
+  local argv=("$@")
+  [[ -x "$cwd/scripts/workshop-upload.py" ]] || { echo "[$(ts)] no scripts/workshop-upload.py in $cwd" >> "$d/output.log"; return 1; }
   launch "$d" "$cwd" scripts/workshop.sh "${argv[@]}" || return 1
   grep -q "^id=$WORKSHOP_ID" "$WS_DIR/workshop.txt" 2>/dev/null || { echo "[$(ts)] $WS_DIR/workshop.txt is not staged for item $WORKSHOP_ID" >> "$d/output.log"; return 1; }
-  echo "[$(ts)] steam -applaunch 108600" >> "$d/output.log"
-  setsid -f steam -applaunch 108600 >/dev/null 2>&1
-  for i in $(seq 1 60); do sleep 2; game_running && break; done
-  game_running || { echo "[$(ts)] the game did not start within 120 s" >> "$d/output.log"; return 1; }
-  sleep 25
-  launch "$d" "$cwd" python3 harness/ui-drive.py workshop --notes "$notes"; rc=$?
-  (( rc != 0 )) && spectacle -b -n -f -o "$d/failure.png" >/dev/null 2>&1 && echo "[$(ts)] screen at the failure: $d/failure.png" >> "$d/output.log"
-  for i in $(seq 1 30); do game_running || break; sleep 2; done
-  if game_running; then echo "[$(ts)] game still up; killing it (main menu, no save loaded)" >> "$d/output.log"; pkill -f "$GAME_PATTERN"; sleep 5; fi
-  (( rc == 0 )) || return $rc
+  launch "$d" "$cwd" python3 scripts/workshop-upload.py --dir "$WS_DIR" --notes "$notes" || return $?
   cp "$WS_DIR/workshop.txt" "$cwd/docs/workshop/workshop.txt" 2>/dev/null && echo "[$(ts)] copied workshop.txt to $cwd/docs/workshop/workshop.txt (uncommitted)" >> "$d/output.log"
   return 0
 }
@@ -946,13 +935,12 @@ result_workshop() {
   echo "--- workshop_log.txt ($WORKSHOP_ID)"; grep -a "$WORKSHOP_ID" "$STEAM_LOGS/workshop_log.txt" 2>/dev/null | tail -3 | cut -c1-200
   echo "--- change-notes page (newest entry)"; changelog_first_entry
   echo "--- staged"; grep -E '^(id|title)=' "$WS_DIR/workshop.txt" 2>/dev/null
-  echo "--- ui-drive.py steps (Jev: screen confirmed / error showing / control chosen)"
-  grep -a -E '^\[[a-z ]+\] screen |upload (OK|NOT)' "$d/output.log" | tail -16
+  echo "--- workshop-upload.py"
+  grep -a -E '^(steam:|item |description |submitted|  +[0-9.]+ s  |upload (OK|FAILED)|check OK|Steam |SteamAPI_|no result|the SubmitItemUpdate|note:)' "$d/output.log" | tail -16
   if (( rc == 0 )); then
-    echo "next: commit $cwd/docs/workshop/workshop.txt (\"workshop: stage the <commit> release\"); preview.gif is gone after an in-game upload (docs/workshop.md, Images)"
+    echo "next: commit $cwd/docs/workshop/workshop.txt (\"workshop: stage the <commit> release\")"
   else
-    echo "--- ui-drive.py (last lines)"; grep -v '^\[queue' "$d/output.log" | tail -12
-    [[ -f "$d/failure.png" ]] && echo "screen: $d/failure.png"
+    echo "--- output (last lines)"; grep -v '^\[queue' "$d/output.log" | tail -12
   fi
 }
 

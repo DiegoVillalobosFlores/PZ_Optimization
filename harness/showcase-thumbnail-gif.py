@@ -51,8 +51,8 @@ it at 268 px on the item page, 448 px behind the enlarge click and at native siz
 description embeds it from GitHub.
 
 The limit Steam enforces is 1,000,000 bytes, not 1 MiB: a 1,011,209-byte file was refused with
-"Limit exceeded". The in-game uploader only takes preview.png: a GIF preview goes up with steamcmd
-(docs/workshop.md).
+"Limit exceeded". The in-game uploader only takes preview.png; scripts/workshop-upload.py sends the GIF
+(docs/workshop.md, Images).
 """
 import os, subprocess, sys
 import numpy as np

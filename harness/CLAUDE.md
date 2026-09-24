@@ -179,7 +179,7 @@ code); `submit run --bench <name>|auto` expands the entry's args before the sess
 suggestion printed and stored (`suggested= fits= matches=` in the job file), never overridden; Jev's ranking sees
 `resources_tested` / `bench` too. `queue.sh suggest --intent ... [--resource ...] [-- args]` asks without submitting. The size is estimated at submit time: `--size <secs>`, else the median `ran` of the
 finished jobs with the same signature (kind + arguments minus `--label` / `--prop` / `--option` / `--env`),
-else a default from the arguments (run: 40 s + route / quit-after seconds; mp 240; workshop 90; cmd 60;
+else a default from the arguments (run: 40 s + route / quit-after seconds; mp 240; workshop 20; cmd 60;
 media 120). **Job start** = a desktop notification (label, session name, estimate, intent). **Overrun**: a job
 still running past its estimate (counted from the launch, not the preflight wait) sends its session an event
 `overrun: job ...` (wakes `watch --exit-on any|overrun`, exit 4) and a notification, again every further
@@ -205,8 +205,8 @@ running job whose connection drops fails with exit 70 and its session is told. S
 finished) or by `Monitor`ing `sessions/<sid>/events` / a job's `status` file; `events` prints the recent ones.
 
 **Preflight** on the desktop (waits with the reason in `blocked`): a game process, a `run.sh` /
-`mp/run.sh` / `showcase-record.sh` / `ui-drive.py workshop` outside the queue, a locked desktop; a
-`workshop` job also needs a really logged-on Steam client (one client restart when the session was replaced).
+`mp/run.sh` / `showcase-record.sh` outside the queue, a locked desktop; a `workshop` job skips those (it uses
+neither the game nor the display) and needs a really logged-on Steam client (one client restart when the session was replaced).
 `--install opt` = `pzopt.sh reinstall` from the job's checkout (build first), `stock` = uninstall, reinstalled
 from the same checkout once the desktop queue drains; `--prop enabled=false` needs no install. `keep` (the
 default) leaves the install alone, except that a `run` / `mp` job finding the game dir stock with no `--install
@@ -226,10 +226,10 @@ removing anything).
   parity_maintained= look_needed=` and `<run>/parity-judge.json`. `list` shows the verdict per job.
 - `mp`: the `harness/mp/run.sh` summary, `window.py <run>:27` and the same `judge.py` verdict; the dedicated
   server is stopped after the job unless the next pending desktop job is also `mp`.
-- `workshop`: `scripts/workshop.sh` staging → `steam -applaunch` → `ui-drive.py workshop --notes` (every
-  screen judged by Jev; the per-step lines are in the result) → `workshop_log.txt` tail + the change-notes
-  page's newest entry; `~/Zomboid/.../workshop.txt` copied to `docs/workshop/workshop.txt` (uncommitted). A
-  failure keeps `failure.png` and quits the game so the queue goes on.
+- `workshop`: `scripts/workshop.sh` staging → `scripts/workshop-upload.py --notes` (Steamworks API through the
+  game's `libsteam_api.so` and the running Steam client, no game, a few seconds; its `steam:` / `item` / progress /
+  `upload OK: EResult 1` lines are in the result, 2026-09-24) → `workshop_log.txt` tail + the change-notes page's
+  newest entry; `~/Zomboid/.../workshop.txt` copied to `docs/workshop/workshop.txt` (uncommitted).
 - `cmd`: exit code, output tail, the run dir if the command produced one under the label.
 - `media` (every encode / re-encode / stitch / GIF render, 2026-09-21 night): shares the desktop queue with
   the runs, so an encode never overlaps a benchmark on this machine; since 2026-09-22 it goes before every
@@ -327,7 +327,7 @@ same window with `harness/mp/window.py <run>:27 ...`; results in `docs/results.m
 | `flicker-triple.py <run>/recording.mp4 FRAME` | same | crops of one frame triple with the A-B-A pixels marked (frame-numbered; use `-ss` times for anything compared with flicker.py) |
 | `judge.py <run> --against <run|baseline.json>... --goal "<what the change should do>"` | analyze.py summaries | TypeSafe (Jev) verdict on the uplift: achieved / partial / no_change / regressed / invalid, goal met, tail regressed, setup matches the goal, hardware-headroom finding. Code computes the card, the deltas (compare.py noise floors, presented-frame ratios) and the objective's facts; Jev only reads that JSON. Exit 0 = achieved; writes `<run>/judge.json` |
 | `parity-judge.py <run|mp4 A> <run|mp4 B> [--seconds 20] [--context "..."] [--shots a.png b.png]` | two `--record` recordings of the same route | visual-parity verdict from Jev over numbers only (it never sees pixels): flicker transients, black share, luma pops, the blocky-lights hard-jump metric (> 40 at 30 fps) and solid jump blocks, HUD corners separated, window aligned at the end of on-screen activity (the quit). Known pairs: `bl-amb-stock` vs `bl-amb-before` → lighting_pops 0.93, vs `bl-amb-fix` → parity 0.79. Exit 0 = parity |
-| `ui-drive.py workshop --notes "..." [--dry-run]` / `step "<screen>" "<control>"` / `read` | live screen (spectacle) or `--screen png` | drives the game's menus: OCR (tesseract, inverted 2x; `~/.local/share/tessdata`) → one Jev request per step (screen up?, which line is the control, error showing?) → press-and-release at the line; focus check via xdotool; skill coordinates as fallback only on a confirmed screen. The Workshop deploy sequence lives in `workshop_steps`; first live deploy 2026-09-21 23:16: 13/13 steps by OCR, no fallback used, 56 s from main menu to desktop (the manual loop took 228 s), `Upload finished : OK`. Preflight stays the skill's (Steam session, peers); hide the in-game overlay with F9 when it covers the wizard title line. Exit 2 stops before any unconfirmed click; `--screens a.png,b.png,...` replays stored screens. Since 2026-09-24 `workshop` holds Plasma's Do Not Disturb (D-Bus `Notifications.Inhibit`) for the whole sequence and a step whose check fails is looked at again for 12 s before stopping: a notification over the native confirm dialog (the queue's own job-start toast, job 1776) put its lines into the OCR and failed the step |
+| `ui-drive.py step "<screen>" "<control>"` / `read` | live screen (spectacle) or `--screen png` | drives the game's menus: OCR (tesseract, inverted 2x; `~/.local/share/tessdata`) → one Jev request per step (screen up?, which line is the control, error showing?) → press-and-release at the line; focus check via xdotool. `read` is the pad checks' OCR. The Workshop deploy sequence it ran 2026-09-21 to 09-24 is gone: the upload is `scripts/workshop-upload.py` (Steamworks API, no game) since 2026-09-24 |
 | `pad.py serve <fifo>` / `pad-check.sh` (`OFFER=true|false`) | a queue `cmd` job | virtual Xbox 360 pad (python-evdev UInput, xpad layout: GLFW GUID `030000005e0400008e02000010010000`, mapped by `media/gamecontrollerdb.txt`) driven by lines on a fifo (`a b x y start back up down left right`, `hold <btn> <s>`); the game only lists a pad whose GUID is a `controller=` line of `options.ini` (the script appends it after a newline guard: the game leaves none after the last option; restored on exit) and activates it on the first A. `pad-check.sh` (2026-09-22) boots to the main menu with `devUpdateOffer`, walks the D-pad from the stock default focus (SOLO, 7 downs to the update item), A / B / scroll / quit through the pad, OCR verdicts, screenshots under `/tmp/pad-check-<OFFER>/`; the game quits through Quit → Yes. Never sends A while the update dialog is up (that is Update now); `pad-overlay-check.sh` (2026-09-23) checks the SHOW / HIDE PERFORMANCE OVERLAY item: main menu by pad (4 downs from SOLO) and mouse, pause menu (bench run, Escape) by mouse; its pause-menu pad step needs the pad to be player 1's controller (a keyboard player's pause menu takes no joypad focus) |
 | `typesafe_client.py` | | shared Jev client (`ask`, `noul`, `choice`, `fmt`); `typesafe-sdk` when importable (user-level pip on the desktop), plain urllib elsewhere; key from `$TYPESAFE_API_KEY` or `~/.config/pzopt/typesafe.key`, never in the repo; ~0.6-1 s per request; `python3 harness/typesafe_client.py` is the smoke test |
 | `readme-chart.py` | named runs | `docs/media/drive-results.svg` |

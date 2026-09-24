@@ -254,6 +254,7 @@ public class RenderThread {
       if (renderState != null) {
          pzopt.InputLag.acquired(); // pzopt: harness input-lag probe, the render thread took a game frame
          pzopt.LowLatency.frameBegin(); // pzopt: reflexSleep queue measurement, frames-in-flight count, input-latch busy
+         pzopt.Pacing.onAcquire(); // pzopt: the frame's step start (VRR pacing)
          waitTime = System.nanoTime() - startWaitTime;
          startWaitTime = 0L;
          cursorVisible = renderState.cursorVisible;
@@ -285,7 +286,9 @@ public class RenderThread {
          var10 = RenderThread.s_performance.displayUpdate.profile();
 
          try {
+            pzopt.Pacing.beforeSwap(); // pzopt: optional present pacing (presentPacing) + swap-call stamp
             Display.update(true);
+            pzopt.Pacing.afterSwap(); // pzopt: swap-return stamp, pzopt-pacing.out row
             checkControllers();
          } catch (Throwable var7) {
             if (var10 != null) {
@@ -428,6 +431,7 @@ public class RenderThread {
 
    public static void Ready() {
       long pzoptReadyNs = System.nanoTime(); // pzopt: harness input-lag probe, the hand-off with its ready-slot wait
+      pzopt.Pacing.onPush(); // pzopt: pair the pushed frame with its step start (VRR pacing)
       SpriteRenderer.instance.pushFrameDown();
       pzopt.InputLag.pushed(pzoptReadyNs); // pzopt: harness input-lag probe
       pzopt.LowLatency.pushed(pzoptReadyNs); // pzopt: reflexSleep, the frame's hand-off and its wait

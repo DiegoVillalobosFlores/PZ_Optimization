@@ -662,6 +662,7 @@ public final class GameWindow {
          long timeDiffNS = newTime - currentTime;
          currentTime = newTime;
          if (pzopt.FrameCap.uncappedNow()) { // stock limiter shape; pzopt.FrameCap picks the in-game or the menu cap (and makes "Uncapped" selectable and persistent)
+            pzopt.Pacing.stepStart(newTime, 0L); // pzopt: the game time this frame shows (VRR pacing, pzopt-pacing.out)
             frameStep();
             pzopt.FrameCap.onFrame(newTime); // pzopt: per-phase frame counter for the console (menu vs game)
             pzopt.FrameCap.stepDone(newTime); // pzopt: the step's own length, without the limiter wait (zoom bake plan)
@@ -669,10 +670,22 @@ public final class GameWindow {
             accumulator += timeDiffNS;
             long desiredDt = PZMath.secondsToNanos / pzopt.FrameCap.lockNow();
             if (accumulator >= desiredDt) {
+               long pzoptShift = pzopt.MacPresent.takeStepShiftNs(desiredDt); // pzopt: macOS present bridge phase control
+               if (pzoptShift > 0L) { // pzopt
+                  pzopt.Pacing.waitUntil(newTime + pzoptShift); // pzopt: start this step later, the frame was early for its panel slot
+                  newTime = System.nanoTime(); // pzopt
+                  currentTime = newTime; // pzopt: the wait is not frame time
+               } // pzopt
+               pzopt.Pacing.stepStart(newTime, desiredDt); // pzopt: the game time this frame shows (VRR pacing, pzopt-pacing.out)
                frameStep();
                pzopt.FrameCap.onFrame(newTime); // pzopt: per-phase frame counter for the console (menu vs game)
                pzopt.FrameCap.stepDone(newTime); // pzopt: the step's own length, without the limiter wait (zoom bake plan)
                accumulator %= desiredDt;
+               if (pzoptShift < 0L) { // pzopt: frames ran late for their slots: bring the next step forward
+                  accumulator -= pzoptShift; // pzopt
+               } // pzopt
+            } else if (pzopt.Config.LIMITER_SLEEP && pzopt.Overrides.enabled()) { // pzopt: sleep most of the wait instead of spinning a core
+               pzopt.Pacing.waitUntil(newTime + (desiredDt - accumulator) - 1_000_000L); // pzopt: the stock loop spins the last ms
             }
          }
 

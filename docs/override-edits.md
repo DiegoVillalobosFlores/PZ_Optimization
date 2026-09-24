@@ -3111,3 +3111,56 @@ GLX server with GLX_NV_delay_before_swap, which XWayland lacks). `Display` gaine
 cursor to window" the game draws its own cursor at the frame's mouse position, and the render thread moves that one
 sprite to the newest pointer position right before it replays the frame (RenderThread `lockStepRenderStep`, before
 `postRender`).
+
+## Variable refresh: G-SYNC / FreeSync / ProMotion (2026-09-24; `borderlessFullscreen`, `vrr`, `vrrCap`, `presentPacing`, `limiterSleep`, `macPresent`)
+
+Measurements and the reasoning behind every key: `docs/findings-vrr-2026-09-24.md`.
+
+### org.lwjglx.opengl.Display (`borderlessFullscreen`, `macPresent`)
+
+- KWin, Mutter and gamescope switch variable refresh on only for a window in the fullscreen state, and the stock
+  borderless window is a screen-sized undecorated window, so it never got VRR. When the borderless window covers the
+  monitor (`pzoptBorderlessFullscreenApplies`: overrides on, window size = the desktop mode, `borderlessFullscreen`
+  auto on Linux / true everywhere), `createWindow` and `setDisplayModeAndFullscreenInternal` make it a GLFW monitor
+  window at the desktop's own mode (`GLFW_REFRESH_RATE` = the monitor's rate, so no mode switch), with auto-iconify
+  off so it stays up when focus moves away. The mode switch also attaches / detaches the monitor when only the
+  borderless state changed (`hasMonitor != wantMonitor`). `isFullscreen()` stays false for that window
+  (`pzoptBorderlessFs`), so options.ini keeps `fullScreen=false` and Core's switch sees the borderless state.
+- `create`: starts `pzopt.Vrr` (DRM `VRR_ENABLED` poller).
+- `update` (the swap): `pzopt.MacPresent.present` first; when the Metal bridge presented the frame, glfwSwapBuffers
+  is skipped.
+- `setBorderlessWindow`: on macOS with the bridge (`macNativeFullscreen`), borderless asks `MacPresent` to enter a
+  native fullscreen Space on the next frame instead of removing the decoration.
+
+### zombie.GameWindow (frame limiter: `presentPacing`, `macPresent`, `limiterSleep`)
+
+- Each limiter step stamps its start and interval (`pzopt.Pacing.stepStart`, the game time the frame shows).
+- `macPresentPhase`: before a step, `MacPresent.takeStepShiftNs` may ask to start it later (the frame was early for its
+  panel slot: the limiter waits and the wait is not counted as frame time) or earlier (the accumulator is advanced).
+- `limiterSleep`: the limiter parks until ~1 ms before the step instead of spinning the whole wait (same pacing, one
+  core less busy); off by default.
+
+### zombie.core.opengl.RenderThread (`presentPacing`, `pacingLog`)
+
+`Pacing.onPush` pairs each pushed frame with its step start, `onAcquire` marks when the render thread takes it,
+`beforeSwap` holds the swap until step start + a high percentile of the recent step-to-ready lag (`presentPacing`
+cpu / gpu / gpufinish; auto = gpu while VRR is active) and stamps the swap call, `afterSwap` stamps its return and
+writes the `pzopt-pacing.out` row. No change to what is drawn.
+
+### pzopt.Vrr, pzopt.Pacing, pzopt.MacPresent, pzopt.FrameCap (not game classes)
+
+- `Vrr`: libdrm through java.lang.foreign on a daemon thread (2 Hz), reads the CRTC `VRR_ENABLED` property of the
+  output the window is on (no DRM master needed). `vrr=auto` acts while it is 1, `on` always, `off` never. The overlay
+  line shows the state.
+- `FrameCap`: while VRR is active and the player's cap is uncapped or above the range, the cap is refresh -
+  refresh^2/3600 (`vrrCap`, 157 at 165 Hz; `vrrCapFps` overrides); a forced `uncappedFps=true` run stays uncapped.
+  With the Mac bridge the cap snaps to a rate the panel shows exactly (4.17 ms steps in fullscreen / borderless /
+  a native fullscreen Space, the refresh grid in a window). `frameCapFps` is a run key that locks game and menus.
+- `Pacing`: GPU completion per frame from a GL_TIMESTAMP query read back a few frames later (never blocks), mapped
+  onto System.nanoTime; the hold is capped at one cap interval per frame (throughput guard).
+- `MacPresent` (Apple silicon, `macPresent`, off by default): the GL back buffer is blitted upside down (GL row 0 is the
+  bottom, Metal's the top) into one of three IOSurface-backed textures, upscaled with `MPSImageBilinearScale` into a
+  native-size CAMetalLayer drawable (a scale-1 layer is resampled by the window server and loses the exact timing) and
+  presented with `afterMinimumDuration` = the cap interval; `presentedTime` goes back into `pzopt-pacing.out`. Any
+  failure removes the layer and falls back to glfwSwapBuffers. Rig `devMacPresentCheck`: compares IOSurface rows
+  with the GL back buffer and logs `mac present check: frame N upright|UPSIDE DOWN|MISMATCH`.

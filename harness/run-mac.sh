@@ -6,7 +6,7 @@
 #                                              <app>/Contents/Java; what was written goes to pzopt-installed.txt
 #   harness/run-mac.sh uninstall               remove exactly the files install wrote
 #   harness/run-mac.sh status                  installed or not, revision, file count
-#   harness/run-mac.sh --label <name> [--mode drive|bench|verify] [--flag k=v]... [--prop k=v]... [--option k=v]...
+#   harness/run-mac.sh --label <name> [--mode drive|bench|verify] [--flag k=v]... [--prop k=v]... [--option k=v]... [--env K=V]...
 #                      [--quit-after secs] [--timeout secs] [--vmarg ARG]... [--dashboard]
 #
 # What a run does (same contract as run.sh / run-win.ps1):
@@ -97,7 +97,7 @@ case "${1:-}" in
 esac
 
 # --- run ---------------------------------------------------------------------------------------
-label=""; mode="drive"; quit_after=""; timeout=900; extra_flags=(); props=(); game_options=(); vmargs=(); dashboard=0
+label=""; mode="drive"; quit_after=""; timeout=900; extra_flags=(); props=(); game_options=(); vmargs=(); envs=(); dashboard=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --label) label="$2"; shift 2 ;;
@@ -108,6 +108,7 @@ while [[ $# -gt 0 ]]; do
     --prop) props+=("$2"); shift 2 ;;          # key=value for Contents/Java/pzopt.properties (see pzopt.Config)
     --option) game_options+=("$2"); shift 2 ;; # key=value written into ~/Zomboid/options.ini for the run
     --vmarg) vmargs+=("$2"); shift 2 ;;        # extra JVM option
+    --env) envs+=("$2"); shift 2 ;;            # KEY=VALUE in the game's environment (e.g. MTL_HUD_ENABLED=1)
     --dashboard) dashboard=1; shift ;;         # keep the PZDashboard mod (default: dropped from the bench save)
     *) die "unknown option: $1" ;;
   esac
@@ -197,7 +198,7 @@ launch_epoch=$(date +%s)
 echo "launching $mode run ($(basename "$out")); jvm: ${jvm_opts[*]} ${vmargs[*]:-}"
 (
   cd "$PZ_DIR"
-  exec caffeinate -dis "$JAVA" "${jvm_opts[@]}" ${vmargs[@]+"${vmargs[@]}"} -Djava.library.path=. \
+  exec env ${envs[@]+"${envs[@]}"} caffeinate -dis "$JAVA" "${jvm_opts[@]}" ${vmargs[@]+"${vmargs[@]}"} -Djava.library.path=. \
     -cp ".:projectzomboid.jar" zombie.gameStates.MainScreenState </dev/null >"$out/launcher-stdout.txt" 2>&1
 ) &
 caff_pid=$!

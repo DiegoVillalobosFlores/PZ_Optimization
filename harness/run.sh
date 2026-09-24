@@ -355,6 +355,8 @@ restore() {
   # Defined (with every helper it calls) before the trap is armed, so an early exit restores everything.
   set +e
   [[ -n "${sysmon_pid:-}" ]] && kill "$sysmon_pid" 2>/dev/null
+  [[ -n "${present_pid:-}" ]] && kill "$present_pid" 2>/dev/null
+  [[ -n "${vrrprobe_pid:-}" ]] && kill "$vrrprobe_pid" 2>/dev/null
   [[ -n "${rec_pid:-}" ]] && kill -INT "$rec_pid" 2>/dev/null
   restore_harness_flag
   restore_mangohud
@@ -539,6 +541,16 @@ while :; do
   # machine-level CPU/GPU utilization for the whole run (harness/sysmon.sh), windowed by the analyzer
   "$REPO/harness/sysmon.sh" "$out/sysmon.csv" 0.5 "$GAME_PATTERN" &
   sysmon_pid=$!
+  # presentation probes (Linux): when the display really flipped each frame (X Present, harness/presentprobe.c)
+  # and whether the compositor had variable refresh on (DRM VRR_ENABLED, harness/vrrprobe.py); harness/pacing.py reads both
+  present_pid=""; vrrprobe_pid=""
+  if [[ "$(uname)" == Linux && -n "${DISPLAY:-}" ]]; then
+    if [[ ! -x "$REPO/harness/presentprobe" || "$REPO/harness/presentprobe.c" -nt "$REPO/harness/presentprobe" ]]; then
+      cc -O2 -o "$REPO/harness/presentprobe" "$REPO/harness/presentprobe.c" -lxcb -lxcb-present 2>/dev/null || true
+    fi
+    [[ -x "$REPO/harness/presentprobe" ]] && { "$REPO/harness/presentprobe" --out "$out/present.txt" & present_pid=$!; }
+    python3 "$REPO/harness/vrrprobe.py" --interval 0.25 --out "$out/vrr.txt" 2>/dev/null & vrrprobe_pid=$!
+  fi
   schedmon_pid=""
   if [[ -n "$schedmon" ]]; then python3 "$REPO/harness/schedmon.py" "$out/schedmon.txt" "$schedmon" & schedmon_pid=$!; fi
   rec_pid=""
@@ -723,6 +735,8 @@ PYC
   [[ -n "$shot_pid" ]] && { kill "$shot_pid" 2>/dev/null || true; wait "$shot_pid" 2>/dev/null || true; }
   [[ -n "$pad_feed_pid" ]] && { kill "$pad_feed_pid" 2>/dev/null || true; wait "$pad_feed_pid" 2>/dev/null || true; pad_feed_pid=""; }
   kill "$sysmon_pid" 2>/dev/null; wait "$sysmon_pid" 2>/dev/null || true
+  [[ -n "$present_pid" ]] && { kill "$present_pid" 2>/dev/null || true; wait "$present_pid" 2>/dev/null || true; }
+  [[ -n "$vrrprobe_pid" ]] && { kill "$vrrprobe_pid" 2>/dev/null || true; wait "$vrrprobe_pid" 2>/dev/null || true; }
   [[ -n "$schedmon_pid" ]] && { kill "$schedmon_pid" 2>/dev/null || true; wait "$schedmon_pid" 2>/dev/null || true; }
   if [[ -n "$rec_pid" ]]; then kill -INT "$rec_pid" 2>/dev/null; wait "$rec_pid" 2>/dev/null || true; echo "recording: $out/recording.mp4 ($(du -h "$out/recording.mp4" 2>/dev/null | cut -f1))"; fi
   sleep 2

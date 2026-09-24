@@ -97,6 +97,31 @@ public final class FrameCap {
 
    /** Main thread only: is the current state's cap "uncapped"? */
    public static boolean uncappedNow() {
+      if (Config.FRAME_CAP_FPS > 0 && Overrides.enabled()) {
+         return false;
+      }
+      if (vrrCapNow() > 0 || MacPresent.active()) {
+         return false;
+      }
+      return playerUncappedNow();
+   }
+
+   /**
+    * While variable refresh is active (pzopt.Vrr), the cap that keeps frames inside its range, when the player's cap is
+    * above it or uncapped; 0 otherwise. A forced uncappedFps=true run is left uncapped.
+    */
+   static int vrrCapNow() {
+      if (!Config.VRR_CAP || !Vrr.active() || "true".equalsIgnoreCase(Config.UNCAPPED_FPS)) {
+         return 0;
+      }
+      int cap = Vrr.cap();
+      if (cap <= 0) {
+         return 0;
+      }
+      return playerUncappedNow() || playerLockNow() > cap ? cap : 0;
+   }
+
+   private static boolean playerUncappedNow() {
       if (!Overrides.enabled() || menuIndex == MENU_SAME || !menuNow()) {
          return PerformanceSettings.instance.isFramerateUncapped();
       }
@@ -105,6 +130,23 @@ public final class FrameCap {
 
    /** Main thread only: the fps lock for the current state; only meaningful when not uncapped. */
    public static int lockNow() {
+      if (Config.FRAME_CAP_FPS > 0 && Overrides.enabled()) {
+         return Config.FRAME_CAP_FPS;
+      }
+      if (MacPresent.active()) {
+         // macOS bridge: a rate the panel shows exactly (uncapped = its maximum), finer steps in fullscreen / borderless
+         int base = playerUncappedNow() ? (int)Math.round(MacPresent.maxHz()) : playerLockNow();
+         return MacPresent.snapFps(base > 0 ? base : 120, macAdaptive());
+      }
+      int vrr = vrrCapNow();
+      return vrr > 0 ? vrr : playerLockNow();
+   }
+
+   private static boolean macAdaptive() {
+      return org.lwjglx.opengl.Display.isFullscreen() || org.lwjglx.opengl.Display.pzoptIsBorderlessFullscreen() || MacPresent.nativeFullscreenNow();
+   }
+
+   private static int playerLockNow() {
       if (!Overrides.enabled() || menuIndex == MENU_SAME || !menuNow()) {
          return Math.max(1, PerformanceSettings.getLockFPS());
       }

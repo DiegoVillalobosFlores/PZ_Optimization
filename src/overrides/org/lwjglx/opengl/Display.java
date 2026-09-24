@@ -171,6 +171,13 @@ public class Display {
                GLFW.glfwWindowHint(GLFW.GLFW_DECORATED, 0); // pzopt: see above
                isBorderlessWindow = true; // pzopt: calcWindowPos places it at the monitor origin, Core's check sees it done
             }
+            if (pzoptBorderlessFullscreenApplies(w, h)) { // pzopt: borderless = a fullscreen window at the desktop mode (VRR), see pzoptBorderlessFs
+               isBorderlessWindow = true; // pzopt: Core's switch finds the borderless state already in place
+               pzoptBorderlessFs = true; // pzopt
+               GLFW.glfwWindowHint(GLFW.GLFW_AUTO_ICONIFY, 0); // pzopt: stays on screen when it loses focus, like a borderless window
+               GLFW.glfwWindowHint(GLFW.GLFW_REFRESH_RATE, monitorRefreshRate); // pzopt: the desktop's rate: no video mode switch
+               pzoptMonitor = monitor; // pzopt
+            }
          }
          if (pzoptFullscreen) {
             GLFW.glfwWindowHint(GLFW.GLFW_REFRESH_RATE, monitorRefreshRate); // the desktop's rate: no video mode switch
@@ -225,6 +232,7 @@ public class Display {
       displayWidth = latestWidth = _width[0];
       displayHeight = latestHeight = _height[0];
       displayCreated = true;
+      pzopt.Vrr.start(); // pzopt: variable refresh state (Linux DRM VRR_ENABLED poller)
       if (Core.isImGui()) {
          imGuiGl3 = new ImGuiImplGl3();
          imGuiGlfw = new ImGuiImplGlfw();
@@ -358,6 +366,9 @@ public class Display {
       if (pzoptHudSwap()) {
          return;
       }
+      if (pzopt.MacPresent.present(Display.Window.handle)) { // pzopt: macOS Metal present bridge (ProMotion / Adaptive-Sync timing)
+         return; // pzopt
+      }
       GLFW.glfwSwapBuffers(Display.Window.handle);
    }
 
@@ -459,11 +470,41 @@ public class Display {
    }
 
    public static boolean isFullscreen() {
-      return !isCreated() ? Core.getInstance().isFullScreen() : GLFW.glfwGetWindowMonitor(Display.Window.handle) != 0L;
+      return !isCreated() ? Core.getInstance().isFullScreen() : GLFW.glfwGetWindowMonitor(Display.Window.handle) != 0L && !pzoptBorderlessFs; // pzopt: a borderless monitor window is not the fullscreen option
+   }
+
+   /**
+    * pzopt: the window is a borderless one that GLFW holds as a monitor window at the desktop's own video mode. Only a
+    * window the compositor knows as fullscreen gets variable refresh: KWin's "automatic" VRR policy, Mutter and gamescope
+    * key on the fullscreen state, which a desktop-sized undecorated window does not have (desktop, KWin 6.7, 2026-09-24:
+    * VRR_ENABLED stayed 0 through a borderless run and was 1 for the whole fullScreen=true one). A GLFW monitor window at
+    * the current mode sets _NET_WM_STATE_FULLSCREEN (X11) / xdg_toplevel.set_fullscreen (Wayland) without a mode switch.
+    * Auto-iconify is off, so it stays on screen when focus moves away like a borderless window does. To Core it stays the
+    * borderless option: isFullscreen() is false, so options.ini keeps fullScreen=false.
+    */
+   private static boolean pzoptBorderlessFs;
+
+   private static boolean pzoptBorderlessFullscreenApplies(int w, int h) {
+      if (!pzopt.Overrides.enabled() || desktopDisplayMode == null || w != desktopDisplayMode.getWidth() || h != desktopDisplayMode.getHeight()) {
+         return false;
+      }
+      String mode = pzopt.Config.BORDERLESS_FULLSCREEN;
+      int platform = GLFW.glfwGetPlatform();
+      boolean linux = platform == GLFW.GLFW_PLATFORM_X11 || platform == GLFW.GLFW_PLATFORM_WAYLAND;
+      return "true".equalsIgnoreCase(mode) || "auto".equalsIgnoreCase(mode) && linux;
+   }
+
+   /** pzopt: the window is a borderless fullscreen (monitor) window; for the overlay / Vrr status. */
+   public static boolean pzoptIsBorderlessFullscreen() {
+      return pzoptBorderlessFs;
    }
 
    public static void setBorderlessWindow(boolean borderless) {
       isBorderlessWindow = borderless;
+      if (borderless && isCreated() && pzopt.MacPresent.nativeFullscreenForBorderless()) { // pzopt: macOS: a native fullscreen Space (Adaptive-Sync / ProMotion timing), see MacPresent
+         pzopt.MacPresent.requestNativeFullscreen(); // pzopt: done on the next frame, after Core's mode switch
+         return; // pzopt: keeps its decoration, hidden in fullscreen
+      } // pzopt
       if (isCreated()) {
          GLFW.glfwSetWindowAttrib(getWindow(), 131077, borderless ? 0 : 1);
       }
@@ -490,17 +531,22 @@ public class Display {
       DisplayMode oldMode = gameWindowMode;
       gameWindowMode = mode;
       Core.setFullScreen(fullscreen);
-      if (isCreated() && (wasFullscreen != fullscreen || !gameWindowMode.equals(oldMode) || !fullscreen && pzoptBorderlessMisplaced())) { // pzopt: also re-place a borderless window the decoration removal left off the monitor origin
+      boolean borderlessFs = !fullscreen && isBorderlessWindow() && pzoptBorderlessFullscreenApplies(mode.getWidth(), mode.getHeight()); // pzopt: see pzoptBorderlessFs
+      boolean wantMonitor = fullscreen || borderlessFs; // pzopt
+      boolean hasMonitor = isCreated() && GLFW.glfwGetWindowMonitor(Display.Window.handle) != 0L; // pzopt
+      if (isCreated() && (wasFullscreen != fullscreen || hasMonitor != wantMonitor || !gameWindowMode.equals(oldMode) || !fullscreen && !borderlessFs && pzoptBorderlessMisplaced())) { // pzopt: also attach / detach a borderless fullscreen window, and re-place a borderless window the decoration removal left off the monitor origin
          GLFW.glfwHideWindow(Display.Window.handle);
          calcWindowPos(fullscreen || isBorderlessWindow());
+         pzoptBorderlessFs = borderlessFs; // pzopt
+         GLFW.glfwSetWindowAttrib(Display.Window.handle, GLFW.GLFW_AUTO_ICONIFY, borderlessFs ? 0 : 1); // pzopt: a borderless window stays up without focus
          GLFW.glfwSetWindowMonitor(
             Display.Window.handle,
-            fullscreen ? monitor : 0L,
+            wantMonitor ? monitor : 0L, // pzopt: borderless fullscreen is a monitor window too
             displayX,
             displayY,
             gameWindowMode.getWidth(),
             gameWindowMode.getHeight(),
-            fullscreen ? getTargetFrequency(mode) : -1
+            fullscreen ? getTargetFrequency(mode) : borderlessFs ? desktopDisplayMode.getFrequency() : -1 // pzopt: borderless keeps the desktop mode
          );
          if (GLFW.glfwGetPlatform() != 393218 && GLFW.glfwGetPlatform() != 393219) {
             GLFW.glfwSetWindowIcon(Display.Window.handle, displayIcons);

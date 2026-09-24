@@ -626,7 +626,7 @@ public final class Overlay {
       fpsText = String.format(java.util.Locale.ROOT, "%3.0f fps", fps);
       fpsColor = fpsColor(fps, cap);
       String[] all = {
-            String.format(java.util.Locale.ROOT, "   %5.2f ms   cap %s", mean, cap > 0 ? cap + " fps" : "none"),
+            String.format(java.util.Locale.ROOT, "   %5.2f ms   cap %s%s", mean, cap > 0 ? cap + " fps" : "none", Vrr.overlayText()),
             String.format(java.util.Locale.ROOT, "p50 %.2f   p99 %.2f   p99.9 %.2f   max %.1f ms   (%d frames / %d s)", p50, p99, p999, max, count, (int)(WINDOW_NS / 1_000_000_000L)),
             String.format(java.util.Locale.ROOT, "1%%-low %.0f fps   jitter %.2f ms   spikes >2x median %d", p99 > 0 ? 1000f / p99 : 0f, count > 1 ? jitter / (count - 1) : 0f, spikes),
             String.format(java.util.Locale.ROOT, "GPU %s   game thread %.0f %%   render thread %.0f %%   process %.0f %% of %d cores   machine %.0f %%   heap %.1f/%.1f GB",

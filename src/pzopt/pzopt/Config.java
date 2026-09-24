@@ -513,6 +513,43 @@ public final class Config {
    public static final boolean ANIM_CLIP_CACHE = bool("animClipCache", true);
    /** auto = honour options.ini (frameRate / uncappedFPS); true / false force the frame cap off / on for a run. */
    public static final String UNCAPPED_FPS = string("uncappedFps", "auto");
+   /** Run key: > 0 locks game and menus at exactly this fps for this launch, nothing persisted (A/B runs; the uncappedFps restore dance can leave another cap). */
+   public static final int FRAME_CAP_FPS = integer("frameCapFps", 0);
+   /** Variable refresh (pzopt.Pacing, Display): per-frame step / swap timestamps to Zomboid/pzopt-pacing.out (harness/pacing.py). */
+   public static final boolean PACING_LOG = bool("pacingLog", INSTRUMENT);
+   /** Variable refresh (pzopt.Vrr): auto = act while the kernel reports VRR on (Linux), on = always, off = never. */
+   public static final String VRR = string("vrr", "auto");
+   /** While VRR is active, keep the frame cap inside its range (refresh - refresh^2/3600) when the player's cap is higher or uncapped. */
+   public static final boolean VRR_CAP = bool("vrrCap", true);
+   /** > 0: the VRR cap in fps instead of the formula. */
+   public static final int VRR_CAP_FPS = integer("vrrCapFps", 0);
+   /** macOS on Apple silicon: present through Metal (pzopt.MacPresent) for ProMotion / Adaptive-Sync timing; on | off (auto = on). */
+   public static final String MAC_PRESENT = string("macPresent", "off");
+   /** macPresent: glFinish instead of glFlush before Metal reads the frame (only if the flush hand-off ever shows torn frames). */
+   public static final boolean MAC_PRESENT_FINISH = bool("macPresentFinish", false);
+   /** macPresent: CAMetalLayer drawables in flight (2 = one shown + one queued; 3 queues ~3 frames of latency at the panel's rate). */
+   public static final int MAC_PRESENT_DRAWABLES = integer("macPresentDrawables", 2);
+   /** macPresent: shift the game's frame starts so frames are ready just before their panel slot (latency; pzopt.MacPresent.steer). */
+   public static final boolean MAC_PRESENT_PHASE = bool("macPresentPhase", true);
+   /** macPresent + the borderless option: a native macOS fullscreen Space instead of a screen-sized borderless window. */
+   public static final boolean MAC_NATIVE_FULLSCREEN = bool("macNativeFullscreen", true);
+   /** Rig: every 1000th bridged frame (5 times), compare the IOSurface rows with the GL back buffer and log whether the picture reaches Metal upright. */
+   public static final boolean DEV_MAC_PRESENT_CHECK = bool("devMacPresentCheck", false);
+   /**
+    * Hold each swap until step start + a high percentile of the recent step-to-ready times, so present gaps equal game-time
+    * steps (capped only). off | cpu | gpu | gpufinish | auto (auto = gpu while VRR is active, else off); see pzopt.Pacing.
+    */
+   public static final String PRESENT_PACING = string("presentPacing", "auto");
+   public static final int PRESENT_PACING_PCT = Math.max(50, Math.min(100, integer("presentPacingPct", 90)));
+   public static final int PRESENT_PACING_MARGIN_US = Math.max(0, integer("presentPacingMarginUs", 200));
+   /**
+    * A borderless window covering the monitor is created as a GLFW monitor window at the desktop's own mode (no mode switch,
+    * no auto-iconify), so the compositor sees a fullscreen window: KWin / Mutter / gamescope only switch variable refresh on
+    * for fullscreen windows. auto = Linux (X11 / XWayland / Wayland), true = every platform, false = stock window.
+    */
+   public static final String BORDERLESS_FULLSCREEN = string("borderlessFullscreen", "auto");
+   /** The frame limiter sleeps to ~1 ms before the next step instead of spinning the game thread through the whole wait. */
+   public static final boolean LIMITER_SLEEP = bool("limiterSleep", false);
    public static final boolean PACK_INDEX = bool("packIndex", true);
    public static final boolean ITEM_PARAM_SWITCH = bool("itemParamSwitch", true);
    public static final boolean DUMP_ITEMS = bool("dumpItems", false);

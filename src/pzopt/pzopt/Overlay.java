@@ -23,6 +23,7 @@ import zombie.core.textures.TextureDraw;
 import zombie.core.textures.TextureFBO;
 import zombie.core.textures.IGLFramebufferObject;
 import zombie.input.GameKeyboard;
+import zombie.input.JoypadManager;
 import zombie.ui.TextManager;
 import zombie.ui.UIFont;
 
@@ -57,7 +58,7 @@ import zombie.ui.UIFont;
  * at all; without it the toggle key shows a notice pointing at the tick box and the restart.
  * {@code overlay=true} shows it from boot (and implies sampling); the key bound to "Toggle performance overlay"
  * (Options > Key Bindings, default F9; {@code overlayKey=<lwjgl code>} is the fallback when the
- * binding is missing) toggles it any time. {@code overlayLog=true}, or any harness run, writes
+ * binding is missing), or L3 + R3 on a controller (both stick buttons, pressed together), toggles it any time. {@code overlayLog=true}, or any harness run, writes
  * {@code Zomboid/pzopt-overlay.out}: one CSV row per presented frame in MangoHud's column names
  * (fps, frametime in ms, cpu_load, gpu_load, plus game_load, render_load, gpu_ms, elapsed in ns,
  * epoch_ms), which harness/analyze.py reads like a MangoHud log. {@code overlayFont} picks the
@@ -482,9 +483,28 @@ public final class Overlay {
       }
    }
 
+   /** Whether some controller held both stick buttons last frame: the chord toggles once per press, not every frame. */
+   private static boolean padChordWasDown;
+
+   /** L3 + R3 held together on one enabled controller (the pad's own stick-button mapping, JoypadManager's poll of this frame). */
+   private static boolean padChordDown() {
+      for (JoypadManager.Joypad pad : JoypadManager.instance.joypadsController) {
+         if (pad != null && !pad.isDisabled() && pad.isL3Pressed() && pad.isR3Pressed()) {
+            return true;
+         }
+      }
+      return false;
+   }
+
    private static boolean toggled() {
       try {
          if (GameKeyboard.isKeyPressed(BIND)) {
+            return true;
+         }
+         boolean chord = padChordDown();
+         boolean chordPressed = chord && !padChordWasDown;
+         padChordWasDown = chord;
+         if (chordPressed) {
             return true;
          }
          Core core = Core.getInstance();

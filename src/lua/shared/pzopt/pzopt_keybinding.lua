@@ -2,7 +2,7 @@
 -- Appended to the stock keyBinding table right after "Display FPS" so it lists next to it in
 -- Options > Key Bindings. Default F9 (unused by stock). Java polls GameKeyboard.isKeyPressed by
 -- this name; when the binding is missing (loose Lua not installed) it falls back to
--- pzopt.Config overlayKey (default 67 = F9 too).
+-- pzopt.Config overlayKey (default 67 = F9 too). On a controller L3 + R3 toggles it (pzopt.Overlay, not a binding).
 -- Installed by scripts/pzopt.sh into <game dir>/media/lua/shared/pzopt/.
 if keyBinding then
     local bind = {}

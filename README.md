@@ -29,7 +29,7 @@ machine you play on.
 > GL call and serialises the render thread: with it on the optimized game stops at about
 > 160 fps and the headroom these patches recover is hidden (164 vs 237 fps on the 120 km/h
 > route, `docs/results.md` 2026-09-19). Use the build's own overlay
-> ([F9](#performance-overlay-f9)), MangoHud or RivaTuner instead.
+> ([F9 / L3 + R3](#performance-overlay-f9--l3--r3)), MangoHud or RivaTuner instead.
 
 ---
 
@@ -61,7 +61,7 @@ machine you play on.
    - [Options > Optimizations](#options--optimizations)
    - [Frame cap: Uncapped, 300 to 500 fps, menu framerate](#frame-cap-uncapped-300-to-500-fps-menu-framerate)
    - [Upscaling: FSR 1.0 and DLSS](#upscaling-fsr-10-and-dlss)
-   - [Performance overlay (F9)](#performance-overlay-f9)
+   - [Performance overlay (F9 / L3 + R3)](#performance-overlay-f9--l3--r3)
    - [`pzopt.properties` and the key table](#pzoptproperties-and-the-key-table)
 5. [How the optimizations work](#how-the-optimizations-work)
    - [Chunk streaming](#1-chunk-streaming)
@@ -650,7 +650,7 @@ and the DLSS preset, then restart the game — the tab shows the stock "restart 
 that cannot run says why and continues as `fsr1` (`upscaler: dlss unavailable (...)`). The same
 keys work as `-Dpzopt.upscaler=fsr1` or in `pzopt.properties`.
 
-**When it helps.** Whenever the GPU is the limit: the F9 overlay's verdict line reads `GPU bound`
+**When it helps.** Whenever the GPU is the limit: the overlay's (F9 / L3 + R3) verdict line reads `GPU bound`
 (GPU busy ≥ 90 %) and the frame rate is under the cap. That is the usual state at 4K and 5K, on
 laptops and integrated GPUs, in heavy fog and thunderstorms, and in downtown Louisville, where the
 world pass is most of the GPU's frame; the gain is roughly the pixel ratio of that pass (this 4090
@@ -746,12 +746,13 @@ shifts colour; the DLSS pair on the spinning bench route (zombies, spinning play
 0.98x the control. The GPU stays saturated at 50 %: the chunk bakes and the composite are not
 screen-pixel work, so the gain is the world pass's share. Plan and seam: `docs/plan-upscalers.md`.
 
-### Performance overlay (F9)
+### Performance overlay (F9 / L3 + R3)
 
 Tick **"Sample frame times and utilization"** in **Options > Profiler** (a tab of its own right
 after Optimizations, with the same preview panel and search; **Reset to defaults** puts its
-settings back), restart, then press **F9** (key binding "Toggle performance overlay", after "Display FPS").
-Sampling is off by default (F9 then only shows a notice pointing at the tick box): it is the
+settings back), restart, then press **F9** (key binding "Toggle performance overlay", after "Display FPS") or, on a
+controller, **L3 + R3** (both sticks pressed together).
+Sampling is off by default (F9 / L3 + R3 then only shows a notice pointing at the tick box): it is the
 build's own profiler, drawn by the game itself, so it reads the same on Windows and Linux,
 in the menus, on the loading screen and in the world, with no MangoHud or RivaTuner.
 
@@ -890,7 +891,7 @@ Full list with comments: [`src/pzopt/pzopt/Config.java`](src/pzopt/pzopt/Config.
 | `overlaySampling` | `false` | measure at all (frame ring, GL timer queries, a sampler thread) |
 | `overlay` / `overlayLog` | `false` / `false` | show the overlay from boot; write `pzopt-overlay.out` (both imply sampling) |
 | `overlayCorner` / `overlayFont` / `overlayKey` | `tl` / `auto` / F9 | placement, font and key binding; `overlayFps*` the colour thresholds |
-| `overlayStats` / `overlayTree` / `overlayVerdict` / `overlayGraph` / `overlayFlame` | `full` / `5` / `detailed` / `240` / `right` | each overlay element, `off` or its size ([Performance overlay](#performance-overlay-f9)) |
+| `overlayStats` / `overlayTree` / `overlayVerdict` / `overlayGraph` / `overlayFlame` | `full` / `5` / `detailed` / `240` / `right` | each overlay element, `off` or its size ([Performance overlay](#performance-overlay-f9--l3--r3)) |
 | `overlayFlameDepth` / `gameThreadProfileHz` | `24` / `100` | flame-graph rows above `GameWindow.frameStep`; game-thread stack samples per second (10..1000) |
 
 ---

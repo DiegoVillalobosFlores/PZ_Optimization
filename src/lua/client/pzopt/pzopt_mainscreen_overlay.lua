@@ -1,8 +1,10 @@
 -- pzopt: "Show / Hide performance overlay" item in the main menu and in the pause menu.
---  The same toggle as the key binding (Options > Key Bindings, default F9), through the overridden
+--  The same toggle as the key binding (Options > Key Bindings, default F9) and the controller chord
+--  L3 + R3, through the overridden
 --  PerformanceSettings (pzopt.Overlay.toggle): one more item in the style of the stock ones (ISLabel,
 --  UIFont.Large, the same hover fade and sounds) right below Options in both menus. Its text follows
---  the overlay's state. With overlaySampling off the overlay cannot show this session: the item stays
+--  the overlay's state and names both shortcuts (the bound key, read each frame, so a rebind shows up).
+--  With overlaySampling off the overlay cannot show this session: the item stays
 --  "SHOW" and a click shows the overlay's own notice (tick the box, restart), like the key does.
 --  Controller: the item has its own row in the menu's joypad list right after Options (the D-pad
 --  reaches it like any stock item), A toggles.
@@ -12,6 +14,25 @@
 
 local TEXT_SHOW = "SHOW PERFORMANCE OVERLAY"   -- the stock items are capitals (UI_mainscreen_* translations)
 local TEXT_HIDE = "HIDE PERFORMANCE OVERLAY"
+local BIND = "Toggle performance overlay"      -- pzopt_keybinding.lua
+local PAD_SHORTCUT = "L3 + R3"                 -- pzopt.Overlay's controller chord
+
+-- "(F9 / L3 + R3)" with the key the binding holds now; just the chord when the binding is cleared.
+local function shortcuts()
+    local ok, name = pcall(function()
+        local key = getCore():getKey(BIND)
+        if not key or key <= 0 then return nil end
+        return Keyboard.getKeyName(key)
+    end)
+    if ok and name and name ~= "" then
+        return "(" .. string.upper(name) .. " / " .. PAD_SHORTCUT .. ")"
+    end
+    return "(" .. PAD_SHORTCUT .. ")"
+end
+
+local function itemText(visible)
+    return (visible and TEXT_HIDE or TEXT_SHOW) .. "  " .. shortcuts()
+end
 
 local function perf()
     return getPerformance()
@@ -48,7 +69,7 @@ local function addItem(self)
             child:setY(child:getY() + labelHgt)
         end
     end
-    local label = ISLabel:new(options:getX(), y, labelHgt, TEXT_SHOW, 1, 1, 1, 1, UIFont.Large, true)
+    local label = ISLabel:new(options:getX(), y, labelHgt, itemText(false), 1, 1, 1, 1, UIFont.Large, true)
     label.internal = "PZOPT_OVERLAY"
     label:initialise()
     label.onMouseDown = onItemClick
@@ -57,8 +78,8 @@ local function addItem(self)
     label.prerender = MainScreen.prerenderBottomPanelLabel
     label:setVisible(options:isVisible())
     self.bottomPanel:setHeight(self.bottomPanel:getHeight() + labelHgt)
-    local textW = math.max(getTextManager():MeasureStringX(UIFont.Large, TEXT_SHOW),
-        getTextManager():MeasureStringX(UIFont.Large, TEXT_HIDE))
+    local textW = math.max(getTextManager():MeasureStringX(UIFont.Large, itemText(false)),
+        getTextManager():MeasureStringX(UIFont.Large, itemText(true)))
     self.maxMenuItemWidth = math.max(self.maxMenuItemWidth or 0, textW)
     label:setWidth(math.max(self.bottomPanel:getWidth(), textW))
     self.bottomPanel:addChild(label)
@@ -108,15 +129,15 @@ local function syncJoypadRow(self)
     end
 end
 
--- Once per frame: the text follows the overlay (the key toggles it too), the item is shown whenever
+-- Once per frame: the text follows the overlay (the key and the chord toggle it too) and the key binding, the item is shown whenever
 -- Options is, i.e. after the main menu's intro fade and not while a stock screen hid it.
 local function syncItem(self)
     local label = self.pzoptOverlayOption
-    local text = overlayVisible() and TEXT_HIDE or TEXT_SHOW
+    local text = itemText(overlayVisible())
     if label.name ~= text then
         local w = label:getWidth()
         label:setNameWithoutMoving(text)
-        label:setWidth(w)
+        label:setWidth(math.max(w, getTextManager():MeasureStringX(UIFont.Large, text)))
     end
     label:setVisible(self.optionsOption:isVisible())
     if self.joyfocus then syncJoypadRow(self) end

@@ -1,12 +1,12 @@
 [b]This is not a Lua mod. Subscribing downloads the files; you still install them by hand (or with the included script).[/b] Enabling it in the Mods list does nothing.
 
-Class overrides for Project Zomboid Build @VERSION@ (game revision @REV@) that shorten chunk-streaming stalls and tighten the frame time, plus an options tab (Options > Optimizations) and an in-game frame-time overlay (F9). Single player and multiplayer, client side only. Steam version on Windows, Linux and macOS.
+Class overrides for Project Zomboid Build @VERSION@ (game revision @REV@) that shorten chunk-streaming stalls and tighten the frame time, plus an options tab (Options > Optimizations) and an in-game frame-time overlay (F9 / L3 + R3). Single player and multiplayer, client side only. Steam version on Windows, Linux and macOS.
 
 Source, measurements, videos and the same files as a GitHub release:
 https://github.com/xD3I/PZ_Optimization
 
 [url=https://github.com/xD3I/PZ_Optimization#readme][img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/00-showcase-thumbnail.gif[/img][/url]
-[i]Uncapped at 5120x2160, the in-game overlay (F9) live at the bottom; the video is on the repository page.[/i]
+[i]Uncapped at 5120x2160, the in-game overlay (F9 / L3 + R3) live at the bottom; video on the repository page.[/i]
 
 [h1]New! Variable refresh (G-SYNC, FreeSync, ProMotion)[/h1]
 [img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/22-vrr.jpg[/img]
@@ -22,7 +22,7 @@ https://github.com/xD3I/PZ_Optimization
 [img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/17-upscaler.jpg[/img]
 The world renders smaller (Quality 67 %, Performance 50 % per axis) and is scaled up under the full-resolution UI. FSR 1.0: any GPU, ~0.1 ms; DLSS: RTX (see the README), also accumulates detail across frames.
 Turn it on: Options > Optimizations > Upscaling > Upscaler = fsr1, pick the quality, restart (console.txt: "[pzopt] upscaler: fsr1 at 50 %").
-Helps only when F9 says "GPU bound" (4K / 5K, laptops, iGPUs; here 509 -> 619 fps at 50 %). At 4K: FSR 1.0 or DLSS preset F.
+Helps when the overlay says "GPU bound" (4K / 5K, laptops, iGPUs; here 509 -> 619 fps at 50 %). At 4K: FSR 1.0 or DLSS preset F.
 
 [h1]What it does[/h1]
 Project Zomboid loads and bakes the map in chunks; on stock, the loading, baking and lighting work of a busy screen lands in the same frame and shows as stutter while driving or turning. These overrides move that work off the game thread, spread it over frames, and cache what stock recomputes every frame (puddles, rain, cutaways, lights, sound zones). At 5120x2160 on an RTX 4090: driving p99 frame time 19 -> 8 ms, uncapped ~270 -> ~500 fps, thunderstorms 83 -> 188 fps.
@@ -33,7 +33,7 @@ Project Zomboid loads and bakes the map in chunks; on stock, the loading, baking
 [img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/11-low-end-hardware.jpg[/img]
 
 [h1]Boot and load times[/h1]
-Launch to main menu and Continue to world ready, same save: stock 7.55 s + 7.67 s, optimized 4.88 s + 3.47 s (FMOD and the animation sets on boot threads, precompiled Lua, animation and pack indexes cached under Zomboid/pzopt/; the first boot after installing is slower, every later one faster than stock).
+Launch to main menu and Continue to world ready, same save: stock 7.55 s + 7.67 s, optimized 4.88 s + 3.47 s (FMOD and the animation sets on boot threads, precompiled Lua, animation and pack indexes cached under Zomboid/pzopt/; the first boot after installing is slower).
 [img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/01-boot-load.jpg[/img]
 
 [h1]How it works[/h1]
@@ -55,8 +55,8 @@ macOS (Terminal; the files go into Project Zomboid.app/Contents/Java):
 [code]bash ~/Library/Application\ Support/Steam/steamapps/workshop/content/108600/@ID@/mods/PZ_Optimization/42/install.bash[/code]
 Same flags: --status, --uninstall, --dir <game folder>.
 
-[h1]Performance overlay (F9)[/h1]
-Off by default: tick "Sample frame times and utilization" in Options > Profiler > Performance overlay and restart, then F9 toggles it. Frame time and its tail (p99 / p99.9 / max, 1 %-low, jitter, spikes), GPU busy, game- and render-thread load, a verdict line, the game-thread tree and flame graph below, the frame graph; every element is a dropdown there. Same numbers on every platform, no MangoHud or RivaTuner.
+[h1]Performance overlay (F9 / L3 + R3)[/h1]
+Off by default: tick "Sample frame times and utilization" in Options > Profiler and restart, then F9 or a pad's L3 + R3 toggles it. Frame time, its tail (p99 / p99.9 / max, 1 %-low, jitter, spikes), GPU busy, game- and render-thread load, a verdict line, the game-thread tree and flame graph below, the frame graph; every element is a dropdown there. Same on every platform, no MangoHud / RivaTuner.
 [img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/13-profiler.jpg[/img]
 
 [h1]Settings[/h1]

@@ -3,8 +3,9 @@
 
   harness/pad.py serve <fifo>   # creates the pad, runs the commands written to the fifo until "quit"
 
-Commands, one per line: a b x y start back lb rb up down left right (a press: down, 0.12 s, up; the game samples
-the pad once per frame), "hold <button> <s>", "sleep <s>", "mark <name>", "done", "quit". Every press, hold, mark and
+Commands, one per line: a b x y start back lb rb l3 r3 up down left right (a press: down, 0.12 s, up; the game
+samples the pad once per frame), "hold <button> <s>", "chord <button> <button> [s]" (both down together, held s,
+default 0.12, both up together), "sleep <s>", "mark <name>", "done", "quit". Every press, hold, mark and
 "done" is printed with its epoch ms ("press down t=<ms> up=<ms>") so harness/padlat.py can line the presses up with
 the game's own log (run.sh --pad). The device is the xpad layout (vendor 045e product 028e,
 buttons BTN_A..BTN_THUMBR, sticks/triggers on ABS_X..ABS_RZ, D-pad on HAT0), so GLFW's GUID is
@@ -16,7 +17,7 @@ import time
 from evdev import AbsInfo, UInput, ecodes as e
 
 BUTTONS = {"a": e.BTN_A, "b": e.BTN_B, "x": e.BTN_X, "y": e.BTN_Y, "start": e.BTN_START, "back": e.BTN_SELECT,
-           "lb": e.BTN_TL, "rb": e.BTN_TR}
+           "lb": e.BTN_TL, "rb": e.BTN_TR, "l3": e.BTN_THUMBL, "r3": e.BTN_THUMBR}
 HATS = {"up": (e.ABS_HAT0Y, -1), "down": (e.ABS_HAT0Y, 1), "left": (e.ABS_HAT0X, -1), "right": (e.ABS_HAT0X, 1)}
 
 
@@ -60,6 +61,22 @@ def press(ui, name, hold=0.12):
     return None
 
 
+def chord(ui, names, hold=0.12):
+    """Presses the buttons together for hold seconds; returns the epoch ms of the down and the up event (None for an unknown name)."""
+    if not all(n in BUTTONS for n in names):
+        print("unknown chord:", " ".join(names), flush=True)
+        return None
+    for n in names:
+        ui.write(e.EV_KEY, BUTTONS[n], 1)
+    ui.syn()
+    t0 = now_ms()
+    time.sleep(hold)
+    for n in names:
+        ui.write(e.EV_KEY, BUTTONS[n], 0)
+    ui.syn()
+    return t0, now_ms()
+
+
 def serve(fifo):
     ui = make_pad()
     print("pad ready:", ui.device.path, flush=True)
@@ -85,6 +102,11 @@ def serve(fifo):
                         t = press(ui, parts[1], float(parts[2]))
                         if t:
                             print("hold", parts[1], "t=%d up=%d" % t, flush=True)
+                        continue
+                    if parts[0] == "chord":             # chord <button> <button> [seconds]
+                        t = chord(ui, parts[1:3], float(parts[3]) if len(parts) > 3 else 0.12)
+                        if t:
+                            print("chord", parts[1], parts[2], "t=%d up=%d" % t, flush=True)
                         continue
                     t = press(ui, parts[0])
                     if t:

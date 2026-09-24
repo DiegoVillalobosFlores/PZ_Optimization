@@ -491,12 +491,12 @@ local SECTIONS = {
 -- own; same controls, preview and search as the Optimizations tab.
 local PROFILER_SECTIONS = {
     {
-        title = "Performance overlay (F9, or the \"Toggle performance overlay\" key binding)", clip = "spin",
+        title = "Performance overlay (F9 or the \"Toggle performance overlay\" key binding; L3 + R3 on a controller)", clip = "spin",
         entries = {
-            { key = "overlaySampling", label = "Sample frame times and utilization (needed for F9)",
-              tip = "Records every presented frame, times the GPU with GL timer queries and samples the CPU load twice a second on a background thread. Off by default: without it F9 only shows a notice. \"Show the overlay from boot\" and \"Log every presented frame\" turn it on too. Applies on the next launch." },
+            { key = "overlaySampling", label = "Sample frame times and utilization (needed for F9 / L3 + R3)",
+              tip = "Records every presented frame, times the GPU with GL timer queries and samples the CPU load twice a second on a background thread. Off by default: without it F9 (or L3 + R3 on a controller) only shows a notice. \"Show the overlay from boot\" and \"Log every presented frame\" turn it on too. Applies on the next launch." },
             { key = "overlay", label = "Show the overlay from boot",
-              tip = "Frame rate, frame-time tail (p99, p99.9, max, 1%-low, jitter, spikes), GPU busy share, game and render thread load, and a frame-time graph. The key toggles it any time." },
+              tip = "Frame rate, frame-time tail (p99, p99.9, max, 1%-low, jitter, spikes), GPU busy share, game and render thread load, and a frame-time graph. The key (F9) or L3 + R3 on a controller toggles it any time." },
             { key = "overlayLog", label = "Log every presented frame",
               tip = "Writes Zomboid/pzopt-overlay.out, one CSV row per frame in MangoHud's column names, for harness/analyze.py. Harness runs log regardless." },
             { key = "overlayStats", label = "Frame statistics",
@@ -665,7 +665,7 @@ local STOCK_FILE = { zombies = "lou", player = "lou" }
 -- The captions over the two clips; the overlay clips are "off" / "on" rather than stock / optimized.
 local CLIP_SIDES = {
     default = { "STOCK GAME", "OPTIMIZED (every optimization on)" },
-    overlay = { "OVERLAY OFF", "OVERLAY ON (F9)" },
+    overlay = { "OVERLAY OFF", "OVERLAY ON (F9 / L3 + R3)" },
     alone = { "STOCK GAME", "STOCK + THESE SETTINGS ONLY" },
     without = { "EVERYTHING ON EXCEPT THESE", "EVERYTHING ON" },
     grid = { "VANILLA GRID (19x19)", "15x15 GRID" },

@@ -109,11 +109,17 @@ done
   echo "version=1"
   echo "id=$id"
   echo "title=PZ_Optimization - FPS Boost & Performance Fix: Less Stutter, Less Lag, Faster Chunk Loading [B42] (manual install)"
-  # the page body; the game joins description= lines with newlines
-  sed "s/@REV@/$rev/g; s/@VERSION@/${version:-42.20.x}/g; s/@COMMIT@/${commit:-?}/g; s/@NFILES@/$nfiles/g; s/@NOVERRIDES@/$noverrides/g; s/@SHA@/$sha/g; s/@ID@/${id:-<item id>}/g; s/^/description=/" docs/workshop/description.txt
+  # the page body; the game joins description= lines with newlines. The image URLs go out as da.gd links
+  # (scripts/workshop-shorten.py, cache docs/workshop/short-urls.txt): ~80 page characters saved per image
+  sed "s/@REV@/$rev/g; s/@VERSION@/${version:-42.20.x}/g; s/@COMMIT@/${commit:-?}/g; s/@NFILES@/$nfiles/g; s/@NOVERRIDES@/$noverrides/g; s/@SHA@/$sha/g; s/@ID@/${id:-<item id>}/g" docs/workshop/description.txt \
+    | python3 scripts/workshop-shorten.py --length | sed 's/^/description=/'
   echo "tags=Build 42;"
   echo "visibility=public"
 } > "$out/workshop.txt"
+
+# Steam's limit is 8,000 characters and the game appends ~50 (the Workshop ID / Mod ID lines)
+plen=$(sed -n 's/^description=//p' "$out/workshop.txt" | python3 -c 'import sys; print(len(sys.stdin.read().rstrip("\n")))')
+(( plen <= 7900 )) || { echo "the page is $plen characters, keep it at or under 7,900 (docs/workshop/description.txt)" >&2; exit 1; }
 
 # the validator's rules, checked here so the in-game screen does not have to say no
 bad=$(find "$out/Contents" -type f \( -name '*.exe' -o -name '*.dll' -o -name '*.bat' -o -name '*.app' -o -name '*.dylib' -o -name '*.sh' -o -name '*.so' -o -name '*.zip' \) | grep -v 'pyramid\.zip$' || true)

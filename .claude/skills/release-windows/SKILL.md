@@ -56,32 +56,43 @@ line per OS. Details: `docs/workshop.md`.
 
 ## Steam Workshop deploy (hands-off, 2026-09-21)
 
-### A user-visible change gets a "New!" section on the page, as one image
+### A user-visible change gets a "New!" section on the page, as one animated GIF
 
 Before the upload, when the release adds something a player sees (a mode, a button, a scene
 that got faster), the description gets a section at the top, right after the showcase GIF:
 
 ```
 [h1]New! <feature name>[/h1]
-[img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/<NN>-<slug>.jpg[/img]
+[img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/<NN>-<slug>.gif[/img]
 ```
 
-**Nothing else in the section: the image carries all the text** — the title ("New! ..."), the
-date of the measurement (top right, `YYYY-MM-DD`), one or two lines saying what the feature is
-and the machine, and the stock-vs-new table with a bar per row. Render it with a script under
-`harness/` in the `docs/media-style.md` style (`harness/lowend-table.py` is the template:
-`DATE`, `ROWS`, the two colour roles stock amber / new green, a gain column), then
-`ffmpeg -y -i docs/media/<name>.png -vf scale=1920:-1 -q:v 3 docs/workshop/images/<NN>-<slug>.jpg`,
-numbered after the last image in `docs/workshop/images/` and listed in `docs/workshop.md`
-(Images). Steps, in order:
+**Nothing else in the section: the GIF carries all the text.** Since 2026-09-24 the card is animated
+(`harness/newcard.py`, first used by `harness/audio-card-gif.py`): the same card as the still ones
+(`docs/media-style.md`: dark panel, title "New! ..." in green top left, the measurement date top right,
+stock amber / new green) at 1280 px wide, with **the change itself playing in the left half** (stock vs
+this release from the runs behind the numbers, e.g. two recordings cut at the same route second,
+anything that makes the difference visible drawn over them) and **the card's text in the right half**:
+the intro lines (what the feature is, the machine), the stock-vs-new table with a bar per row and the
+change column; the footer runs under both. **Size the text for the page, not the file:** Steam's description column
+is 655 px wide, so the card shows at about half size; `newcard.Card.SIZES` (body 24 px, title 46) reads at ~12 px there.
+Check a frame scaled to 655 px wide before using it (the first GIF, 1920 px with 15-18 px text, was unreadable). A card script fills `Card(title, date, intro, rows, footer)`,
+draws each frame's left slot (`card.media`) over `card.base()` and calls `write_gif()` (one palette,
+gifsicle -O3, no lossy: it speckles the static text; real-time delays). Render it as a queue `media` job (it decodes the recordings); keep it
+under ~8 MB (GitHub raw serves it; `docs/media-style.md` caps GIFs at 10 MB). Number it after the last image in
+`docs/workshop/images/` and list it in `docs/workshop.md` (Images). The still cards before 26 stay JPGs.
+Steps, in order:
 
-1. Render the PNG and the JPG; look at the JPG (Read) before using it.
-2. Add the two lines to `docs/workshop/description.txt`. Keep the substituted page under
-   8,000 characters with margin (the game appends ~50): `python3 -c` the length after
-   replacing `@VERSION@ @REV@ @NFILES@ @ID@`; aim for ≤ 7,900 and shorten an older caption if
-   needed. The previous "New!" section moves down or goes when the next one arrives; the
+1. Render the GIF; look at a frame of it (`ffmpeg -i <gif> -vf select=eq(n\,30) -frames:v 1 /tmp/x.png`,
+   Read) and at `--still` output before using it.
+2. Add the two lines to `docs/workshop/description.txt` with the long raw GitHub URL. `scripts/workshop.sh`
+   stages the page with every `[img]` URL swapped for a da.gd link (`scripts/workshop-shorten.py`, cache
+   `docs/workshop/short-urls.txt`: a new image gets its link created and checked at staging; commit the
+   cache), prints `page: N characters` and refuses a page over 7,900 (Steam's limit is 8,000, the game
+   appends ~50). The short links saved 1,640 characters on 2026-09-24 (7,825 -> 6,185). Only da.gd works:
+   Steam loads description images with `crossorigin="anonymous"`, and TinyURL's and spoo.me's redirects
+   lack `Access-Control-Allow-Origin: *`, so those images break. The previous "New!" section moves down or goes when the next one arrives; the
    README keeps the long form.
-3. Commit the script, the PNG, the JPG and the description and **push master first**: the
+3. Commit the script, the GIF and the description and **push master first**: the
    `[img]` URLs are raw GitHub links to `master`, so the page shows a broken image until the
    push is public.
 4. `scripts/workshop.sh --zip <the release zip>` re-stages `workshop.txt` from the description,

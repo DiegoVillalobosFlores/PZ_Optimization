@@ -87,5 +87,6 @@ Four roles, and every colour is one of them. Text is white or grey; a hue means 
 | `harness/stitch-showcase.py` | the showcase video and its results card (the reference for this file) |
 | `harness/stitch-triple-hdr.sh`, `stitch-louisville-sbs.sh`, `stitch-storm-sbs.sh`, `stitch-sbs.sh` | the side-by-side videos |
 | `harness/showcase-thumbnail.py`, `stitch-sbs-gif.sh`, `encode-av1-hdr.sh` | posters, GIFs, the `-1080` copies |
+| `harness/newcard.py` (+ `audio-card-gif.py`, `ao-card-gif.py`) | the Workshop's animated "New!" cards: the still card layout with the change playing on the left, the text on the right |
 | `harness/mods-table.py` | `docs/media/workshop-mods-comparison.png` (a still image in this style) |
 | `harness/readme-chart.py` | `docs/media/drive-results.svg` (light, predates this file; redo in this style when it is next regenerated) |

@@ -134,9 +134,23 @@ caption lost three parentheticals (page 7,873 substituted characters).
 `docs/findings-sound-2026-09-24.md` in the Louisville horde + thunderstorm + alarms + gunfire scene, stock vs this release:
 clipped samples with a pistol and the assault-rifle stress, true peak, sound code per game-thread frame, Jev's audio verdict;
 runs `snd-i4-*`, `snd-i6-*`, `snd-l2-*`; 2026-09-24): the power card lost its `[h1]`, the upscaler caption became one line
-(page 7,854 substituted characters).
+(page 7,854 substituted characters). The same day the section became the first animated "New!" card:
+`26-clear-audio.gif` (`harness/audio-card-gif.py` on `harness/newcard.py`, 1280 px wide, fonts sized for Steam's 655 px
+description column): the still card's text and table in
+the right half, and in the left half the assault-rifle stress runs `snd-i6-stress-stock2` / `snd-i6-stress-opt` playing
+from 4 s after their route start, each with the game's own audio stream drawn as it plays (the last 1.5 s of the
+waveform, samples at full scale in amber) and a running clipped-sample count. Every "New!" section from here on is a GIF
+in that layout (release-windows skill); the JPG `26` stays for the item's carousel.
+`27` the "New! Ambient occlusion" card (`harness/ao-card-gif.py`, the second animated card: a divider sweeping across the
+same frame of the Rosewood house with AO off and on, the `--shot-at` captures `ao-shot-off2` / `ao-final-on`, which line
+up to the pixel; the table is the AO GPU cost standing / walking / 120 km/h drive and the capped drive's fps and p99 with
+AO off vs on, from `docs/findings-ambient-occlusion-2026-09-24.md`; 2026-09-24): the clear-audio card lost its `[h1]`.
 `description.txt` embeds them with `[img]` from the raw GitHub URL of `master`,
-so they render only after the folder is pushed. The same files go in the item's own carousel:
+so they render only after the folder is pushed. The staged page carries da.gd short links instead (2026-09-24,
+`scripts/workshop-shorten.py`, cache `docs/workshop/short-urls.txt`, ~80 characters saved per image; da.gd is the one
+shortener whose redirect sends `Access-Control-Allow-Origin: *`, which Steam's `crossorigin="anonymous"` images need).
+If da.gd ever goes away, delete the cache line or switch the helper to another CORS-clean shortener; the long URLs in
+`description.txt` still work but the page is ~1,600 characters longer. The same files go in the item's own carousel:
 on the Workshop page, "Add/edit images & videos" takes the JPGs (upload `00` first, it becomes
 the header) and a YouTube URL for the showcase video.
 

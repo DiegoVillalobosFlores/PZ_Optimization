@@ -49,6 +49,7 @@ machine you play on.
    - [Input latency: NVIDIA Reflex-style low latency](#input-latency-nvidia-reflex-style-low-latency)
    - [Variable refresh: G-SYNC, FreeSync, ProMotion](#variable-refresh-g-sync-freesync-promotion)
    - [Clear audio: no clipping under gunfire](#clear-audio-no-clipping-under-gunfire)
+   - [Ambient occlusion at almost no cost](#ambient-occlusion-at-almost-no-cost)
 3. [Install](#install)
    - [Requirements](#requirements)
    - [Method A: Steam Workshop](#method-a-steam-workshop)
@@ -393,6 +394,28 @@ twice a second; `harness/audio-judge.py` looks for cutoffs, gaps, dropouts, clic
   threads stay at 0.1 of a core.
 
 All of them are in Options > Optimizations > Sound. Every run: [docs/findings-sound-2026-09-24.md](docs/findings-sound-2026-09-24.md).
+
+### Ambient occlusion at almost no cost
+
+![Ambient occlusion off and on, Rosewood house](docs/workshop/images/27-ambient-occlusion.gif)
+
+Soft shading where surfaces meet: floors darken along the base of walls, in room corners, under and around furniture,
+stairs, fences, bushes and trees. The game's depth buffer is a linear, world-space height field (orthographic 2:1
+projection), so every depth texel is an exact 3D position and the AO is computed in true 3D without a normal buffer:
+ground-truth-style horizon AO with visibility bitmasks (32 sectors per slice, a thickness per sample, so thin posts
+occlude as little as they cover and no halos form at depth jumps). It runs when a chunk's picture is baked, reading the
+eight neighbour chunk textures for occluders across the edge, and is multiplied into that picture; lighting-only
+re-bakes reuse the kept AO. A frame that bakes nothing pays nothing, and so does a moving camera.
+
+- **Cost** (desktop, RTX 4090, 5120x2160): 0 standing or panning, 4.1 us a frame walking through Rosewood (0.27 % at
+  650 fps), 1.3 % of the GPU's time in the 120 km/h drive and the storm route, which bake new chunk pictures every frame.
+- **Frame-time tail**: under a cap the computes follow the last frame's slack, so the capped 240 fps drive keeps its
+  tail: 220 fps, p99 14.2-14.8 ms with AO on against 218 fps, 14.2-14.7 ms off. The trade-off: when the game thread
+  misses the cap (a fast drive at max zoom), new chunks get their AO a little late.
+
+Off by default because it changes the picture: Options > Optimizations > Ambient occlusion (strength, radius and scale
+there too), applies on the next launch. Windows and Linux; the macOS game runs OpenGL 2.1, where it stays off. Every
+run: [docs/findings-ambient-occlusion-2026-09-24.md](docs/findings-ambient-occlusion-2026-09-24.md).
 
 ---
 

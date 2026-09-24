@@ -158,6 +158,7 @@ public final class AmbientStreamManager extends BaseAmbientStreamManager {
                IsoGridSquare playerSq = player.getCurrentSquare();
                if (playerSq != null) {
                   this.updatePowerSupply();
+                  if (pzopt.SoundTick.due()) { // pzopt: soundTickHz, the listener's ambience parameters at FMOD's pace
                   this.parameterFogIntensity.update();
                   this.parameterRainIntensity.update();
                   this.parameterSeason.update();
@@ -187,6 +188,7 @@ public final class AmbientStreamManager extends BaseAmbientStreamManager {
                   this.parameterRoomSize.update();
                   this.parameterRoomTypeEx.update();
                   this.parameterWaterSupply.update();
+                  } // pzopt: soundTickHz
                   float timeOfDay = GameTime.instance.getTimeOfDay();
 
                   for (int n = 0; n < this.worldEmitters.size(); n++) {

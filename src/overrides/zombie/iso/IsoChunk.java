@@ -293,6 +293,48 @@ public final class IsoChunk {
 
    public void updateSounds() {
       synchronized (WorldSoundManager.instance.soundList) {
+         if (pzopt.Config.WORLD_SOUND_CLEANUP_FAST && pzopt.Overrides.enabled() && WorldSoundManager.pzoptUniformLife) { // pzopt: worldSoundCleanupFast.
+            // Every sound so far was born with life 16 and all lose one per update together, and this list is in creation
+            // order, so its dead entries are a prefix: trim it and stop at the first live one.
+            int pzoptK = 0; // pzopt
+            int pzoptN = this.soundList.size(); // pzopt
+            while (pzoptK < pzoptN) { // pzopt
+               WorldSound sound = this.soundList.get(pzoptK); // pzopt
+               if (sound != null && sound.life > 0) { // pzopt
+                  break; // pzopt
+               } // pzopt
+               pzoptK++; // pzopt
+            } // pzopt
+            if (pzopt.Config.DEV_WORLD_SOUND_CLEANUP_CHECK) { // pzopt: the rig: nothing dead may follow the prefix
+               for (int r = pzoptK; r < pzoptN; r++) { // pzopt
+                  WorldSound sound = this.soundList.get(r); // pzopt
+                  if (sound == null || sound.life <= 0) { // pzopt
+                     WorldSoundManager.pzoptPrefixMiss++; // pzopt
+                  } // pzopt
+               } // pzopt
+            } // pzopt
+            if (pzoptK > 0) { // pzopt
+               this.soundList.subList(0, pzoptK).clear(); // pzopt
+            } // pzopt
+            return; // pzopt
+         } // pzopt
+         if (pzopt.Config.WORLD_SOUND_CLEANUP_FAST && pzopt.Overrides.enabled()) { // pzopt: worldSoundCleanupFast, one pass that
+            int pzoptW = 0; // pzopt: keeps the live sounds in order (stock removed each dead one with a shift)
+            int pzoptN = this.soundList.size(); // pzopt
+            for (int r = 0; r < pzoptN; r++) { // pzopt
+               WorldSound sound = this.soundList.get(r); // pzopt
+               if (sound != null && sound.life > 0) { // pzopt
+                  if (pzoptW != r) { // pzopt
+                     this.soundList.set(pzoptW, sound); // pzopt
+                  } // pzopt
+                  pzoptW++; // pzopt
+               } // pzopt
+            } // pzopt
+            if (pzoptW < pzoptN) { // pzopt
+               this.soundList.subList(pzoptW, pzoptN).clear(); // pzopt
+            } // pzopt
+            return; // pzopt
+         } // pzopt
          int s = this.soundList.size();
 
          for (int n = 0; n < s; n++) {

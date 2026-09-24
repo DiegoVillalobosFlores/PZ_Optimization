@@ -130,6 +130,11 @@ release ecc868d): the zombie-detail card lost its `[h1]`, the upscaler caption l
 120 fps cap on the 100 s walk, stock / the previous release / this one, the flip in balanced and power-saver and the MacBook's
 system power, runs of `docs/findings-ecores-2026-09-24.md`; 2026-09-24): the HDR card lost its `[h1]`, the mods-comparison
 caption lost three parentheticals (page 7,873 substituted characters).
+`26` the "New! Clear audio" card (`docs/media/clear-audio.png` from `harness/audio-card.py`: the sound pass of
+`docs/findings-sound-2026-09-24.md` in the Louisville horde + thunderstorm + alarms + gunfire scene, stock vs this release:
+clipped samples with a pistol and the assault-rifle stress, true peak, sound code per game-thread frame, Jev's audio verdict;
+runs `snd-i4-*`, `snd-i6-*`, `snd-l2-*`; 2026-09-24): the power card lost its `[h1]`, the upscaler caption became one line
+(page 7,854 substituted characters).
 `description.txt` embeds them with `[img]` from the raw GitHub URL of `master`,
 so they render only after the folder is pushed. The same files go in the item's own carousel:
 on the Workshop page, "Add/edit images & videos" takes the JPGs (upload `00` first, it becomes

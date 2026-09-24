@@ -71,6 +71,9 @@
      "args": "--mode bench --flag start=6445,5195 --flag pier=6436,5186 --flag horde_dir=SE --flag time_of_day=12 --flag weather=clear --flag showcase=horde --flag director=jev --flag burn=false --flag fire_line=false --flag no_attack=true --flag horde=150 --flag mags=20 --flag route=S:1 --flag speed=0.02 --flag hold=10 --flag zoom=1 --record --launcher direct --no-dashboard --no-mangohud --prop overlay=false --option focusloss=false --option panCameraWhileAiming=false"},
     {"name": "load", "resources": ["load-time"],
      "what": "boot and Continue-to-world timing with a short path drive (60 tiles east on KY-60, stops by itself) so the run ends by itself; loadtime.py reads pzopt-loadtrace.out",
-     "args": "--mode drive --flag path=8010,11204.5/8070,11204.5 --route-seconds 8 --launcher direct --prop instrument=true --no-dashboard"}
+     "args": "--mode drive --flag path=8010,11204.5/8070,11204.5 --route-seconds 8 --launcher direct --prop instrument=true --no-dashboard"},
+    {"name": "sound-storm-horde", "resources": ["game-thread", "frame-pacing"],
+     "what": "the sound engine under load: Louisville horde, thunderstorm, a house and a car alarm, a pistol fired twice a second, the helicopter; slow walk so every source stays in earshot; census at 4 Hz, the game's own audio recorded for audio-judge.py (Jev) and asprof for soundprof.py",
+     "args": "--preset louisville --flag weather=storm --flag house_alarm=12 --flag car_alarm=8 --flag gunshots=2 --flag helicopter=true --flag sound_probe_hz=4 --flag route=S:25 --flag speed=1 --route-seconds 25 --record --record-audio game --asprof event=cpu,interval=5ms,threads --prop instrument=true --prop uncappedFps=true --no-dashboard --launcher direct"}
   ]
 }

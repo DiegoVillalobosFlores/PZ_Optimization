@@ -3278,6 +3278,80 @@ blend test reads a local that is `numberZombiesBlended` unless the key lowers it
 ZBBetterFPS' cull-cap transformer (it rewrites exactly two `SIPUSH 510` sites and disables itself otherwise) still
 applies, and its lower counts win. `tests/pzopt/ZombieLodTest`.
 
+## Sound engine pass (2026-09-24; `emitterIdleSkip`, `soundTickHz`, `audioLimiter`, `audioLimiterCeilingDb`, `audioLimiterStereoFold`)
+
+Scene: `--preset louisville --flag weather=storm --flag house_alarm=12 --flag car_alarm=8 --flag gunshots=2|8
+--flag helicopter=true` (a horde of ~1,800-2,300 zombies, a thunderstorm, a house and a car alarm, gunfire, the
+helicopter), recorded with the game's own audio stream (`--record-audio game`) and judged by `harness/audio-judge.py`
+(Jev). Findings and numbers: `docs/findings-sound-2026-09-24.md`.
+
+### fmod.fmod.FMODSoundEmitter (new override, `emitterIdleSkip`)
+
+Vineflower output of the jar class, unchanged except for the quiet class-loaded marker and one call at the two
+places a sound enters the emitter's start list (the event path and the file path of `addSound`): when the emitter's
+parent is a character, the character's new `pzoptSoundBusy` flag is raised. Nothing else can put a sound into an
+emitter: `instances` is only filled from the start list and `stopped` only from `instances`.
+
+### zombie.characters.IsoGameCharacter (fourth edit, `emitterIdleSkip`, `soundTickHz`)
+
+`updateEmitter` asked each zombie's three FMOD emitters (vocals, footsteps, extra) — nine list checks — every frame,
+and every 30 ms ticked the three empty emitters to move their position (2.8 % of the game thread on the horde, the
+leaf `FMODSoundEmitter.isEmpty`). A zombie that has run the stock path once with a tick (primed: its emitters carry a
+position, which a file sound queued on an unpositioned emitter would read to pick 2D) and whose flag is down now
+returns at once; a busy zombie takes the stock path, and after its tick the flag is set to whether any of the three
+emitters still holds something. Only zombies with a `CharacterSoundEmitter` are ever primed; players and animals keep
+the stock path. The parameter refresh of a busy zombie additionally waits for a `pzopt.SoundTick` frame unless a
+sound is about to start (which always gets fresh values, as the start reads them). Measured 2.81 % -> 0.66 % for the
+emitter path, sound code 5.26 % -> 2.82 % of the game thread (runs `snd-i1-off` / `snd-i1-on`).
+
+### zombie.audio.ObjectAmbientEmitters, zombie.audio.FMODAmbientWalls (new overrides, `soundTickHz`)
+
+Vineflower output of the jar classes with the class-loaded marker; `update()` returns on a frame that is not a
+`pzopt.SoundTick` frame. Both rebuild their slot assignment from scratch on every call (nearest emitters, sort, start
+/ stop), so skipping calls only delays a start or stop to the next tick. FMOD Studio applies what they set on its own
+update every 20 ms; the default 60 Hz tick is faster than that, and under 60 fps every frame is a tick.
+`ObjectAmbientEmitters.stopNotPlaying` also reports each slot it stops to `pzopt.SoundProbe.ambientStop` when the
+measurement key `devAmbientSlotLog` is on (off by default; the rain-gap hunt's `# ambient stop` lines).
+
+### zombie.AmbientStreamManager (edit, `soundTickHz`)
+
+The block that refreshes the listener's ambience parameters (weather, zones, walls, inside, room type, ...) runs on
+`pzopt.SoundTick` frames; the power supply update before it and the alarms, world emitters and world ambiance after
+it stay per frame (the alarm's world sound is gameplay).
+
+### zombie.GameWindow (edit, `audioLimiter`)
+
+The block that runs once FMOD is up (`BootAsync.afterFmod`) first calls `pzopt.AudioLimiter.install()`: FMOD's
+limiter DSP is created through the core C API (FFM into `natives/libfmod.so`) and added at the head of the master
+channel group, checked by the name FMOD reports. Stock mixes 5.1 at 32 kHz on every device
+(`libfmodintegration64`'s `FMOD_System_Init` hardcodes `SetSoftwareFormat(32000, FMOD_SPEAKERMODE_5POINT1)`); on a
+stereo device the OS mixer adds the six channels up into two, after FMOD, and that sum clipped: FMOD's own output
+stayed under 0.75 per channel while the recording held 6,000-19,000 samples at full scale in 25 s. So on a stereo
+device (`FMOD_System_GetDriverInfo`) the limiter takes stereo input (`FMOD_DSP_SetChannelFormat`,
+`audioLimiterStereoFold`): FMOD folds 5.1 to stereo ahead of the limiter and only the front pair reaches the OS
+mixer; a 5.1 / 7.1 device keeps the per-channel limiter and its surround. Ceiling `audioLimiterCeilingDb` (-2 dBFS:
+-1 left single samples over after the 32 -> 48 kHz resample), 50 ms release, linked channels, no make-up gain.
+Stock clipped / optimized: 6,161 / 0 samples (pistol), 19,113 / 0 (assault rifle at 8 shots/s).
+
+### zombie.WorldSoundManager + zombie.iso.IsoChunk (sound pass, second round: `worldSoundCleanupFast`, `hearingHoist`)
+
+`WorldSoundManager.update` swept every loaded chunk's list of world sounds each frame and removed the expired ones
+with one `ArrayList.remove` shift each (0.35 % of the game thread with alarms, thumps and gunfire). A world sound is
+born with life 16 (`WorldSound.init`; only the copy constructor can give another value) and every sound in the global
+list loses one per update, so (1) no chunk list can hold a dead sound after a frame in which none reached 0: the sweep
+is skipped then (`pzoptDeadPending`); and (2) while every sound was born with 16, each chunk list, filled in creation
+order by `addSound`, holds its dead sounds as a prefix: `IsoChunk.updateSounds` trims the leading dead entries and
+stops at the first live one. The first sound added with another life (`pzoptUniformLife`, set in `addSound`) turns the
+trim off for the session; the fallback is a one-pass order-preserving compaction. Lists, order and timing are stock's:
+the sweep still happens before the dead sounds are released to the pool. Rig `devWorldSoundCleanupCheck`: on skipped
+frames every chunk list is scanned for dead entries, and after a trim the rest of the list is (run
+`snd-l2-ws-prefix-20260924-164104`: 5,527 sweeps, 16 skipped, 0 dead found either way). Measured 0.35 -> 0.17 %.
+
+`getBiggestSoundZomb` (a zombie looking for the loudest sound around it) evaluated the zombie's hearing multiplier
+(sandbox hearing x worn items x weather: pure reads) and looked up the zombie's own square once per candidate sound; both
+are now taken once per call, the square at the first sound that needs it. Same float products, same squares.
+Measured 0.33 -> 0.10 % (runs `snd-l2-ws-off` / `snd-l2-ws-on`).
+
 ### HDR output (`hdr` and the `hdr*` keys, 2026-09-24; pzopt.Hdr, HdrWayland, HdrLight, HdrFlash, HdrMac)
 
 All hooks are no-ops unless `hdr=true`; findings and numbers in `docs/findings-hdr-2026-09-24.md`.

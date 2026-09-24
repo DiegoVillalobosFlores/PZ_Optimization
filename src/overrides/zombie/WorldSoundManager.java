@@ -217,6 +217,12 @@ public final class WorldSoundManager {
 
          long t3 = timing ? System.nanoTime() : 0L; // pzopt
          this.soundList.add(s);
+         if (s.life != 16) { // pzopt: worldSoundCleanupFast, a sound with another life breaks the creation-order = death-order rule
+            pzoptUniformLife = false; // pzopt: for good; the chunk sweep goes back to the full pass
+         } // pzopt
+         if (s.life <= 0) { // pzopt: worldSoundCleanupFast (a copied sound arriving dead still gets swept)
+            this.pzoptDeadPending = true; // pzopt: worldSoundCleanupFast
+         } // pzopt: worldSoundCleanupFast
          ZombiePopulationManager.instance.addWorldSound(s, doSend);
          if (timing) { // pzopt
             long t4 = System.nanoTime(); // pzopt
@@ -376,17 +382,25 @@ public final class WorldSoundManager {
          soundList = this.soundList;
       }
 
+      boolean pzoptHoist = pzopt.Config.HEARING_HOIST && pzopt.Overrides.enabled(); // pzopt: hearingHoist
+      float pzoptHearing = pzoptHoist ? this.getHearingMultiplier(zom) : 0.0F; // pzopt: hearingHoist (pure: the zombie's hearing, worn items, weather)
+      IsoGridSquare pzoptSq2 = null; // pzopt: hearingHoist, the zombie's own square, looked up at the first sound that needs it
+      boolean pzoptSq2Done = false; // pzopt: hearingHoist
       synchronized (this.soundList) { // pzopt: as getSoundZomb
       for (int n = 0; n < soundList.size(); n++) {
          WorldSoundManager.WorldSound sound = soundList.get(n);
          if (sound != null && sound.stressZombies && sound.radius != 0) {
             float dist = IsoUtils.DistanceToSquared(x, y, z * 3, sound.x, sound.y, sound.z * 3);
-            float radius = sound.radius * this.getHearingMultiplier(zom);
+            float radius = sound.radius * (pzoptHoist ? pzoptHearing : this.getHearingMultiplier(zom)); // pzopt: hearingHoist
             if (!(dist > radius * radius)
                && (!(dist < sound.zombieIgnoreDist * sound.zombieIgnoreDist) || z != sound.z)
                && (!ignoreBySameType || !sound.sourceIsZombie)) {
                IsoGridSquare sq = IsoWorld.instance.currentCell.getGridSquare(sound.x, sound.y, sound.z);
-               IsoGridSquare sq2 = IsoWorld.instance.currentCell.getGridSquare(x, y, z);
+               if (!pzoptHoist || !pzoptSq2Done) { // pzopt: hearingHoist
+                  pzoptSq2 = IsoWorld.instance.currentCell.getGridSquare(x, y, z); // pzopt: hearingHoist
+                  pzoptSq2Done = true; // pzopt: hearingHoist
+               } // pzopt: hearingHoist
+               IsoGridSquare sq2 = pzoptSq2; // pzopt: hearingHoist
                float delta = dist / (radius * radius);
                if (sq != null && sq2 != null && sq.getRoom() != sq2.getRoom()) {
                   delta *= 1.2F;
@@ -519,8 +533,40 @@ public final class WorldSoundManager {
       return ret;
    }
 
+   // pzopt: worldSoundCleanupFast. A sound in a chunk list can only be dead (life 0) after the decrement below took it
+   // there; after a frame where none reached 0 the chunk sweep has nothing to remove.
+   private boolean pzoptDeadPending = true;
+   public static long pzoptSkipped, pzoptSwept, pzoptSkipDeadFound; // pzopt: worldSoundCleanupFast counters (SoundProbe summary)
+   public static long pzoptPrefixMiss; // pzopt: devWorldSoundCleanupCheck, dead entries found after a chunk list's live prefix (must stay 0)
+   public static boolean pzoptUniformLife = true; // pzopt: every sound added so far was born with life 16 (IsoChunk.updateSounds may trim a prefix)
+
    public void update() {
-      if (!GameServer.server) {
+      boolean pzoptSweep = this.pzoptDeadPending || !pzopt.Config.WORLD_SOUND_CLEANUP_FAST || !pzopt.Overrides.enabled(); // pzopt: worldSoundCleanupFast
+      this.pzoptDeadPending = false; // pzopt: worldSoundCleanupFast
+      if (!pzoptSweep) { // pzopt: worldSoundCleanupFast
+         pzoptSkipped++; // pzopt
+         if (pzopt.Config.DEV_WORLD_SOUND_CLEANUP_CHECK && !GameServer.server) { // pzopt: the rig proving the skip safe
+            for (int n = 0; n < IsoPlayer.numPlayers; n++) { // pzopt
+               IsoChunkMap map = IsoWorld.instance.currentCell.chunkMap[n]; // pzopt
+               for (int y = 0; !map.ignore && y < IsoChunkMap.chunkGridWidth; y++) { // pzopt
+                  for (int x = 0; x < IsoChunkMap.chunkGridWidth; x++) { // pzopt
+                     IsoChunk c = map.getChunk(x, y); // pzopt
+                     if (c != null) { // pzopt
+                        for (int i = 0; i < c.soundList.size(); i++) { // pzopt
+                           WorldSoundManager.WorldSound w = c.soundList.get(i); // pzopt
+                           if (w == null || w.life <= 0) { // pzopt
+                              pzoptSkipDeadFound++; // pzopt
+                           } // pzopt
+                        } // pzopt
+                     } // pzopt
+                  } // pzopt
+               } // pzopt
+            } // pzopt
+         } // pzopt
+      } else { // pzopt
+         pzoptSwept++; // pzopt
+      } // pzopt
+      if (!GameServer.server && pzoptSweep) { // pzopt: worldSoundCleanupFast
          for (int n = 0; n < IsoPlayer.numPlayers; n++) {
             IsoChunkMap chunkMap = IsoWorld.instance.currentCell.chunkMap[n];
             if (!chunkMap.ignore) {
@@ -542,6 +588,9 @@ public final class WorldSoundManager {
          WorldSoundManager.WorldSound sound = this.soundList.get(n);
          if (sound != null && sound.life > 0) {
             sound.life--;
+            if (sound.life <= 0) { // pzopt: worldSoundCleanupFast
+               this.pzoptDeadPending = true; // pzopt: worldSoundCleanupFast (its chunk lists are swept next frame, before its release)
+            } // pzopt: worldSoundCleanupFast
          } else {
             this.soundList.remove(n);
             this.release(sound);

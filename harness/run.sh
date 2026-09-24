@@ -123,6 +123,7 @@ while [[ $# -gt 0 ]]; do
     --pad) pad_script="$2"; shift 2 ;;               # drive the menus with a virtual pad (see below)
     --inputlag) inputlag=1; pad_script="$2"; shift 2 ;; # in-game input-lag profile: uinput keyboard + mouse + pad (see below)
     --record) record=1; shift ;;
+    --record-audio) record_audio="$2"; shift 2 ;;   # desktop (default: every sound the desktop plays) | game (only the game's FMOD stream, opus 384 kbps; harness/audio.py)
     --resume-shot) resume_shot="$2"; shift 2 ;;
     --keep-save) keep_save=1; shift ;;       # hard-link the bench save as the run's exit save left it into <run>/save (for --resume-from)
     --resume-from) resume_from="$2"; shift 2 ;;  # a --keep-save run dir: its exit save (player position + resume shot) is this run's bench save  # dir with pzopt-resume.jpg/.properties[/-load.txt] (a run dir): copied into the bench save, so Continue shows that shot
@@ -591,7 +592,11 @@ while :; do
     # exited. harness/stitch-quad.sh rescales the inputs itself; being HDR they need a tone-map there
     # for an SDR upload.
     rec_mon=$(gpu-screen-recorder --list-monitors 2>/dev/null | head -1 | cut -d'|' -f1)
-    gpu-screen-recorder -w "${rec_mon:-DP-1}" -f 60 -q very_high -k av1_hdr -cursor no -a default_output -o "$out/recording.mp4" > "$out/recording.log" 2>&1 &
+    # --record-audio game: the game's own FMOD client stream only (PipeWire app "FMOD Audio", linked when it appears),
+    # nothing else the desktop plays, at 384 kbps opus instead of the default 128 (harness/audio.py, 2026-09-24)
+    rec_audio=(-a default_output)
+    [[ "${record_audio:-desktop}" == game ]] && rec_audio=(-a "app:FMOD Audio" -ab 384)
+    gpu-screen-recorder -w "${rec_mon:-DP-1}" -f 60 -q very_high -k av1_hdr -cursor no "${rec_audio[@]}" -o "$out/recording.mp4" > "$out/recording.log" 2>&1 &
     rec_pid=$!
   fi
   if [[ "$launcher" == direct ]]; then
@@ -795,7 +800,7 @@ cp "$ZOMBOID"/pzopt-*.out "$out/" 2>/dev/null || true
 [[ -f "$ZOMBOID/Screenshots/pzopt-shot2.png" ]] && cp "$ZOMBOID/Screenshots/pzopt-shot2.png" "$out/shot2-game.png"
 cp "$PZ_DIR/pzopt.properties" "$out/pzopt.properties"
 cp "$LAUNCHER" "$out/ProjectZomboid64.json"
-{ echo "layout=$LAYOUT"; echo "mode=$mode"; echo "crashed=$crashed"; echo "attempts=$attempt"; echo "jfr=$jfr"; echo "jfr_period=$jfr_period"; echo "jfr_settings=${jfr_settings[*]:-}"; echo "game_profiler=$game_profiler"; echo "gc=${gc:-default}"; echo "no_dashboard=$no_dashboard"; echo "mangohud_secs=$mangohud_secs"; echo "no_mangohud=${no_mangohud:-0}"; echo "lead=${lead:-dynamic}"; echo "route_seconds=$route_seconds"; echo "renderer=$renderer"; echo "game_env=${game_env[*]:-}"; echo "record=$record"; echo "launcher=$launcher"; echo "game_options=${game_options[*]:-}"; echo "mods=${extra_mods[*]:-}"; echo "vmargs=${vmargs[*]:-}"; echo "mangohud_config=${mangohud_config:-default}"; echo "launch_epoch=$launch_epoch"; echo "run_seconds=$((end-start))"; echo "preset=${preset:-none}"; echo "flags=${extra_flags[*]:-}"; } > "$out/run.opts"
+{ echo "layout=$LAYOUT"; echo "mode=$mode"; echo "crashed=$crashed"; echo "attempts=$attempt"; echo "jfr=$jfr"; echo "jfr_period=$jfr_period"; echo "jfr_settings=${jfr_settings[*]:-}"; echo "game_profiler=$game_profiler"; echo "gc=${gc:-default}"; echo "no_dashboard=$no_dashboard"; echo "mangohud_secs=$mangohud_secs"; echo "no_mangohud=${no_mangohud:-0}"; echo "lead=${lead:-dynamic}"; echo "route_seconds=$route_seconds"; echo "renderer=$renderer"; echo "game_env=${game_env[*]:-}"; echo "record=$record"; echo "record_audio=${record_audio:-desktop}"; echo "launcher=$launcher"; echo "game_options=${game_options[*]:-}"; echo "mods=${extra_mods[*]:-}"; echo "vmargs=${vmargs[*]:-}"; echo "mangohud_config=${mangohud_config:-default}"; echo "launch_epoch=$launch_epoch"; echo "run_seconds=$((end-start))"; echo "preset=${preset:-none}"; echo "flags=${extra_flags[*]:-}"; } > "$out/run.opts"
 # gc.log rolls over (filecount=3); keep the segments that were written during this run
 for g in "$PZ_DIR"/gc.log "$PZ_DIR"/gc.log.[0-9]*; do
   [[ -f "$g" ]] || continue

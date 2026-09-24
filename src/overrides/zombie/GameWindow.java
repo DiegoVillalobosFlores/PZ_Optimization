@@ -736,6 +736,7 @@ public final class GameWindow {
       // the banks are still loading they resolve to null, never register, and the menu music never stops (issue #3).
       // Core.soundDisabled is read here too, so a failed init on the thread still yields the Dummy managers.
       pzopt.BootAsync.afterFmod(() -> {
+         pzopt.AudioLimiter.install(); // pzopt: audioLimiter, the master limiter DSP once FMOD is up
          SoundManager.instance = (BaseSoundManager)(Core.soundDisabled ? new DummySoundManager() : new SoundManager());
          AmbientStreamManager.instance = (BaseAmbientStreamManager)(Core.soundDisabled ? new DummyAmbientStreamManager() : new AmbientStreamManager());
          BaseSoundBank.instance = (BaseSoundBank)(Core.soundDisabled ? new DummySoundBank() : new FMODSoundBank());

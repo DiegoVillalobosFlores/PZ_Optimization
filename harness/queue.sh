@@ -876,6 +876,18 @@ PY
   fi
 }
 
+audio_run() { # Jev's audio verdict (harness/audio-judge.py) for a run recorded with --record-audio game
+  local d="$1" cwd="$2" run="$3" ref="" a
+  grep -q '^record_audio=game' "$run/run.opts" 2>/dev/null && [[ -f "$run/recording.mp4" ]] || return 0
+  # the reference: the --parity-against run, else the first --against run, when it has game audio too
+  for a in $(jget "$d" parity_against) $(jget "$d" against); do
+    [[ -d "$a" ]] || a="$cwd/$a"
+    if grep -q '^record_audio=game' "$a/run.opts" 2>/dev/null; then ref="$a"; break; fi
+  done
+  echo "--- audio-judge.py (Jev)${ref:+  against $ref}"
+  (cd "$cwd" && timeout 900 python3 harness/audio-judge.py "$run" ${ref:+--against "$ref"} 2>&1 | grep -v '^jev:\|^  ') || true
+}
+
 result_header() {
   local d="$1" rc="$2"
   echo "job=$(job_id "$d") kind=$(jget "$d" kind) label=$(jget "$d" label) machine=$(jget "$d" machine) session=$(jget "$d" session)"
@@ -902,6 +914,7 @@ result_run() { # <job> <rc> <cwd> <run dir or empty>
   grep -a -iE 'exception|error' "$run/console.txt" 2>/dev/null | grep -a -v 'ERROR: 0:0\|GL_' | head -8
   judge_run "$d" "$cwd" "$run"
   parity_run "$d" "$cwd" "$run"
+  audio_run "$d" "$cwd" "$run"
 }
 
 result_mp() {

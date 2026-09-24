@@ -100,7 +100,7 @@ public final class Harness {
          || "play".equals(HarnessFlags.get("mode"));
    /** play: a copy of a real save with the scene flags applied (weather, hour, torch) and the player left alone: no god mode, no ghost, no route, no quit. */
    private static final boolean PLAYING = "play".equals(HarnessFlags.get("mode"));
-   private static final int IDLE = 0, WAIT_WORLD = 1, SETTLE = 2, RUN = 3, LINGER = 5, DONE = 4, PLAY = 6, MP_VEHICLE = 7, MP_ALIGN = 8, MP_TELEPORT = 9, PATH_START = 10;
+   private static final int IDLE = 0, WAIT_WORLD = 1, SETTLE = 2, RUN = 3, LINGER = 5, DONE = 4, PLAY = 6, MP_VEHICLE = 7, MP_ALIGN = 8, MP_TELEPORT = 9, PATH_START = 10, FADE = 11;
    /** drive mode with flag path=: the route's centreline, its driver and what it sees (DrivePilot, 2026-09-24). */
    private static DrivePath drivePath;
    private static DrivePilot pilot;
@@ -120,6 +120,10 @@ public final class Harness {
    private static int mpStartX, mpStartY;
    private static boolean mpRepeated;
    private static long lingerUntilEpochMs;
+   // exit_fade_ms: the game's audio faded out over this long before the quit (default 1500 in a sound run, else 0).
+   // Leaving the world stops every FMOD sound at once (IngameState.exit -> SoundManager.stop -> ChannelGroup_Stop),
+   // which cut a rolling thunder in every recorded sound run (harness/audio-judge.py, exit window, 2026-09-24)
+   private static long fadeStartNs, fadeMs = -1L, fadeBus;
    /** Instant the route starts (unix ms), fixed at world-ready: max(route_start_epoch, world ready + settle). */
    private static long plannedStartEpochMs;
    /** Derived end of the external log when mangohud_end_epoch is absent (0 = none). */
@@ -269,8 +273,25 @@ public final class Harness {
          state = LINGER;
          return;
       }
+      quitAfterFade(); // to the main menu (saves); the Lua mod then quits the process
+   }
+
+   /** Quit, after fading the game's audio out when exit_fade_ms asks for it (the FADE state ramps the master bus). */
+   private static void quitAfterFade() {
+      if (fadeMs < 0L) {
+         fadeMs = Long.parseLong(HarnessFlags.get("exit_fade_ms", SoundProbe.requested() ? "1500" : "0").trim());
+      }
+      if (fadeMs > 0L && !zombie.core.Core.soundDisabled) {
+         fadeBus = fmod.javafmod.FMOD_Studio_System_GetBus("bus:/");
+         if (fadeBus != 0L) {
+            Log.info("harness: fading the game's audio out over " + fadeMs + " ms before the quit");
+            fadeStartNs = System.nanoTime();
+            state = FADE;
+            return;
+         }
+      }
       state = DONE;
-      requestQuit(); // to the main menu (saves); the Lua mod then quits the process
+      requestQuit();
    }
 
    /** First call decides whether a harness run is requested; afterwards drives the state machine. */
@@ -729,6 +750,14 @@ public final class Harness {
          case LINGER -> {
             // run.sh drops pzopt-logdone once it has closed the external log itself (control socket)
             if (System.currentTimeMillis() >= lingerUntilEpochMs || new File(ZomboidFileSystem.instance.getCacheDir(), "pzopt-logdone").isFile()) {
+               quitAfterFade();
+            }
+         }
+         case FADE -> {
+            // equal-power-like ramp of the master bus to silence, then the stock quit (which stops every sound)
+            float t = Math.min(1f, (nowNs - fadeStartNs) / 1e6f / fadeMs);
+            fmod.javafmod.FMOD_Studio_Bus_SetVolume(fadeBus, (1f - t) * (1f - t));
+            if (t >= 1f) {
                state = DONE;
                requestQuit();
             }

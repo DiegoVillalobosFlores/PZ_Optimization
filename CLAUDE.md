@@ -403,6 +403,14 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   `devMacPresentCheck` rig). Rigs: `harness/pacing.py`, `presentprobe.c`, `vrrprobe.py` (every run.sh run writes
   `present.txt` / `vrr.txt`). The desktop's KWin VRR policy is Never by the maintainer's choice: set Automatic only inside
   the test job. Native-Wayland optimized runs segfault at exit (not VRR code, open).
+- Sound engine pass (2026-09-24, `docs/findings-sound-2026-09-24.md`): rig `pzopt.SoundProbe` (`house_alarm`, `car_alarm`,
+  `gunshots`, census `pzopt-sound.out`), bench `sound-storm-horde`, `run.sh --record-audio game` (the game's own PipeWire
+  stream), `harness/soundprof.py` / `audio.py` / `audio-judge.py` (Jev: cutoffs, gaps, dropouts, clicks, clipping; in every
+  queue result of a `--record-audio game` run). The game mixes 5.1 at 32 kHz on every device (hardcoded in
+  `libfmodintegration64`), so on stereo output the OS downmix clipped under gunfire (6,000-19,000 samples in 25 s, stock);
+  `audioLimiter` (FMOD's limiter at the master's head, stereo fold ahead of it on stereo devices, -2 dBFS) -> 0. Sound
+  code on the game thread 5.3 -> 2.7 % in the horde (`emitterIdleSkip`, `soundTickHz` 60); FMOD's threads 0.1 core. The
+  harness fades the mix out before quitting in sound runs (`exit_fade_ms`; the quit stops every sound at once).
 - Open plans: `docs/plan-game-load.md`, `docs/plan-vulkan-renderer.md`, `docs/plan-resource-use.md`,
   `docs/plan-zombie-multithread.md` (2026-09-22: the rest of the zombie simulation on all cores, phased).
   The game-thread optimization plans were dropped on 2026-09-21 at the maintainer's request.

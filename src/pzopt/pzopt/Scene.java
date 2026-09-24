@@ -63,6 +63,8 @@ import zombie.iso.weather.ClimateManager;
  *       sub-steps with an extra call each (the fish-scaring walk, the native population scan). A summary line
  *       every 5 s in the console and {@code sound_stats=} in pzopt-bench.out. Rig of 2026-09-22, runs
  *       {@code sound-*}.</li>
+ *   <li>{@code house_alarm=D}, {@code car_alarm=D}, {@code sound_probe=true} — the stock house and car alarms placed
+ *       next to the route at its start, and the once-a-second census of the sound engine: {@link SoundProbe}.</li>
  * </ul>
  * Unset keys leave the save as it is. Nothing here is written back: runs use the bench save copy.
  */
@@ -129,6 +131,7 @@ public final class Scene {
       puddles = Float.parseFloat(HarnessFlags.get("puddles", "-1").trim());
       Showcase.apply(); // showcase=horde
       Showcase.worldReady(p); // showcase=horde: god mode, unseen, power off, the area cleared until the scene starts
+      SoundProbe.apply(); // house_alarm / car_alarm / sound_probe
       if (soundRadius > 0) {
          Log.info("harness: sound=" + soundRadius + " every " + soundEvery + " frame(s) from the player's square, hearing="
                + zombie.SandboxOptions.instance.lore.hearing.getValue() + " (1=pinpoint x3, 2=normal x1, 3=poor x0.45)" + (soundParts ? ", parts timed" : "") + (soundFixed ? ", fixed square" : ""));
@@ -260,6 +263,7 @@ public final class Scene {
       if (soundRadius > 0) {
          fireSound(p, nowNs);
       }
+      SoundProbe.tick(p, nowNs);
       if (helicopter && nowNs - lastHeliLogNs >= 5_000_000_000L) {
          lastHeliLogNs = nowNs;
          Log.info("harness: helicopter " + helicopterState());
@@ -396,6 +400,7 @@ public final class Scene {
       if ("on".equals(lights)) {
          lightsOn();
       }
+      SoundProbe.routeStart(IsoPlayer.getInstance(), nowNs);
    }
 
    /** fire=N: N fires in a row 4 tiles south-east of the player, 2 tiles apart (IsoFireManager, may spread). */
@@ -525,7 +530,7 @@ public final class Scene {
    }
 
    static boolean requested() {
-      return timeOfDay >= 0f || !weather.isEmpty() || fog >= 0f || !torch.isEmpty() || visible || population >= 0f || carSpawn > 0 || seeAll || zombiesOff || soundRadius > 0 || helicopter || fires > 0 || !lights.isEmpty() || headlights || puddles >= 0F;
+      return timeOfDay >= 0f || !weather.isEmpty() || fog >= 0f || !torch.isEmpty() || visible || population >= 0f || carSpawn > 0 || seeAll || zombiesOff || soundRadius > 0 || helicopter || fires > 0 || !lights.isEmpty() || headlights || puddles >= 0F || SoundProbe.requested();
    }
 
    /** Flag see_all=true: read by the LightingJNI override on every player update (false until apply() ran). */
@@ -671,6 +676,6 @@ public final class Scene {
             + "\nsee_all=" + seeAll
             + (carSpawn > 0 ? "\ncar_spawn=" + carSpawn + "\nvehicles_loaded=" + zombie.iso.IsoWorld.instance.currentCell.getVehicles().size() : "")
             + (soundRadius > 0 ? "\nsound_radius=" + soundRadius + "\nsound_every=" + soundEvery + "\nsound_stats=" + soundStats() : "")
-            + (helicopter ? "\nhelicopter=" + helicopterState() : "") + ThumpRig.summary();
+            + (helicopter ? "\nhelicopter=" + helicopterState() : "") + ThumpRig.summary() + SoundProbe.summary();
    }
 }

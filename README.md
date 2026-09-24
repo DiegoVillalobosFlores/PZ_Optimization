@@ -48,6 +48,7 @@ machine you play on.
    - [Against the Workshop's performance mods](#against-the-workshops-performance-mods)
    - [Input latency: NVIDIA Reflex-style low latency](#input-latency-nvidia-reflex-style-low-latency)
    - [Variable refresh: G-SYNC, FreeSync, ProMotion](#variable-refresh-g-sync-freesync-promotion)
+   - [Clear audio: no clipping under gunfire](#clear-audio-no-clipping-under-gunfire)
 3. [Install](#install)
    - [Requirements](#requirements)
    - [Method A: Steam Workshop](#method-a-steam-workshop)
@@ -368,6 +369,30 @@ the game's own per-frame stamps (`harness/pacing.py`):
 
 Windows (borderless already covers the screen there) and AMD FreeSync are not measured yet; on Windows set Variable
 refresh rate = on in Options > Optimizations. Every run: [docs/archive/2026-09-24/findings-vrr-2026-09-24.md](docs/archive/2026-09-24/findings-vrr-2026-09-24.md).
+
+### Clear audio: no clipping under gunfire
+
+![Clear audio, stock vs this build](docs/media/clear-audio.png)
+
+Measured on the game's own audio stream (PipeWire, recorded alone) in the loudest scene we could build: the downtown
+Louisville horde (~2,000 zombies) in a thunderstorm with a house alarm, a car alarm, the helicopter and a pistol fired
+twice a second; `harness/audio-judge.py` looks for cutoffs, gaps, dropouts, clicks and clipping and Jev gives the verdict.
+
+- **No more crackle on stereo** (`audioLimiter`, `audioLimiterStereoFold`, on by default): the game mixes 5.1 surround at
+  32 kHz on every device (fixed inside FMOD's init in the game's native library). On stereo speakers or headphones the
+  operating system adds the six channels into two after the game, and under gunfire that sum clipped: 6,161 samples at
+  full scale in 25 s with the pistol, 19,113 with an assault rifle at 8 shots a second, although FMOD's own output never
+  passed 0.75. The game now folds to stereo itself, ahead of FMOD's limiter at the head of the master mix (ceiling
+  -2 dBFS, 50 ms release): 0 clipped samples, true peak -0.3 dBTP. A 5.1 / 7.1 device keeps its surround and gets the
+  limiter per channel.
+- **Sound upkeep costs a fifth** (`emitterIdleSkip`, `soundTickHz`, `worldSoundCleanupFast`, `hearingHoist`): stock
+  checks every zombie's three sound emitters every frame, refreshes the listener's ambience parameters every frame
+  (FMOD applies them every 20 ms), sweeps every chunk's expired noises one `remove` at a time and re-reads a zombie's
+  hearing per candidate sound. Silent zombies now skip their emitters, the ambience runs at 60 Hz, the sweep only runs
+  when a noise expired, and hearing is read once: sound code on the game thread 1.35 ms -> 0.24 ms a frame. FMOD's own
+  threads stay at 0.1 of a core.
+
+All of them are in Options > Optimizations > Sound. Every run: [docs/findings-sound-2026-09-24.md](docs/findings-sound-2026-09-24.md).
 
 ---
 

@@ -464,6 +464,11 @@ public abstract class IsoGameCharacter
    public ModelInstance primaryHandModel;
    public ModelInstance secondaryHandModel;
    public final BaseCharacterSoundEmitter emitter;
+   // pzopt: emitterIdleSkip. Raised by the FMODSoundEmitter override whenever one of this character's emitters queues a
+   // sound, cleared in updateEmitter once all three emitters are empty after a tick; primed = the stock path has run once
+   // with a tick, so the emitters carry a position (a file sound queued on a never-positioned emitter plays 2D).
+   public boolean pzoptSoundBusy;
+   private boolean pzoptSoundPrimed;
    private final FMODParameterList fmodParameters = new FMODParameterList();
    private final AnimationVariableSource gameVariables = new AnimationVariableSource();
    private AnimationVariableSource playbackGameVariables;
@@ -1550,14 +1555,23 @@ public abstract class IsoGameCharacter
    }
 
    public void updateEmitter() {
+      // pzopt: emitterIdleSkip. A primed zombie with nothing queued, playing or stopping has nothing to update: its
+      // parameters go nowhere (emitterParamSkip) and the 30 ms tick of three empty emitters only moved their position.
+      // One field read replaces the three emitters' nine list checks per zombie per frame. The flag cannot miss a sound:
+      // every sound enters an FMODSoundEmitter through toStart, where the override raises it before this runs again.
+      if (this.pzoptSoundPrimed && !this.pzoptSoundBusy && pzopt.Config.EMITTER_IDLE_SKIP && pzopt.Overrides.enabled()) { // pzopt: emitterIdleSkip
+         return; // pzopt: emitterIdleSkip
+      }
+
       // pzopt: emitterParamSkip. Stock recomputes every FMOD parameter of every character every frame (the footstep
       // material walks the square's objects, the zone parameter the room) although a parameter value only goes
       // anywhere through the event instances of this character's own emitter. With no instance running and none about
       // to start, the computed values are written to nothing; the cached value they would leave behind is refreshed
       // here before the emitter starts a sound, which is the only place startEventInstance reads it. 2,389 silent
       // zombies were ~2 % of the game thread on the Louisville horde.
-      if (!pzopt.Config.EMITTER_PARAM_SKIP || !pzopt.Overrides.enabled() || this.emitter == null || !this.emitter.isClear()
-            || this.emitter.hasSoundsToStart()) {
+      boolean pzoptParamsDue = !this.pzoptSoundPrimed || pzopt.SoundTick.due() || this.emitter.hasSoundsToStart(); // pzopt: soundTickHz (a starting sound always gets fresh values)
+      if (pzoptParamsDue && (!pzopt.Config.EMITTER_PARAM_SKIP || !pzopt.Overrides.enabled() || this.emitter == null || !this.emitter.isClear() // pzopt: soundTickHz
+            || this.emitter.hasSoundsToStart())) { // pzopt: soundTickHz
          this.getFMODParameters().update();
       }
 
@@ -1569,6 +1583,11 @@ public abstract class IsoGameCharacter
          } else {
             this.emitter.set(this.getX(), this.getY(), this.getZ());
             this.emitter.tick();
+         }
+
+         if (this instanceof IsoZombie && this.emitter instanceof CharacterSoundEmitter && pzopt.Config.EMITTER_IDLE_SKIP && pzopt.Overrides.enabled()) { // pzopt: emitterIdleSkip
+            this.pzoptSoundPrimed = true; // pzopt: emitterIdleSkip
+            this.pzoptSoundBusy = !this.emitter.isClear(); // pzopt: emitterIdleSkip (all three emitters empty after the tick)
          }
       }
    }

@@ -427,6 +427,7 @@ public final class WorldStreamer {
             this.finished = false;
             this.worldStreamer = new Thread(ThreadGroups.Workers, () -> {
                pzopt.StreamerWake.register();
+               pzopt.CorePlacement.background(); // pzopt: macOS utility QoS (E cores first)
                while (!this.finished) {
                   try {
                      this.threadLoop();

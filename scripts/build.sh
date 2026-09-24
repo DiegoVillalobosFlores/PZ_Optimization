@@ -111,6 +111,42 @@ if [[ -f "$sh/puddles_common.frag.glsl" && -f "$sh/puddles_common.vert.glsl" ]];
 else
   echo "puddle shaders not found next to the jar; the puddleEarlyZ shaders are not generated" >&2
 fi
+# Vision-cone blur split for Config.visBlurReduce (media/shaders/pzopt_visBlurReduce.*, pzopt_visibilityBlur.*), derived
+# from the installed game's visibilityBlur shader: its 25-tap sum depends only on the blur-texture texel a screen pixel
+# maps to, so pzopt_visBlurReduce runs the stock loop once per blur texel into a float texture and pzopt_visibilityBlur is
+# the stock screen pass with the loop replaced by one texelFetch of that sum. The loop is copied verbatim; the build
+# fails if the stock shader no longer has it.
+if [[ -f "$sh/visibilityBlur.frag" && -f "$sh/visibilityBlur.vert" ]]; then
+  osh="$OUT/media/shaders"
+  mkdir -p "$osh"
+  python3 - "$sh/visibilityBlur.frag" "$osh" <<'PY' || { echo "visibilityBlur shader changed shape; visBlurReduce shaders not generated" >&2; exit 1; }
+import re, sys
+src = open(sys.argv[1]).read()
+out = sys.argv[2]
+loop = re.search(r"\n([ \t]*for \(int y = -BLUR_RANGE; y <= BLUR_RANGE; y\+\+\)\s*\{\s*for \(int x = -BLUR_RANGE; x <= BLUR_RANGE; x\+\+\)\s*\{.*?alpha \+= sam\.a;\s*\}\s*\})", src, re.S)
+head = src[:src.index("void main()")]
+assert loop and "uniform sampler2D depth;" in src and "ivec2 pixel = ivec2(gl_FragCoord.xy / screenSize * texSize);" in src
+assert "vec2 maxUV = texSize / TextureSize;" in src and "vec2 pixelStep = vec2(1.0, 1.0) / TextureSize;" in src
+# the reduce pass: one fragment per blur texel, the stock loop verbatim, the raw sum out
+reduce = head + """void main()
+{
+    // pzopt: visBlurReduce, the stock screen pass's 25-tap sum for the blur texel this fragment covers
+    vec2 maxUV = texSize / TextureSize;
+    ivec2 pixel = ivec2(gl_FragCoord.xy);
+    vec2 pixelStep = vec2(1.0, 1.0) / TextureSize;
+    float alpha = 0.0;
+""" + loop.group(1) + """
+    colour = vec4(alpha, 0.0, 0.0, 1.0);
+}
+"""
+open(out + "/pzopt_visBlurReduce.frag", "w").write(reduce)
+screen = src.replace("uniform sampler2D depth;", "uniform sampler2D depth;\nuniform sampler2D reduced; // pzopt: visBlurReduce", 1)
+screen = screen.replace(loop.group(1), "    alpha = texelFetch(reduced, clamp(pixel, ivec2(0), ivec2(texSize) - 1), 0).r; // pzopt: visBlurReduce, the 25-tap sum from pzopt_visBlurReduce", 1)
+open(out + "/pzopt_visibilityBlur.frag", "w").write(screen)
+PY
+  cp "$sh/visibilityBlur.vert" "$osh/pzopt_visBlurReduce.vert"
+  cp "$sh/visibilityBlur.vert" "$osh/pzopt_visibilityBlur.vert"
+fi
 
 # Extract the stock copies of the overridden classes for comparison.
 patterns=()

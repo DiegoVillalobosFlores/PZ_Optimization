@@ -2825,9 +2825,13 @@ public final class IsoWorld {
 
             try {
                WeatherFxMask.initMask();
+               pzopt.GpuSections.begin("atlas"); // pzopt: GPU section
                DeadBodyAtlas.instance.render();
                WorldItemAtlas.instance.render();
+               pzopt.GpuSections.end("atlas"); // pzopt: GPU section
+               pzopt.GpuSections.begin("cell"); // pzopt: GPU section
                this.currentCell.render();
+               pzopt.GpuSections.end("cell"); // pzopt: GPU section
                Gizmos.getInstance().render(IsoCamera.frameState.playerIndex);
                this.DrawIsoCursorHelper();
                DeadBodyAtlas.instance.renderDebug();

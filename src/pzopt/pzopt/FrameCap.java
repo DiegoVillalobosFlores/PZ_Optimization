@@ -49,7 +49,21 @@ public final class FrameCap {
 
    public static void stepDone(long startNs) {
       lastStepNs = System.nanoTime() - startNs;
+      if (!CORES_OFF || !PSTATE_OFF) {
+         boolean unc = uncappedNow();
+         boolean world = GameWindow.isIngameState();
+         int cap = unc ? 0 : lockNow();
+         if (!CORES_OFF) {
+            CorePlacement.onStep(lastStepNs, world, unc, cap);
+         }
+         if (!PSTATE_OFF) {
+            GpuPstate.onStep(world, unc, cap);
+         }
+      }
    }
+
+   private static final boolean CORES_OFF = CorePlacement.MODE.equals("off");
+   private static final boolean PSTATE_OFF = GpuPstate.MODE.equals("off");
    public static final int MIN_FPS = 24;
    public static final int MAX_FPS = 500;
    public static final int MENU_SAME = 1;

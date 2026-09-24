@@ -63,7 +63,10 @@ public final class RecalcPool {
                AnimalPathfind.getInstance(); // lazy singleton reached from RecalcProperties; initialise it here, once
                int width = loading() ? LOAD_WIDTH : WIDTH;
                e = new ThreadPoolExecutor(width, width, 10L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), r -> {
-                  Thread t = new Thread(ThreadGroups.Workers, r, Guard.WORKER_PREFIX + threadIndex.getAndIncrement());
+                  Thread t = new Thread(ThreadGroups.Workers, () -> {
+                     CorePlacement.background(); // macOS: utility QoS (E cores first)
+                     r.run();
+                  }, Guard.WORKER_PREFIX + threadIndex.getAndIncrement());
                   t.setDaemon(true);
                   t.setPriority(Thread.NORM_PRIORITY);
                   return t;

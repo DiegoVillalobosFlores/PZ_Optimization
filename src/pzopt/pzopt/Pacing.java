@@ -388,6 +388,45 @@ public final class Pacing {
       }
    }
 
+   /**
+    * limiterSleep: parks until limiterSpinUs before the limiter's next step and returns; the stock limiter loop spins the
+    * rest, so a late wake costs nothing but the spin it replaces.
+    */
+   public static void limiterWait(long stepNs) {
+      if (!slackSet) {
+         slackSet = true;
+         timerSlack1ns();
+      }
+      long left = stepNs - System.nanoTime() - Config.LIMITER_SPIN_US * 1000L;
+      if (left > 20_000L) {
+         LockSupport.parkNanos(left);
+      }
+   }
+
+   private static boolean slackSet; // game thread only
+
+   /**
+    * Linux: the calling thread's timer slack to 1 ns (default 50 us), so a park ends when asked; prctl(PR_SET_TIMERSLACK)
+    * only touches the calling thread.
+    */
+   static void timerSlack1ns() {
+      if (!new java.io.File("/proc/self/task").isDirectory()) {
+         return;
+      }
+      try {
+         java.lang.foreign.Linker l = java.lang.foreign.Linker.nativeLinker();
+         java.lang.invoke.MethodHandle prctl = l.downcallHandle(l.defaultLookup().find("prctl").orElseThrow(),
+               java.lang.foreign.FunctionDescriptor.of(java.lang.foreign.ValueLayout.JAVA_INT, java.lang.foreign.ValueLayout.JAVA_INT,
+                     java.lang.foreign.ValueLayout.JAVA_LONG), java.lang.foreign.Linker.Option.firstVariadicArg(1));
+         int r = (int) prctl.invokeExact(29, 1L); // PR_SET_TIMERSLACK
+         if (r != 0) {
+            Log.warn("limiterSleep: prctl(PR_SET_TIMERSLACK) = " + r);
+         }
+      } catch (Throwable t) {
+         Log.warn("limiterSleep: no timer slack change (" + t + ")");
+      }
+   }
+
    /** Sleeps to ~1 ms before the deadline (park is coarse), then spins the rest. */
    public static void waitUntil(long deadlineNs) {
       while (true) {

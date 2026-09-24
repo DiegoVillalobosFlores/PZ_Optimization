@@ -23,6 +23,9 @@ import org.json.JSONObject;
  */
 public final class GcChoice {
    static final String MARKER = "-Dpzopt.gc=g1";
+   static final String JIT_MARKER = "-Dpzopt.jit=steady";
+   /** jitSteady: the flags that follow JIT_MARKER; the undo removes every argument with one of these prefixes. */
+   static final String[] JIT_FLAGS = {"-XX:PerMethodTrapLimit=0", "-XX:PerBytecodeTrapLimit=0"};
    static final String MARKER_PAUSE = "-Dpzopt.gc=g1,pause";
    private static final String ZGC = "-XX:+UseZGC";
    private static final String G1 = "-XX:+UseG1GC";
@@ -56,6 +59,10 @@ public final class GcChoice {
          toStock(j); // from a clean stock form, so a changed gcPauseMs or mode is applied exactly
          if (want) {
             toG1(j, Config.GC_PAUSE_MS);
+         }
+         jitToStock(j);
+         if (Overrides.enabled() && Config.JIT_STEADY) {
+            jitToSteady(j);
          }
          boolean changed = !j.toString().equals(before);
          Log.info("gc: running " + currentGc() + "; gcMode=" + Config.GC_MODE + " gcPauseMs=" + Config.GC_PAUSE_MS + " ("
@@ -95,6 +102,43 @@ public final class GcChoice {
          changed[0] = true;
       });
       return changed[0];
+   }
+
+   /** jitSteady: the marker and the flags, in every vmArgs array (the flags a user set himself stay: we only add ours). */
+   static void jitToSteady(JSONObject j) {
+      forEachVmArgs(j, args -> {
+         if (indexOf(args, JIT_MARKER) >= 0) {
+            return;
+         }
+         for (String f : JIT_FLAGS) {
+            if (prefixIndex(args, f.substring(0, f.indexOf('=') + 1)) >= 0) {
+               return; // the player tunes this flag himself
+            }
+         }
+         args.put(JIT_MARKER);
+         for (String f : JIT_FLAGS) {
+            args.put(f);
+         }
+      });
+   }
+
+   /** Undo jitToSteady where our marker is. */
+   static void jitToStock(JSONObject j) {
+      forEachVmArgs(j, args -> {
+         if (indexOf(args, JIT_MARKER) < 0) {
+            return;
+         }
+         for (int i = args.length() - 1; i >= 0; i--) {
+            String a = args.optString(i);
+            boolean ours = a.equals(JIT_MARKER);
+            for (String f : JIT_FLAGS) {
+               ours |= a.startsWith(f.substring(0, f.indexOf('=') + 1));
+            }
+            if (ours) {
+               args.remove(i);
+            }
+         }
+      });
    }
 
    /** Undo toG1 where one of our markers is. */

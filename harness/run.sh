@@ -483,6 +483,11 @@ JFR_OUT="$PZ_DIR/pzopt.jfr"
 ASPROF_OUT="$PZ_DIR/pzopt-asprof.jfr"
 rm -f "$ASPROF_OUT"
 [[ -n "$asprof" ]] && vmargs+=("-agentpath:$REPO/harness/asprof/libasyncProfiler.so=start,$asprof,jfr,file=$ASPROF_OUT")
+# pzopt.GcChoice writes the player's launcher JSON (jitSteady: C2 trap limits) but leaves harness runs alone, so an
+# optimized run gets the same flags here; --prop jitSteady=false or enabled=false (a stock run) goes without
+jit_steady=1; [[ -f "$PZ_DIR/pzopt-installed.txt" ]] || jit_steady=0   # no pzopt installed: a stock game, stock flags
+for p in "${props[@]}"; do [[ "$p" == "jitSteady=false" || "$p" == "enabled=false" ]] && jit_steady=0; done
+(( jit_steady )) && vmargs+=("-Dpzopt.jit=steady" "-XX:PerMethodTrapLimit=0" "-XX:PerBytecodeTrapLimit=0")
 # The launcher is always edited for a run: a gc log (-Xlog:gc) is added when the
 # JSON has none, so harness/analyze.py can count collector events in the route window.
 {
@@ -497,6 +502,11 @@ if launcher == "direct":
     j["vmArgs"] = ["-Dzomboid.steam=0" if a == "-Dzomboid.steam=1" else a for a in j["vmArgs"]]
 if not any(a.startswith("-Xlog:gc") for a in j["vmArgs"]):
     j["vmArgs"].append(f"-Xlog:gc:file={gc_log}:time,uptime:filecount=3,filesize=20M")
+# a --jfr run that died before its EXIT trap left its recording in the JSON the next run saved as the original (the flip,
+# 2026-09-24: every run profiled with JFR for a day); only a --jfr run records
+j["vmArgs"] = [a for a in j["vmArgs"] if not a.startswith("-XX:StartFlightRecording")]
+for v in j.get("windows", {}).values():
+    v["vmArgs"] = [a for a in v["vmArgs"] if not a.startswith("-XX:StartFlightRecording")]
 if jfr == "1":
     opt = f"-XX:StartFlightRecording=settings=profile,filename={jfr_file},dumponexit=true"
     if period:

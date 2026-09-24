@@ -685,7 +685,7 @@ public final class GameWindow {
                   accumulator -= pzoptShift; // pzopt
                } // pzopt
             } else if (pzopt.Config.LIMITER_SLEEP && pzopt.Overrides.enabled()) { // pzopt: sleep most of the wait instead of spinning a core
-               pzopt.Pacing.waitUntil(newTime + (desiredDt - accumulator) - 1_000_000L); // pzopt: the stock loop spins the last ms
+               pzopt.Pacing.limiterWait(newTime + (desiredDt - accumulator)); // pzopt: the stock loop spins the last limiterSpinUs
             }
          }
 

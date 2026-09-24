@@ -263,9 +263,11 @@ public class RenderThread {
 
          try {
             pzopt.Overlay.gpuBegin(); // pzopt: GL timer query around the sprite replay (GPU busy time of the frame)
+            pzopt.GpuPstate.gpuBegin(); // pzopt: gpuPstate, the frame's GPU time (GL timestamps) for the AMD clock governor
             pzopt.CursorLatch.beforeReplay(renderState); // pzopt: cursorLatch, the drawn cursor at the newest pointer position
             SpriteRenderer.instance.postRender();
             pzopt.Overlay.gpuEnd(); // pzopt: end of the frame's GPU work; the swap is not timed
+            pzopt.GpuPstate.gpuEnd(); // pzopt: gpuPstate
             pzopt.InputLag.frameQueued(); // pzopt: harness input-lag probe, GPU-completion timestamp query of the frame
             zombie.core.VBO.GLVertexBufferObject.pzoptFrameEnd(); // pzopt: frame fence for the persistent sprite buffers
          } catch (Throwable var8) {

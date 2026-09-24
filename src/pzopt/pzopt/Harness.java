@@ -830,7 +830,9 @@ public final class Harness {
                 + "\nroute_seconds=" + secs + "\nchunks_loaded=" + chunks + "\nchunks_per_second=" + (secs > 0f ? chunks / secs : 0f)
                 + "\nsettings=" + Config.describe()
                 + "\nzombie_batches=" + AnimBatch.describe() + " | " + ActionEval.describe() + " | " + AnimParallel.describe() + " | " + LightingBatch.describe() + " | " + FrameBatch.describe()
-                + "\nbake_counters=" + zombie.iso.fboRenderChunk.FBORenderCell.pzoptBakeCounters() + "\n"); // pzopt: the per-frame batch and bake counters at route end
+                + "\nbake_counters=" + zombie.iso.fboRenderChunk.FBORenderCell.pzoptBakeCounters()
+                + "\ncore_placement=" + CorePlacement.describe()
+                + "\ngpu_pstate=" + GpuPstate.describe() + "\n"); // pzopt: the per-frame batch and bake counters at route end
       } catch (IOException e) {
          Log.warn("harness: could not write summary: " + e);
       }
@@ -1707,7 +1709,7 @@ public final class Harness {
       rows.sort((a, b) -> Long.compare(Long.parseLong(b[1]), Long.parseLong(a[1])));
       File f = new File(ZomboidFileSystem.instance.getCacheDir(), "pzopt-threads.out");
       try (FileWriter w = new FileWriter(f)) {
-         w.write("# route_seconds=" + secs + " cores=" + Runtime.getRuntime().availableProcessors() + "\n");
+         w.write("# route_seconds=" + secs + " cores=" + Config.CPUS + "\n");
          long proc = processCpuNs();
          if (proc >= 0 && processCpuAtStart >= 0) {
             w.write("# process_cpu_ms=" + (proc - processCpuAtStart) / 1_000_000 + " process_share=" + ((proc - processCpuAtStart) / 1e9 / secs) + "\n");

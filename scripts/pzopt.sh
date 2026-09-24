@@ -102,7 +102,7 @@ PYEOF
   rm -rf "$PZ_DIR/pzopt/aot"
 }
 
-reset_gc() {  # undo pzopt.GcChoice's launcher switch (-Dpzopt.gc=g1 marker: G1 back to ZGC, our pause target removed)
+reset_gc() {  # undo pzopt.GcChoice's launcher edits (-Dpzopt.gc=g1 marker: G1 back to ZGC, our pause target removed; -Dpzopt.jit=steady: our JIT flags removed)
   [[ -f "$1" ]] && command -v python3 >/dev/null || return 0
   python3 - "$1" <<'PYEOF'
 import json,sys
@@ -116,7 +116,14 @@ def fix(a):
 if "vmArgs" in j: j["vmArgs"]=fix(j["vmArgs"])
 for v in j.values():
     if isinstance(v,dict) and "vmArgs" in v: v["vmArgs"]=fix(v["vmArgs"])
-if ch[0]: json.dump(j,open(p,"w"),indent="\t"); print("launcher: pzopt's G1 switch undone (back to the launcher's ZGC)")
+J="-Dpzopt.jit=steady"; JP=("-XX:PerMethodTrapLimit=","-XX:PerBytecodeTrapLimit=")
+def fixj(a):
+    if J not in a: return a
+    ch[0]=True; return [x for x in a if x!=J and not x.startswith(JP)]
+if "vmArgs" in j: j["vmArgs"]=fixj(j["vmArgs"])
+for v in j.values():
+    if isinstance(v,dict) and "vmArgs" in v: v["vmArgs"]=fixj(v["vmArgs"])
+if ch[0]: json.dump(j,open(p,"w"),indent="\t"); print("launcher: pzopt's G1 switch / JIT flags undone (back to the launcher's own)")
 PYEOF
 }
 

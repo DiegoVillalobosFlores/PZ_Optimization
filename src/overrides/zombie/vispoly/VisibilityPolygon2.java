@@ -1397,9 +1397,14 @@ public final class VisibilityPolygon2 {
                int screenTop = IsoCamera.getScreenTop(this.playerIndex);
                int screenWidth = IsoCamera.getScreenWidth(this.playerIndex);
                int screenHeight = IsoCamera.getScreenHeight(this.playerIndex);
+               Shader pzoptScreen = pzopt.VisBlur.reduce(blurTex); // pzopt: visBlurReduce, the 25-tap sum once per vision texel (null = the stock pass)
+               Shader pzoptBlur = pzoptScreen != null ? pzoptScreen : blurShader; // pzopt: visBlurReduce
                GL11.glViewport(screenLeft, screenTop, screenWidth, screenHeight);
-               blurShader.Start();
-               ShaderProgram blurProgram = blurShader.getProgram();
+               pzoptBlur.Start(); // pzopt: visBlurReduce
+               ShaderProgram blurProgram = pzoptBlur.getProgram(); // pzopt: visBlurReduce
+               if (pzoptScreen != null) { // pzopt: visBlurReduce
+                  blurProgram.setValue("reduced", pzopt.VisBlur.sums(), 2); // pzopt
+               } // pzopt
                VisibilityPolygon2.L_render.vector2.set(screenWidth, screenHeight);
                blurProgram.setValue("screenSize", VisibilityPolygon2.L_render.vector2);
                VisibilityPolygon2.L_render.vector2.set(screenLeft, screenTop);
@@ -1434,7 +1439,7 @@ public final class VisibilityPolygon2 {
                   var15.close();
                }
 
-               blurShader.End();
+               pzoptBlur.End(); // pzopt: visBlurReduce
             } catch (Throwable var21) {
                if (var2 != null) {
                   try {

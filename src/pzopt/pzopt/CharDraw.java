@@ -81,7 +81,7 @@ public final class CharDraw {
 
    private static final boolean ENABLED = Config.CHAR_DRAW_PREP && Config.effectiveWorkers() > 1;
    /** Build threads: the key, clamped to cores - 2 (the game and render threads keep theirs); the walk uses one of them too. */
-   static final int THREADS = Math.max(1, Math.min(Config.CHAR_DRAW_THREADS, Runtime.getRuntime().availableProcessors() - 2));
+   static final int THREADS = Math.max(1, Math.min(Config.CHAR_DRAW_THREADS, Config.CPUS - 2));
    private static ExecutorService pool; // game thread creates it on first use
 
    private static final ArrayList<IsoMovingObject> onScreen = new ArrayList<>(2048);
@@ -131,7 +131,10 @@ public final class CharDraw {
       if (p == null) {
          final AtomicInteger n = new AtomicInteger();
          p = java.util.concurrent.Executors.newFixedThreadPool(THREADS, r -> {
-            Thread t = new Thread(r, "pzopt-chardraw-" + n.getAndIncrement());
+            Thread t = new Thread(() -> {
+               CorePlacement.background(); // macOS: utility QoS (E cores first)
+               r.run();
+            }, "pzopt-chardraw-" + n.getAndIncrement());
             t.setDaemon(true);
             return t;
          });

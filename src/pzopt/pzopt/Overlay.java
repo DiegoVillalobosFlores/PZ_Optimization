@@ -706,7 +706,7 @@ public final class Overlay {
       Runtime rt = Runtime.getRuntime();
       float heapUsed = (rt.totalMemory() - rt.freeMemory()) / 1073741824f;
       float heapMax = rt.maxMemory() / 1073741824f;
-      int cores = rt.availableProcessors();
+      int cores = Config.CPUS; // the machine's, not the calling thread's affinity mask (corePlacement)
       String gpu = gpuState < 0 ? "n/a" : String.format(java.util.Locale.ROOT, "%.0f %%", gpuLoad);
       fpsText = String.format(java.util.Locale.ROOT, "%3.0f fps", fps);
       fpsColor = fpsColor(fps, cap);

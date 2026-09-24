@@ -39,7 +39,7 @@ public final class FrameBatch {
       }
    }
 
-   public static final int THREADS = Math.max(1, Math.min(Config.FRAME_THREADS, Runtime.getRuntime().availableProcessors() - 1));
+   public static final int THREADS = Math.max(1, Math.min(Config.FRAME_THREADS, Config.CPUS - 1));
 
    /**
     * One batch: its runner, size and counters in one object, published to the workers through {@link #current}. A worker
@@ -242,6 +242,7 @@ public final class FrameBatch {
    private static final long SPIN_NANOS = Config.FRAME_SPIN_US * 1000L;
 
    private static void workerLoop() {
+      CorePlacement.background(); // macOS: utility QoS (E cores first)
       int seen = 0;
       while (true) {
          // frameSpinUs: the frame's batches come back to back (separation, transitions, animators, bones, lighting);

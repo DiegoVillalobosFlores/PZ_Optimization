@@ -122,6 +122,8 @@ local SECTIONS = {
     {
         title = "Cutaways, lighting and weather (game thread)", clip = "spin",
         entries = {
+            { key = "visBlurReduce", label = "Vision-cone edge blur summed once per texel",
+              tip = "The soft edge of the vision cone is a 25-sample blur that stock runs for every pixel of the zoomed-out world image (at the widest zoom ~13 million pixels, 340 million texture reads a frame), although the sum only changes every few pixels. It is now summed once per blur texel and looked up per pixel: the same image, less GPU work." },
             { key = "cutawayFast", label = "Replay cutaway masks",
               tip = "Clean chunk levels replay their stored wall-cutaway occluder masks instead of re-testing every square." },
             { key = "cutawayRadius", label = "Cutaway radius (chunks)",
@@ -403,7 +405,24 @@ local SECTIONS = {
               note = { on = "Apple silicon; needs fullscreen or borderless for the finer steps" },
               tip = "OpenGL frames on a Mac are shown on the 120 Hz grid, so a cap like 90 fps alternates 8 ms and 17 ms frames. Presented through Metal, a ProMotion or Adaptive-Sync display shows frames at any multiple of 4.17 ms in fullscreen: the frame cap is snapped to what the panel shows exactly (120, 80, 60, 48, 40 fps) and every frame is held on screen for exactly that long." },
             { key = "limiterSleep", label = "Frame limiter sleeps instead of spinning",
-              tip = "While the game waits for its next frame under a frame cap, the stock limiter keeps one core busy spinning. This sleeps until about 1 ms before the frame and spins only that last ms: same frame timing, about 0.7 of a core less CPU at a 100 fps cap (cooler and quieter on laptops)." },
+              tip = "While the game waits for its next frame under a frame cap, the stock limiter keeps one core busy spinning. This sleeps until 0.2 ms before the frame (1.5 ms on Windows, where a sleep wakes on the 1 ms timer tick) and spins only that: same frame timing, about half a core less CPU at a 120 fps cap. On by default except on Windows." },
+        },
+    },
+    {
+        title = "CPU cores and power (laptops and handhelds)", clip = "spin",
+        entries = {
+            { key = "corePlacement", label = "Which cores the game's threads run on (hybrid CPUs)",
+              choices = { "auto", "efficient", "performance", "off" },
+              note = { auto = "background work on the efficient cores, the game and render threads there too while they keep the frame cap", efficient = "every thread on the efficient cores", performance = "game and render threads on the fast cores, the rest on the efficient ones", off = "stock: the operating system decides" },
+              tip = "CPUs such as the Ryzen AI 300 series (Zen 5 + Zen 5c), Intel's P + E core chips and Apple silicon have fast cores that cost several times the power of their efficient ones for the same work: one busy thread drew 9.2 W on a Zen 5 core and 2.2 W on a Zen 5c core of an Ayaneo Flip. Linux put the game's lighting, compiler, audio and loader threads on the fast cores as often as not. Auto keeps all of that on the efficient cores and moves the game and render threads to the fast cores only while they would otherwise miss the frame cap. Linux sets the cores directly; macOS gets the matching quality-of-service classes. Applies on the next launch." },
+            { key = "gpuPstate", label = "AMD GPU clock level while playing (Linux)",
+              choices = { "auto", "off", "standard", "min_sclk" },
+              note = { auto = "the lowest fixed clock whose frame time fits the cap, automatic clocks otherwise", off = "stock: the driver's automatic clocks", standard = "a fixed ~1 GHz", min_sclk = "the lowest shader clock (~640 MHz)" },
+              tip = "At a frame cap the Radeon driver runs the GPU at its top clock (2.7-2.9 GHz on a Radeon 890M, the highest voltage) for a few milliseconds and then idles it. Most of the game's GPU work waits on memory, not on the clock: at a fixed 640 MHz the 890M still held 120 fps on the bench walk. Auto measures the GPU time of every frame and holds the lowest clock level that keeps the cap, stepping up the moment it does not. The level applies to the whole GPU while the game runs and is released when it exits (a crash included). Applies on the next launch." },
+            { key = "jitSteady", label = "Java compiler: no speculative recompiles",
+              tip = "Java's optimizing compiler leaves out the branches a method never took while it was being profiled; when the game later takes one (a new street, a different zombie state) the compiled code is thrown away and compiled again. A 100 s walk through the world did that ~2,000 times and kept a compiler thread busy the whole walk (16,600 compilations). With this on the compiler keeps every branch: the compiler's CPU time halves, the game runs as fast. Written into the game's launcher file for the next launch; the uninstallers take it out again." },
+            { key = "lightingSyncPark", label = "Lighting thread sleeps between updates",
+              tip = "The lighting thread updates 15 times a second (the Lighting FPS setting) and waited for its next update with LWJGL's timer, which sleeps in 1 ms steps and then spins the last millisecond. This sleeps straight to the next update. Applies on the next launch." },
         },
     },
     {
@@ -801,6 +820,11 @@ local AXIS_TITLE = "load on that part with this setting  (stock game = mid)"
 -- change): -1 a few percent, -2 clearly measurable, -3 the big wins (docs/archive/2026-09-24/results.md, docs/archive/2026-09-24/findings-*.md). A combo's
 -- bars describe moving it away from stock in the direction the tab offers.
 local EFFECTS = {
+    corePlacement = { cores = -1 },
+    gpuPstate = { gpu = -1 },
+    jitSteady = { cores = -2 },
+    lightingSyncPark = { cores = -1 },
+    visBlurReduce = { gpu = -1 },
     enabled = { cpu = -3, render = -3, gpu = -1, cores = 2, ram = 1, disk = 1, load = -3, chunks = -2 },
     -- chunk textures
     treesInChunkTexture = { cpu = -3, render = -2, gpu = -1 },

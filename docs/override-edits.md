@@ -3307,3 +3307,60 @@ All hooks are no-ops unless `hdr=true`; findings and numbers in `docs/findings-h
 - **zombie.input.GameKeyboard.isKeyDown(int)** (harness only): reports the key codes `pzopt.Showcase` holds (the movement
   keys and Run of the director's `run_to_pier`).
 
+## E-core pass: hybrid-CPU placement, AMD GPU clock, limiter sleep, vision-blur split (2026-09-24; `corePlacement`, `gpuPstate`, `limiterSleep`, `lightingSyncPark`, `visBlurReduce`, `jitSteady`)
+
+Goal (maintainer): on the flip (Ryzen AI 9 HX 370: 4 Zen 5 + 8 Zen 5c, Radeon 890M) a 120 fps capped run in the
+balanced power profile as close to 12 W as the game can get. Findings in `docs/findings-ecores-2026-09-24.md`.
+
+### zombie.GameWindow (frame limiter)
+
+- `limiterSleep` now calls `pzopt.Pacing.limiterWait(step)`: one park until `limiterSpinUs` (200 us; 1500 on Windows)
+  before the step, the stock loop spins the rest. The old path (`waitUntil(step - 1 ms)`) parked to 2 ms before the step
+  and spun 1 ms inside the helper plus 1 ms in the stock loop, a quarter of a core at 120 fps. The limiter thread's timer
+  slack is 1 ns on Linux (prctl, first wait). `limiterSleep` is on by default except on Windows (a park wakes on the 1 ms
+  tick there).
+
+### zombie.core.opengl.RenderThread
+
+- `pzopt.GpuPstate.gpuBegin()` / `gpuEnd()` next to the overlay's timer hooks around `SpriteRenderer.postRender()`: two
+  GL_TIMESTAMP queries per frame (no nesting limit, unlike the overlay's GL_TIME_ELAPSED), read a few frames late, feed the
+  `gpuPstate` governor on the render thread. No change to what is drawn.
+
+### org.lwjglx.opengl.Display
+
+- `sync(fps)`, called only by the lighting thread, goes to `pzopt.LightingSync.sync` (`lightingSyncPark`, default on):
+  a park straight to the next update instead of LWJGL's 1 ms sleeps + yield-spin of the last millisecond. The first call
+  also marks the thread as background work (macOS QoS).
+
+### zombie.vispoly.VisibilityPolygon2 (`visBlurReduce`)
+
+- `renderToScreen`: before the blur shader starts, `pzopt.VisBlur.reduce(blurTex)` runs a pass over the half-resolution
+  vision texture that writes, per texel, the stock shader's 25-tap alpha sum (the loop copied verbatim by
+  scripts/build.sh into `pzopt_visBlurReduce.frag`) into an R32F texture; the screen pass then uses
+  `pzopt_visibilityBlur` (the stock shader with the loop replaced by one texelFetch of that sum, sampler `reduced` on unit
+  2). The stock sum depends only on the integer vision texel a fragment maps to, so the result is the same; at the widest
+  zoom the stock pass read 25 texels for each of ~13 M world pixels. Pitfall: `TextureFBO` allocates its colour
+  texture as RGBA8 whatever the Texture asked for, which clamped the sum to 1 and removed the shadow (first build);
+  the pass re-specifies the texture as R32F after creating the FBO. One player only; any failure (shaders missing or not
+  compiled) keeps the stock pass for the session.
+
+### zombie.iso.WorldStreamer
+
+- The streamer thread calls `pzopt.CorePlacement.background()` first (macOS: utility QoS; no-op elsewhere).
+
+### zombie.iso.IsoWorld, zombie.iso.fboRenderChunk.FBORenderCell (GPU sections only)
+
+- `gpuSections` timestamps added around the body/item atlases (`atlas`), the cell render (`cell`), `performRenderTiles`
+  (`tiles`), the on-screen chunk loop (`chunks`), players + corpse / mannequin shadows (`players`), animated attachments +
+  flies + highlight (`attach`), the per-level loop (`zloop`), its character shadows (`shadows`) and the vision cone
+  (`vispoly`). Measurement only (`gpuSections=true`).
+
+### pzopt classes (not game classes)
+
+- `CorePlacement` (`corePlacement=auto|efficient|performance|off`, Linux affinity by thread name via FFM
+  sched_setaffinity; macOS QoS classes for threads we own; `coreBackgroundCpus`, `corePromotePct`, `coreDemotePct`,
+  `coreHoldMs`). Hooked from `FrameCap.stepDone`.
+- `GpuPstate` (`gpuPstate=auto|off|standard|min_sclk|min_mclk|peak`, `gpuPstateFitPct`): `AMDGPU_CTX_OP_SET_STABLE_PSTATE`
+  on a context of its own on the render node (no root; released by the kernel when the context closes).
+- `GcChoice` also writes `jitSteady` (`-XX:PerMethodTrapLimit=0 -XX:PerBytecodeTrapLimit=0`, marker
+  `-Dpzopt.jit=steady`) into the launcher JSON; scripts/pzopt.sh, install.sh and install.ps1 remove them with the G1 switch.

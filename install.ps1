@@ -119,14 +119,24 @@ function Reset-Gc {
     $script:gcChanged = $true
     return ,$a
   }
+  # jitSteady (marker -Dpzopt.jit=steady): the JIT trap-limit flags it added
+  $jm = '-Dpzopt.jit=steady'
+  $fixJit = {
+    param($a)
+    $a = @($a)
+    if (-not ($a -contains $jm)) { return ,$a }
+    $a = @($a | Where-Object { $_ -ne $jm -and $_ -notlike '-XX:PerMethodTrapLimit=*' -and $_ -notlike '-XX:PerBytecodeTrapLimit=*' })
+    $script:gcChanged = $true
+    return ,$a
+  }
   $script:gcChanged = $false
-  if ($j.vmArgs) { $j.vmArgs = & $fix $j.vmArgs }
+  if ($j.vmArgs) { $j.vmArgs = & $fixJit (& $fix $j.vmArgs) }
   foreach ($p in $j.PSObject.Properties) {
-    if ($p.Value -is [psobject] -and $p.Value.PSObject.Properties['vmArgs']) { $p.Value.vmArgs = & $fix $p.Value.vmArgs }
+    if ($p.Value -is [psobject] -and $p.Value.PSObject.Properties['vmArgs']) { $p.Value.vmArgs = & $fixJit (& $fix $p.Value.vmArgs) }
   }
   if ($script:gcChanged) {
     [IO.File]::WriteAllText($Json, ($j | ConvertTo-Json -Depth 10), (New-Object Text.UTF8Encoding $false))
-    Write-Host "launcher: pzopt's G1 switch undone (back to the launcher's ZGC)"
+    Write-Host "launcher: pzopt's G1 switch / JIT flags undone (back to the launcher's own)"
   }
 }
 $Rev = Get-JarRevision

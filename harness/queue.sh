@@ -799,6 +799,7 @@ remote_job() { # sync -> wrapper -> run in the ssh foreground -> collect; sets R
   else
     mrsync "$m" "$cwd/harness/run-mac.sh" "$host:$repo/harness/run-mac.sh" >> "$d/output.log" 2>&1 || { echo "[$(ts)] rsync run-mac.sh failed ($m disconnected?)" >> "$d/output.log"; return 70; }
     mrsync "$m" "$cwd/harness/mod/" "$host:$repo/harness/mod/" >> "$d/output.log" 2>&1
+    mrsync "$m" "$cwd/harness/macpower.py" "$host:$repo/harness/macpower.py" >> "$d/output.log" 2>&1   # run-mac.sh's P/E + power sampler
   fi
   if [[ "$install" == opt ]]; then
     [[ -d "$cwd/build/classes" ]] || { echo "[$(ts)] --install opt: no $cwd/build/classes (scripts/build.sh first)" >> "$d/output.log"; return 1; }

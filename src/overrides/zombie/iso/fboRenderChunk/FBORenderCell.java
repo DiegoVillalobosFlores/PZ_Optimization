@@ -611,7 +611,9 @@ public final class FBORenderCell {
          AbstractPerformanceProfileProbe var44 = renderTiles.performRenderTiles.profile();
 
          try {
+            pzopt.GpuSections.begin("tiles"); // pzopt: GPU section
             this.performRenderTiles(perPlayerRender, playerIndex, this.currentTimeMillis);
+            pzopt.GpuSections.end("tiles"); // pzopt: GPU section
          } catch (Throwable var24) {
             if (var44 != null) {
                try {
@@ -1506,6 +1508,7 @@ public final class FBORenderCell {
       perPlayerData1.chunksWithTranslucentFloor.clear();
       perPlayerData1.chunksWithTranslucentNonFloor.clear();
 
+      pzopt.GpuSections.begin("chunks"); // pzopt: GPU section (every on-screen chunk: bakes and per-chunk passes)
       for (int i = 0; i < perPlayerData1.onScreenChunks.size(); i++) {
          IsoChunk c = perPlayerData1.onScreenChunks.get(i);
          AbstractPerformanceProfileProbe var10 = renderOneChunk.profile();
@@ -1529,6 +1532,7 @@ public final class FBORenderCell {
          }
       }
 
+      pzopt.GpuSections.end("chunks"); // pzopt: GPU section
       if (pzoptZoomRetain) {
          this.pzoptZoomSettle(playerIndex); // pzopt: zoomRetain, a credit nothing consumed is not carried to the next plan
       }
@@ -1542,9 +1546,11 @@ public final class FBORenderCell {
       FBORenderShadows.getInstance().clear();
       boolean pzoptFloorOnly = pzopt.ResumeShot.noMoving; // pzopt: resumeShot's exit capture (below "full"): no players, shadows, corpses
       if (!pzoptFloorOnly) {
+      pzopt.GpuSections.begin("players"); // pzopt: GPU section (players, corpse / mannequin shadows)
       this.renderPlayers(playerIndex);
       this.renderCorpseShadows(playerIndex);
       this.renderMannequinShadows(playerIndex);
+      pzopt.GpuSections.end("players"); // pzopt: GPU section
       }
       if (!DebugOptions.instance.fboRenderChunk.corpsesInChunkTexture.getValue() && !pzoptFloorOnly) {
          this.renderCorpsesInWorld(playerIndex);
@@ -1611,11 +1617,14 @@ public final class FBORenderCell {
          var30.close();
       }
 
+      pzopt.GpuSections.begin("attach"); // pzopt: GPU section
       this.renderAnimatedAttachments(playerIndex);
       this.renderFlies(playerIndex);
       FBORenderObjectHighlight.getInstance().render(playerIndex);
+      pzopt.GpuSections.end("attach"); // pzopt: GPU section
       IsoChunkMap chunkMap = IsoWorld.instance.currentCell.getChunkMap(playerIndex);
 
+      pzopt.GpuSections.begin("zloop"); // pzopt: GPU section (per-level translucent / water / splashes / shadows)
       for (int z = chunkMap.minHeight; z <= chunkMap.maxHeight; z++) {
          SpriteRenderer.instance.beginProfile(translucentFloorObjectsProbe);
          AbstractPerformanceProfileProbe var34 = translucentFloor.profile();
@@ -1667,14 +1676,18 @@ public final class FBORenderCell {
 
          pzopt.GpuSections.begin("splashes"); /* pzopt: GPU section */ this.renderRainSplashes(playerIndex, z); pzopt.GpuSections.end("splashes");
          SpriteRenderer.instance.beginProfile(shadowsProbe);
+         pzopt.GpuSections.begin("shadows"); // pzopt: GPU section
          FBORenderShadows.getInstance().renderMain(z);
+         pzopt.GpuSections.end("shadows"); // pzopt: GPU section
          SpriteRenderer.instance.endProfile(shadowsProbe);
          if (z == PZMath.fastfloor(IsoCamera.frameState.camCharacterZ)) {
             SpriteRenderer.instance.beginProfile(visibilityProbe);
             ProfileArea var36 = GameProfiler.getInstance().profile("Visibility");
 
             try {
+               pzopt.GpuSections.begin("vispoly"); // pzopt: GPU section (the vision cone: polygon + blur + screen pass)
                VisibilityPolygon2.getInstance().renderMain(playerIndex);
+               pzopt.GpuSections.end("vispoly"); // pzopt: GPU section
             } catch (Throwable var23) {
                if (var36 != null) {
                   try {
@@ -1725,6 +1738,7 @@ public final class FBORenderCell {
       }
 
       FBORenderShadows.getInstance().endRender();
+      pzopt.GpuSections.end("zloop"); // pzopt: GPU section
       if (DebugOptions.instance.weather.showUsablePuddles.getValue()) {
          this.renderPuddleDebug(playerIndex);
       }

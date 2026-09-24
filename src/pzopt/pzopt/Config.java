@@ -457,6 +457,14 @@ public final class Config {
    public static final boolean LUA_PROFILE = bool("luaProfile", INSTRUMENT); // pzopt.LuaProfile: the game-thread sampler also names the Lua function it caught (Zomboid/pzopt-lua.out); on in instrumented runs
    public static final String GC_MODE = string("gcMode", "g1"); // pzopt.GcChoice: the next launch's collector. g1 (default, the maintainer's decision 2026-09-23) | auto (G1 on gcG1Cores cores or fewer) | stock (the launcher's own ZGC; undoes our switch)
    public static final int GC_G1_CORES = integer("gcG1Cores", 4);
+   /**
+    * pzopt.GcChoice: the next launch's C2 compiles without speculative traps (-XX:PerMethodTrapLimit=0
+    * -XX:PerBytecodeTrapLimit=0, marker -Dpzopt.jit=steady): every branch is compiled instead of pruning the ones the
+    * profile never saw. A walk through the world deoptimized ~2,000 compiled methods per 100 s (unstable_if: a branch
+    * never taken while profiling, then taken in a new street) and recompiled 16,600, a compiler thread busy for the whole
+    * walk; without the traps the JIT used 0.43 cores instead of 0.83, same game-thread time (the flip, 2026-09-24).
+    */
+   public static final boolean JIT_STEADY = bool("jitSteady", true);
    public static final int GC_PAUSE_MS = integer("gcPauseMs", 0); // -XX:MaxGCPauseMillis added with the G1 switch (0 = G1's own 200 ms target)
    public static final String JIT_MODE = string("jitMode", "auto"); // pzopt.JitGovernor: tiered (stock) | c1play (C2 excluded from world start on) | c2idle (C2 threads at SCHED_IDLE from world start, Linux; no measured gain) | auto (default: c1play on jitC1Cores cores or fewer, stock above)
    public static final int JIT_C1_CORES = integer("jitC1Cores", 4);
@@ -565,8 +573,50 @@ public final class Config {
     * for fullscreen windows. auto = Linux (X11 / XWayland / Wayland), true = every platform, false = stock window.
     */
    public static final String BORDERLESS_FULLSCREEN = string("borderlessFullscreen", "auto");
-   /** The frame limiter sleeps to ~1 ms before the next step instead of spinning the game thread through the whole wait. */
-   public static final boolean LIMITER_SLEEP = bool("limiterSleep", false);
+   /**
+    * The frame limiter parks the game thread until limiterSpinUs before the next step instead of spinning it through the
+    * whole wait (a core at full clock for nothing: at a 120 fps cap half of the game thread's time on the flip). Default on
+    * except on Windows, where a park wakes on the 1 ms timer tick.
+    */
+   public static final boolean LIMITER_SLEEP = bool("limiterSleep", !System.getProperty("os.name", "").startsWith("Win"));
+   /** limiterSleep: how long before the step the park ends; the stock loop spins the rest (the game thread's timer slack is 1 ns on Linux). */
+   public static final int LIMITER_SPIN_US = Math.max(0, integer("limiterSpinUs", System.getProperty("os.name", "").startsWith("Win") ? 1500 : 200));
+   /**
+    * Hybrid CPUs (Zen 5 + Zen 5c, Intel P + E, Apple P + E): which cores the game's threads run on (pzopt.CorePlacement).
+    * off (stock: the OS decides) | auto (background threads on the efficient cores; the game and render threads there too
+    * while they keep the frame cap, moved to the fast cores when they fall short) | efficient (everything on the efficient
+    * cores) | performance (game and render threads on the fast cores, everything else on the efficient ones).
+    */
+   public static final String CORE_PLACEMENT = string("corePlacement", "auto");
+   /**
+    * The machine's logical CPUs, read when Config loads (boot, before corePlacement narrows any thread's affinity: Java's
+    * availableProcessors() follows the calling thread's mask, so a pool sized later from the game thread got 8 of 24).
+    */
+   public static final int CPUS = Runtime.getRuntime().availableProcessors();
+   /**
+    * AMD GPUs on Linux: the GPU clock level while a world is on screen (pzopt.GpuPstate): off | auto (the lowest fixed
+    * level whose GPU time per frame fits the frame cap, automatic clocks otherwise) | standard | min_sclk | min_mclk | peak.
+    */
+   public static final String GPU_PSTATE = string("gpuPstate", "auto");
+   /** gpuPstate=auto: a level holds while the frame's GPU time p90 stays under this share of the frame interval. */
+   public static final int GPU_PSTATE_FIT_PCT = Math.max(30, Math.min(100, integer("gpuPstateFitPct", 95)));
+   /** The vision cone's edge blur sums its 25 taps once per vision texel instead of once per world pixel (pzopt.VisBlur; same result). */
+   public static final boolean VIS_BLUR_REDUCE = bool("visBlurReduce", true);
+   /** The lighting thread parks to its next update instead of LWJGL's sleep + yield-spin (pzopt.LightingSync). */
+   public static final boolean LIGHTING_SYNC_PARK = bool("lightingSyncPark", true);
+   /**
+    * corePlacement: the CPUs background threads may use instead of every efficient core (a list like "4-7,16-19"; empty =
+    * the efficient class). Packing them onto fewer cores lets the others reach their deepest idle state.
+    */
+   public static final String CORE_BACKGROUND_CPUS = string("coreBackgroundCpus", "");
+   /** corePlacement: the CPUs the game / render / GL threads use when they are on the fast class (a list; empty = the fast class). */
+   public static final String CORE_CRITICAL_CPUS = string("coreCriticalCpus", "");
+   /** corePlacement=auto: the game step's p90 (share of the frame interval) above which the game and render threads move to the fast cores. */
+   public static final int CORE_PROMOTE_PCT = Math.max(30, Math.min(100, integer("corePromotePct", 85)));
+   /** corePlacement=auto: back to the efficient cores when the work, scaled by the measured fast/slow speed ratio, fits this share of the interval. */
+   public static final int CORE_DEMOTE_PCT = Math.max(20, Math.min(95, integer("coreDemotePct", 70)));
+   /** corePlacement=auto: the least time (ms) the game and render threads stay on the fast cores before the governor may move them back. */
+   public static final int CORE_HOLD_MS = Math.max(250, integer("coreHoldMs", 3000));
    public static final boolean PACK_INDEX = bool("packIndex", true);
    public static final boolean ITEM_PARAM_SWITCH = bool("itemParamSwitch", true);
    public static final boolean DUMP_ITEMS = bool("dumpItems", false);

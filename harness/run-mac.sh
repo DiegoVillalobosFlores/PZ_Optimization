@@ -157,9 +157,10 @@ mods_edit "$ZOMBOID/Saves/$BENCH_SAVE/mods.txt" enable "$MOD_ID"
 cp "$ZOMBOID/options.ini" "$ZOMBOID/options.ini.pzopt-orig"
 # the game writes no newline after the last option: an --option append would glue the key onto that line
 [[ -z "$(tail -c1 "$ZOMBOID/options.ini")" ]] || echo >> "$ZOMBOID/options.ini"
-game_pid=""; sampler_pid=""
+game_pid=""; sampler_pid=""; macpower_pid=""
 restore() {
   [[ -n "$sampler_pid" ]] && { kill "$sampler_pid" 2>/dev/null || true; }
+  [[ -n "$macpower_pid" ]] && { kill "$macpower_pid" 2>/dev/null || true; }
   [[ -n "$game_pid" ]] && kill -0 "$game_pid" 2>/dev/null && { kill "$game_pid" 2>/dev/null || true; }
   [[ -f "$ZOMBOID/mods/default.txt.pzopt-orig" ]] && mv -f "$ZOMBOID/mods/default.txt.pzopt-orig" "$ZOMBOID/mods/default.txt"
   if [[ -f "$ZOMBOID/latestSave.ini.pzopt-orig" ]]; then mv -f "$ZOMBOID/latestSave.ini.pzopt-orig" "$ZOMBOID/latestSave.ini"; fi
@@ -222,8 +223,8 @@ python3 - "$out/sysmon.csv" "$game_pid" >> "$out/sysmon.log" 2>&1 <<'EOF' &
 import re, subprocess, sys, time
 csv, pid = sys.argv[1], sys.argv[2]
 f = open(csv, "w", buffering=1)
-f.write("epoch_ms,cpu_pct,cpu_busiest_core_pct,gpu_pct,gpu_sm_mhz,gpu_mem_mhz,gpu_w,gpu_c,vram_mib,game_cpu_pct,bat_w\n")
-top = subprocess.Popen(["top", "-l", "0", "-s", "1", "-n", "1", "-stats", "pid,cpu", "-pid", pid], stdout=subprocess.PIPE, text=True)
+f.write("epoch_ms,cpu_pct,cpu_busiest_core_pct,gpu_pct,gpu_sm_mhz,gpu_mem_mhz,gpu_w,gpu_c,vram_mib,game_cpu_pct,bat_w,energy_impact\n")
+top = subprocess.Popen(["top", "-l", "0", "-s", "1", "-n", "1", "-stats", "pid,cpu,power", "-pid", pid], stdout=subprocess.PIPE, text=True)
 def gpu():
     try:
         o = subprocess.run(["ioreg", "-r", "-d", "1", "-c", "IOAccelerator"], capture_output=True, text=True, timeout=2).stdout
@@ -237,14 +238,18 @@ for line in top.stdout:
     if m:
         cpu = "%.1f" % (float(m.group(1)) + float(m.group(2)))
         continue
-    m = re.match(r"^\s*%s\s+([\d.]+)" % pid, line)
+    m = re.match(r"^\s*%s\s+([\d.]+)\s+([\d.]+)?" % pid, line)
     if m:
         game = m.group(1)
+        power = m.group(2) or ""  # top's energy impact of the game process (Apple's model: CPU time by cluster, GPU, wakeups)
         if first:  # top's first sample is since process start, not an interval
             first = False; continue
-        f.write("%d,%s,,%s,,,,,,%s,\n" % (int(time.time() * 1000), cpu, gpu(), game))
+        f.write("%d,%s,,%s,,,,,,%s,,%s\n" % (int(time.time() * 1000), cpu, gpu(), game, power))
 EOF
 sampler_pid=$!
+# P / E cluster load and the SMC system power (harness/macpower.py) beside it
+python3 "$HERE/macpower.py" "$out/power.csv" 1 >> "$out/sysmon.log" 2>&1 &
+macpower_pid=$!
 
 start=$(date +%s)
 while kill -0 "$game_pid" 2>/dev/null; do
@@ -256,6 +261,7 @@ done
 wait "$caff_pid" 2>/dev/null || true
 end=$(date +%s)
 kill "$sampler_pid" 2>/dev/null || true; wait "$sampler_pid" 2>/dev/null || true; sampler_pid=""
+kill "$macpower_pid" 2>/dev/null || true; wait "$macpower_pid" 2>/dev/null || true; macpower_pid=""
 game_pid=""
 
 # 5. collect

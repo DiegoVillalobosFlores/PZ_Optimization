@@ -824,6 +824,10 @@ public class Display {
    }
 
    public static void sync(int fps) {
+      if (pzopt.LightingSync.ON) { // pzopt: the lighting thread (the only caller) parks to its next update instead of yield-spinning the last ms
+         pzopt.LightingSync.sync(fps); // pzopt
+         return; // pzopt
+      } // pzopt
       Sync.sync(fps);
    }
 

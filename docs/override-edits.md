@@ -3314,6 +3314,15 @@ All hooks are no-ops unless `hdr=true`; findings and numbers in `docs/findings-h
   controller skips the ragdoll step for that one frame. `releaseRagdollController` / `initRagdollController` /
   `updateRagdollInternal` call `pzopt.AnimParallel.noteRagdoll`, which logs (first 5, with the stack) any of them off the
   game thread; 0 in 4 runs after the fix.
+- **zombie.characters.IsoGameCharacter** (`pzoptRestWorker`, 2026-09-24, player report: `ArrayIndexOutOfBoundsException` in
+  `CollideWithObstacles.getIntersection` from `AnimParallel`, ragdolls sliding / spinning / flying): the worker task now
+  stops right after the animator when the zombie's multitrack holds a ragdoll track, and the zombie finishes on the game
+  thread in queue order through the serial path (`AnimCapture.ragdoll`, counter `serialRagdoll=`). The fix above left the
+  model update of that frame on the worker with the ragdoll step skipped (the ragdoll started one frame late); the
+  reported stack is from a release before it, where `initRagdollController` → `onRagdollSimulationStarted` →
+  `slideAwayFromWalls` → `PolygonalMap2.resolveCollision` ran on eight workers sharing one collision scratch. Checked with
+  the `horde-shoot` bench (`harness/ragdoll-judge.py`, `pzopt.RagdollWatch`): at matched fps the optimized ragdolls are
+  stock's (0 abnormal episodes either side), 0 ragdoll calls off the game thread.
 - **zombie.input.Mouse** (harness only): `getXA/getYA/getX/getY` return `pzopt.Showcase.aimXA/aimYA` while the showcase
   aims, and `update()` reports the right button held and the left one from `Showcase.fireDown` while `holdButtons`, so the
   game's own aim / attack / recoil / fire-mode path runs as for a player holding the mouse. Off (one volatile read) outside

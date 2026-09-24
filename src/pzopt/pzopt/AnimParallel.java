@@ -43,7 +43,11 @@ import zombie.core.skinnedmodel.animation.AnimationTrack;
  * a character with no square, and a zombie whose current anim states (or its live nodes) name a variable callback with
  * side effects in a condition, a scalar, a speed scale or a track-time variable ({@link ActionEval#impureCallback}):
  * those callbacks clear the target, drop the thump target, rescan corpses or run a pathfind line test, and must run on
- * the game thread in stock's order. The callbacks themselves carry a guard ({@link #impureGuard}): reached on a
+ * the game thread in stock's order. A zombie whose animator step on the worker left a ragdoll track (a hit or a death)
+ * also stops right after the animator: the model update would start or step the ragdoll (the wall slide through
+ * PolygonalMap2's shared collision scratch, the ragdoll pool, the physics world), which is game-thread work
+ * ({@code serialRagdoll=}; before it the model update ran on the worker and only skipped the ragdoll step for that frame,
+ * and older releases created the controller there: ArrayIndexOutOfBounds in CollideWithObstacles). The callbacks themselves carry a guard ({@link #impureGuard}): reached on a
  * worker anyway, they throw before any side effect and the zombie finishes on the game thread; the count is in the log
  * ({@code impure=}) and has to stay 0.
  */
@@ -60,7 +64,7 @@ public final class AnimParallel {
    private static boolean gameNoInterpolate; // the game thread running a worker task (it joins the batch)
    private static AnimCapture gameCapture;
 
-   public static long frames, armed, serialEvents, serialOther, notArmed, statesUnsafe, impureTouches, failures;
+   public static long frames, armed, serialEvents, serialOther, serialRagdoll, notArmed, statesUnsafe, impureTouches, failures;
 
    public static boolean enabled() {
       return ENABLED && !failed && Overrides.enabled();
@@ -255,6 +259,8 @@ public final class AnimParallel {
             if (c.serial) {
                if (c.impure) {
                   serialOther++;
+               } else if (c.ragdoll) {
+                  serialRagdoll++;
                } else if (c.failure != null) {
                   failures++;
                   serialOther++;
@@ -343,6 +349,11 @@ public final class AnimParallel {
     * game's Bullet library): counts and logs (first 5, with the stack) a call that is not on the game thread. Evidence
     * rig for the Bullet calculateSimulationIslands crash while shooting a burning horde (showcase runs, 2026-09-24).
     */
+   /** Ragdoll controller calls seen off the game thread so far (harness RagdollWatch). */
+   public static synchronized int ragdollOffThreadCount() {
+      return ragdollOffThread;
+   }
+
    public static void noteRagdoll(String where) {
       Thread t = Thread.currentThread();
       if (gameThread == null || t == gameThread) {
@@ -519,7 +530,7 @@ public final class AnimParallel {
    /** One line for the periodic FBORenderCell log. */
    public static String describe() {
       return "animator parallel: frames=" + frames + " armed=" + armed + " notArmed=" + notArmed + " statesUnsafe=" + statesUnsafe
-            + " evalWaits=" + evalWaits + " evalWait ms=" + (evalWaitNanos / 1_000_000L) + " pipelineWaits=" + pipelineWaits + " pipelineWait ms=" + (pipelineWaitNanos / 1_000_000L) + " firstWorkerStart ms=" + (firstStartNanos / 1_000_000L) + " span ms=" + (spanNanos / 1_000_000L) + " workerTasks=" + workerTasks.get() + " task ms=" + (taskNanos.get() / 1_000_000L) + " serialEvents=" + serialEvents + " serialOther=" + serialOther + " impure=" + impureTouches + " failures=" + failures
+            + " evalWaits=" + evalWaits + " evalWait ms=" + (evalWaitNanos / 1_000_000L) + " pipelineWaits=" + pipelineWaits + " pipelineWait ms=" + (pipelineWaitNanos / 1_000_000L) + " firstWorkerStart ms=" + (firstStartNanos / 1_000_000L) + " span ms=" + (spanNanos / 1_000_000L) + " workerTasks=" + workerTasks.get() + " task ms=" + (taskNanos.get() / 1_000_000L) + " serialEvents=" + serialEvents + " serialOther=" + serialOther + " serialRagdoll=" + serialRagdoll + " impure=" + impureTouches + " failures=" + failures
             + (failed ? " FAILED" : "");
    }
 }

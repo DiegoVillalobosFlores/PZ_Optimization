@@ -10688,6 +10688,15 @@ public abstract class IsoGameCharacter
          }
 
          AnimationPlayer animPlayer = this.getAnimationPlayer();
+         // pzopt: a ragdoll track (the animator just started one on a hit or a death) makes the model update start or step
+         // the ragdoll: onRagdollSimulationStarted's wall slide (PolygonalMap2's shared collision scratch), the ragdoll
+         // pool and the physics world. That is game-thread work: the rest runs there, after the dispatch, as stock.
+         if (animPlayer.getMultiTrack().containsAnyRagdollTracks()) { // pzopt: animatorParallel ragdoll start
+            c.serial = true; // pzopt: animatorParallel ragdoll start
+            c.ragdoll = true; // pzopt: animatorParallel ragdoll start
+            return; // pzopt: animatorParallel ragdoll start
+         } // pzopt: animatorParallel ragdoll start
+
          this.applyDeltas(animPlayer);
          if (!this.hasActiveModel()) {
             animPlayer.updateBones = false;

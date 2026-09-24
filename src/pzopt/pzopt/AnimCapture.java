@@ -25,6 +25,8 @@ public final class AnimCapture {
    /** Set last by the worker task (animatorPipeline: the game thread finishes the character once it sees it). */
    public volatile boolean done;
    public boolean impure;
+   /** Set by the worker: the animator left a ragdoll track, whose start and step must run on the game thread. */
+   public boolean ragdoll;
    public Throwable failure;
    /** The animation time step of this frame, computed on the game thread. */
    public float deltaT;
@@ -34,6 +36,7 @@ public final class AnimCapture {
       this.done = false;
       this.serial = false;
       this.impure = false;
+      this.ragdoll = false;
       this.failure = null;
       this.count = 0;
       this.releaseCount = 0;

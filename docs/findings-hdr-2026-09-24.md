@@ -272,6 +272,24 @@ SDR decode), so the HDR container at expansion 0 reproduces the SDR window exact
   `docs/override-edits.md`); open: a quit-time crash `Ragdoll::deleteRigidBodies` after heavy kills (ours 5/5, stock 0/2;
   a key bisect was stopped halfway: 79 boolean keys off = clean).
 
+- **2026-09-25 00:00-00:40 flip report: every light bloomed indoors by day, only while facing north.** Rig: `pzopt.Explore`
+  (`explore=restaurant`, Jev walks the character through a building by the movement keys, `harness/explore-director.py`)
+  + `devHdrTraceMs` (per-facing console line: frame average, night key, light-map reference, seen / couldSee counts,
+  medians). Cause: the light map's reference ("ambient") was the median light of the squares in the view cone, with a hard
+  switch to all squares below 64 seen. Indoors by day it followed the facing: the cone on the dim room gave 0.2-0.4
+  (every lamp and window pool at full gain, `maxExcess` 160-220, plus bloom), the cone on a wall (< 64 squares) or out of a
+  window gave 1.0 (nothing). Run `flip-hdrnorth-walk-*` (bakery / grocery strip, noon): grocery W 0.40 / 220 vs SE
+  1.00 / 0; janitor NW 0.69 / 176 vs E 1.00 / 0; "north" was the dim side of the maintainer's building. The night-torch
+  spin had the same swing, smaller (0.16 facing E / S, 0.28 facing N). Fix (`HdrLight.build`): the reference is floored
+  at `1 - Hdr.nightCap()` (the climate's daylight, the composite's own night cap), so by day nothing stands out, as the
+  design said; at night the median is blended from all squares to the seen ones by the seen count (no hard switch) and
+  eased over ~0.4 s. Verify, same building (`flip-hdrnorth-walk-fix-bakery-*` vs `flip-hdrnorth-walk-*`, grocerystorage
+  dumps at the four quarter turns): frame mean 6.3 / 13.2 / 6.5 / 12.2 nits (p99 33-73) by facing before, 6.0-7.0 nits
+  (p99 32-35) in every facing after; reference 1.000, `maxExcess` 0 in every room and facing. Pizza Whirled
+  (`flip-hdrnorth-walk-fix-*`, 7 rooms) the same, but it is bright inside (room median 255): it never showed the bug.
+  Night-torch spin (`flip-hdrnorth-night-fix-*` vs `flip-hdrnorth-trace-*`): the torch / lamps keep `maxExcess` 255 in
+  every facing; the reference's swing by facing narrows (N 0.165-0.278 -> 0.166-0.243, SE max 0.396 -> 0.201).
+
 ## State (2026-09-24 10:10)
 
 `hdr=true` on KDE Plasma 6 with HDR on gives: UI at the desktop's white, the world as SDR in daylight, lamp / torch /

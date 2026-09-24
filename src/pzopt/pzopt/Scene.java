@@ -131,6 +131,7 @@ public final class Scene {
       puddles = Float.parseFloat(HarnessFlags.get("puddles", "-1").trim());
       Showcase.apply(); // showcase=horde
       Showcase.worldReady(p); // showcase=horde: god mode, unseen, power off, the area cleared until the scene starts
+      Explore.worldReady(p); // explore=restaurant: the walk through the nearest restaurant
       SoundProbe.apply(); // house_alarm / car_alarm / sound_probe
       if (soundRadius > 0) {
          Log.info("harness: sound=" + soundRadius + " every " + soundEvery + " frame(s) from the player's square, hearing="
@@ -256,6 +257,7 @@ public final class Scene {
       }
       keepWornItems(p); // the bench player keeps their glasses (screen blur otherwise; see pinWornItems)
       Showcase.tick(p, nowNs); // showcase=horde: aim, fire, keep the lights on
+      Explore.tick(p, nowNs); // explore=restaurant: walk, look around
       ThumpRig.tick(p, nowNs); // thump=N: zombies thumping a door off-screen (the thump-burst repro)
       if (zombiesOff) {
          removeZombies();

@@ -697,6 +697,7 @@ public final class Config {
    public static final int HDR_PEAK_NITS = integer("hdrPeakNits", 0); // brightest highlight in cd/m², 0 = the panel's peak
    public static final int HDR_ITM_PCT = integer("hdrItmPct", 50); // highlight expansion strength (0 = the SDR picture in an HDR container)
    public static final int HDR_BLOOM_PCT = integer("hdrBloomPct", 30); // bloom from the expanded highlights, % strength (0 = off)
+   public static final int DEV_HDR_TRACE_MS = integer("devHdrTraceMs", 0); // dev: every N ms a console line with the player's facing, the world's average light, the night key and the light-map stats
    public static final int HDR_LIGHT_PCT = integer("hdrLightPct", 100); // light-map gain: lit squares (lamps, torches, fire) brightened by their light over the ambient, % strength
    public static final int HDR_GLINT_PCT = integer("hdrGlintPct", 100); // sun glints and sky reflections on water and puddles, lamp glints at night, % strength (0 = off, shaders stay stock)
    public static final int HDR_SUN_PCT = integer("hdrSunPct", 60); // sunlit outdoors on a clear day brighter than the SDR picture by this %, scaled by sun height and clouds (0 = daylight as SDR)

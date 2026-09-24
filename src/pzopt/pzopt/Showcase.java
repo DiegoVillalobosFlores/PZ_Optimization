@@ -54,11 +54,11 @@ public final class Showcase {
       return key >= 0 && key < heldKeys.length && heldKeys[key];
    }
 
-   private static void releaseKeys() {
+   static void releaseKeys() {
       java.util.Arrays.fill(heldKeys, false);
    }
 
-   private static void holdKey(String binding) {
+   static void holdKey(String binding) {
       int k = zombie.core.Core.getInstance().getKey(binding);
       if (k > 0 && k < heldKeys.length) heldKeys[k] = true;
    }
@@ -468,7 +468,7 @@ public final class Showcase {
    }
 
    /** The movement keys toward (dx, dy) in world tiles: the keys move screen-relative (up = north-west). */
-   private static void moveKeys(float dx, float dy) {
+   static void moveKeys(float dx, float dy) {
       float sx = dx - dy, sy = dx + dy, len = (float)Math.hypot(sx, sy);
       if (len < 1e-3F) return;
       sx /= len;

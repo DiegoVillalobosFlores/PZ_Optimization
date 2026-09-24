@@ -64,7 +64,7 @@ public final class HdrLight {
    static final class Frame extends TextureDraw.GenericDrawer {
       static final int FREE = 0, BUILDING = 1, BUILT = 2, UPLOADING = 3;
       final ByteBuffer data = BufferUtils.createByteBuffer(MAX * MAX * 4);
-      final int[] hist = new int[256], histSeen = new int[256];
+      final int[] hist = new int[256], histSeen = new int[256], histCould = new int[256];
       /** per texel: the analytic intensity of the lights reaching the square and its colour (see build) */
       final float[] an = new float[MAX * MAX], ar = new float[MAX * MAX], ag = new float[MAX * MAX], ab = new float[MAX * MAX], tmp = new float[MAX * MAX];
       /** per texel: sun exposure (outdoors x the square's light), blurred; uploaded as the aux map (R8) */
@@ -97,7 +97,12 @@ public final class HdrLight {
    /** the last built map's median light, squares read and max excess (Hdr's frame dumps) */
    static volatile float lastAmbient;
    static volatile int lastCounted, lastSeen, lastMaxExcess;
+   /** devHdrTraceMs: squares in the line of sight whatever the facing (JNILighting vis bit 4), the medians of all / seen / those */
+   static volatile int lastCould, lastMedAll, lastMedSeen, lastMedCould;
    static final float[] mapping = new float[6];
+   /** the ambient the excess is measured against, eased over time (worker thread only) */
+   private static float ambEased = -1F;
+   private static long ambEasedNs;
    private static int tex, auxTex;
    static final int AUX_UNIT = 2;
    private static final byte[] ZERO = new byte[MAX * MAX * 4];
@@ -224,6 +229,9 @@ public final class HdrLight {
          int[] histSeen = f.histSeen;
          java.util.Arrays.fill(histSeen, 0);
          int seen = 0;
+         int[] histCould = f.histCould;
+         java.util.Arrays.fill(histCould, 0);
+         int could = 0;
          d.put(0, ZERO, 0, w * h * 4);
          java.util.Arrays.fill(f.an, 0, w * h, 0F);
          java.util.Arrays.fill(f.sun, 0, w * h, 0F);
@@ -264,9 +272,14 @@ public final class HdrLight {
                      int mc = Math.max(r, Math.max(g, b));
                      hist[mc]++; // same measure as the excess below (max channel)
                      counted++;
-                     if (VIS != null && ((byte)VIS.get(jl) & 2) != 0) {
+                     byte vis = VIS != null ? (byte)VIS.get(jl) : 0;
+                     if ((vis & 2) != 0) {
                         histSeen[mc]++;
                         seen++;
+                     }
+                     if ((vis & 4) != 0) {
+                        histCould[mc]++;
+                        could++;
                      }
                      int t = ((y - y0) / step) * w + (x - x0) / step;
                      int o = t * 4;
@@ -302,18 +315,24 @@ public final class HdrLight {
             }
          }
          // ambient = median light of the sampled squares; alpha = excess over it, 0..1 of the remaining range
-         // only over the squares the player sees now: the unseen ones are drawn darkened (fog of war) and pulled the median
-         // of a sunny day to 0.54, so all sunlit ground counted as lamp-lit and got the light gain (hdr35: 1.5x)
-         int[] mh = seen >= 64 ? histSeen : hist;
-         int half = (seen >= 64 ? seen : counted) / 2, acc = 0, median = 0;
-         for (int i = 0; i < 256; i++) {
-            acc += mh[i];
-            if (acc > half) {
-               median = i;
-               break;
-            }
+         // over the squares the player sees now: the unseen ones are drawn darkened (fog of war) and pulled the median
+         // of a sunny day to 0.54, so all sunlit ground counted as lamp-lit and got the light gain (hdr35: 1.5x).
+         // That median follows the view cone, so by day it is floored at the climate's daylight: indoors it swung with the
+         // facing between the dim room (0.2-0.4: every lamp and window pool at full gain, plus bloom) and 1.0 (the cone on
+         // a wall, under 64 squares, or out of a window: nothing), the flip report of lights blooming only while facing north
+         // (runs flip-hdrnorth-walk-*). In daylight nothing stands out, as designed; the night keeps the median, blended
+         // from all squares to the seen ones by the seen count (the old hard switch at 64 flipped with the facing too) and
+         // eased over ~0.4 s so turning fades the gain instead of popping it.
+         float seenW = Math.min(1F, seen / 64F);
+         float target = Math.max(1F - Hdr.nightCap(), ((1F - seenW) * median(hist, counted) + seenW * median(histSeen, seen)) / 255F);
+         long now = System.nanoTime();
+         if (ambEased < 0F || now - ambEasedNs > 1_000_000_000L) {
+            ambEased = target; // first map, or after a pause
+         } else {
+            ambEased += (target - ambEased) * (1F - (float)Math.exp(-(now - ambEasedNs) / 0.4e9));
          }
-         float amb = median / 255F;
+         ambEasedNs = now;
+         float amb = ambEased;
          float hot = Math.max(0F, Math.min(1F, Hdr.tune.lightHot));
          // the per-square light lists are all-or-nothing at a cone's edge or a wall: a separable 5-tap blur (~2 squares)
          // keeps the analytic field from cutting a hard edge into the smooth vertex light (hdrcmp-ours, 09:25)
@@ -350,6 +369,12 @@ public final class HdrLight {
          lastAmbient = amb;
          lastCounted = counted;
          lastSeen = seen;
+         lastCould = could;
+         if (Config.DEV_HDR_TRACE_MS > 0) {
+            lastMedAll = median(hist, counted);
+            lastMedSeen = median(histSeen, seen);
+            lastMedCould = median(histCould, could);
+         }
          lastMaxExcess = maxExcess;
          f.lit = lit;
          f.buildNs = System.nanoTime() - t0;
@@ -358,6 +383,16 @@ public final class HdrLight {
          Log.warn("hdr light: build failed: " + t);
          f.state.set(Frame.FREE);
       }
+   }
+
+   private static int median(int[] h, int n) {
+      for (int i = 0, acc = 0; i < 256; i++) {
+         acc += h[i];
+         if (acc > n / 2) {
+            return i;
+         }
+      }
+      return 0;
    }
 
    /** In-place separable [1 4 6 4 1]/16 blur of a w x h field (edges clamped). */

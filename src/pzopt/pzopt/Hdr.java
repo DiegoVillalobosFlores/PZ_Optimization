@@ -784,9 +784,14 @@ public final class Hdr {
       GL20.glUniform4f(loc, left, Core.height - top - sh, sw, sh);
    }
 
+   /** 1 at night, 0 in daylight: the climate's daylight (0.15 .. 0.5) as the cap of the night keys. */
+   static float nightCap() {
+      return 1F - Math.max(0F, Math.min(1F, (HdrGlint.daylight - 0.15F) / 0.35F));
+   }
+
    private static void setLightUniforms(int l0, int l1, int f, int sampler) {
       int prog = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
-      float dl = HdrGlint.daylight, nightCap = 1F - Math.max(0F, Math.min(1F, (dl - 0.15F) / 0.35F));
+      float nightCap = nightCap();
       GL20.glUniform4f(GL20.glGetUniformLocation(prog, "pzHdrH"), tune.lightTint, nightCap, 0F, 0F);
       float levelPx = 96F * Core.tileScale / Math.max(0.1F, Core.getInstance().getZoom(0)); // one floor level on screen
       GL20.glUniform4f(GL20.glGetUniformLocation(prog, "pzHdrG"), tune.lightMax, tune.itmDay, 1F + (tune.flashMax - 1F) * flash, levelPx * tune.lightReach);
@@ -841,6 +846,11 @@ public final class Hdr {
       }
       if (active && tune.light > 0F) {
          HdrLight.queue(tune.lightFlipY);
+      }
+      if (Config.DEV_HDR_TRACE_MS > 0 && zombie.characters.IsoPlayer.players[0] != null) {
+         zombie.characters.IsoPlayer p = zombie.characters.IsoPlayer.players[0];
+         traceDir = String.valueOf(p.getDir());
+         traceAngle = (float)Math.toDegrees(Math.atan2(p.getForwardDirection().y, p.getForwardDirection().x));
       }
       if (active) {
          SpriteRenderer.instance.drawGeneric(STATS);
@@ -921,6 +931,9 @@ public final class Hdr {
       GL11.glBindTexture(GL11.GL_TEXTURE_2D, statsTex); // the composite and the bright pass sample it on unit 7
       GL13.glActiveTexture(GL13.GL_TEXTURE0);
       GpuSections.markNow("hdr.stats", true);
+      if (Config.DEV_HDR_TRACE_MS > 0) {
+         trace();
+      }
 
       // 2. bloom from what the expansion adds above SDR
       if (tune.bloom > 0F) {
@@ -954,6 +967,31 @@ public final class Hdr {
       if (stencil) {
          GL11.glEnable(GL11.GL_STENCIL_TEST);
       }
+   }
+
+   private static volatile String traceDir = "?";
+   private static volatile float traceAngle;
+   private static long traceNextMs;
+   private static final java.nio.FloatBuffer TRACE_BUF = BufferUtils.createFloatBuffer(4);
+
+   /** devHdrTraceMs: the stats pass's 1x1 mip read back (a sync read, dev only) next to the keys it drives. */
+   private static void trace() {
+      long now = System.currentTimeMillis();
+      if (now < traceNextMs) {
+         return;
+      }
+      traceNextMs = now + Config.DEV_HDR_TRACE_MS;
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, statsTex);
+      int top = (int)Math.floor(Math.log(Math.max(STATS_W, STATS_H)) / Math.log(2));
+      TRACE_BUF.clear();
+      GL11.glGetTexImage(GL11.GL_TEXTURE_2D, top, GL11.GL_RGBA, GL11.GL_FLOAT, TRACE_BUF);
+      float avg = TRACE_BUF.get(3);
+      float dl = HdrGlint.daylight, nightCap = nightCap();
+      float s = Math.max(0F, Math.min(1F, (avg - tune.nightLo) / Math.max(1e-6F, tune.nightHi - tune.nightLo)));
+      float night = Math.min(1F - s * s * (3F - 2F * s), nightCap);
+      Log.info(String.format("hdr trace: dir=%s angle=%.0f avg=%.4f night=%.2f nightCap=%.2f daylight=%.2f lightAmbient=%.3f seen=%d maxExcess=%d could=%d counted=%d medAll=%d medSeen=%d medCould=%d",
+            traceDir, traceAngle, avg, night, nightCap, dl, HdrLight.lastAmbient, HdrLight.lastSeen, HdrLight.lastMaxExcess, HdrLight.lastCould, HdrLight.lastCounted,
+            HdrLight.lastMedAll, HdrLight.lastMedSeen, HdrLight.lastMedCould));
    }
 
    private static int fboFor(int texture) {

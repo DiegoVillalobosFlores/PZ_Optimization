@@ -71,6 +71,7 @@ PzoptOptionClasses = {
     devFogFlat = { "pzopt.FogPass" },
     devFogNoDraw = { "pzopt.FogPass" },
     devGlStateCheck = { "pzopt.GlState" },
+    devHdrTraceMs = { "pzopt.Hdr", "pzopt.HdrLight" },
     devLightingReadCheck = { "FBORenderCell", "pzopt.LightingBatch" },
     devMacPresentCheck = { "pzopt.MacPresent" },
     devProfileLogOff = { "pzopt.GameThreadProfile" },

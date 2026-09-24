@@ -589,6 +589,7 @@ public final class Harness {
                }
                Scene.routeStart(nowNs);
                Showcase.routeStart(p); // showcase=horde: the HDR horde video scene
+               Explore.routeStart(p); // explore=restaurant: out of the car, the walk begins
                chunksAtStart = Stats.chunkCount();
                runStartNs = nowNs;
                runStartEpochMs = System.currentTimeMillis();
@@ -661,6 +662,10 @@ public final class Harness {
                 }
                 return;
              }
+            if (Explore.done()) {
+               finish(p, 0); // explore=restaurant: every room visited (or the director said done)
+               return;
+            }
             if (upstairsAt > 0f && (nowNs - runStartNs) / 1e9 >= upstairsAt) {
                upstairsAt = 0f; // once: the level change mid-route (upstairs_at, issue #12 transition)
                Stats.mark("upstairs");
@@ -687,7 +692,7 @@ public final class Harness {
             // teleport tools use); it also takes the player out of a vehicle,
             // which plain setX/setY does not survive
             boolean holding = leg >= legs.size() && holdSecs > 0f;
-            if (!holding && !Showcase.active() && ((int)x != p.getXi() || (int)y != p.getYi())) { // showcase=horde moves the player itself
+            if (!holding && !Showcase.active() && !Explore.active() && ((int)x != p.getXi() || (int)y != p.getYi())) { // showcase=horde moves the player itself
                // no teleports during the hold: the player may walk away from the end square (manual tests)
                p.teleportTo((int)x, (int)y, routeZ);
             }

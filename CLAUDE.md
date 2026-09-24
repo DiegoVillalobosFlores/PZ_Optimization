@@ -212,7 +212,7 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   lightingRebakeMs=1000. Game thread now 97 % busy with broad work (bakes 20 %, world update 23 %,
   Lua UI 10 %): 240 locked on that route needs a structural change, not more trims.
 - In-game performance overlay (2026-09-20, `pzopt.Overlay`, F9 or `--prop overlay=true`; since 2026-09-21 its
-  measurement is opt-in, `overlaySampling` tab tick box, default off, F9 shows a restart notice without it; harness
+  measurement is opt-in, `overlaySampling` tab tick box, default off, F9 shows a notice without it; since 2026-09-24 every Profiler-tab key applies at once, no restart (`Config.reloadLive`, `Overlay.reconfigure`); harness
   runs and `overlay=true` imply it — the Windows 0.5 s stutter was its JMX load sampling on the game thread): presented
   frame time, p99/p99.9/max/1%-low/jitter/spikes over 5 s, GPU busy (GL timer query), game/render
   thread load, verdict line, frame graph; every harness run also writes `pzopt-overlay.out`

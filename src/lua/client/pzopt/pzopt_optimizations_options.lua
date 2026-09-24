@@ -2,8 +2,9 @@
 --  Every pzopt.Config key is a control here: booleans are tick boxes, integers are combos whose first
 --  entry is the build's default on this machine. The values live in Java: the overridden
 --  PerformanceSettings forwards to pzopt.Config (what is in force since boot) and pzopt.UserOptions
---  (Zomboid/pzopt/options.ini, what the next launch will read). Everything applies on the next
---  launch, so a change away from the boot value raises the stock "restart required" dialog.
+--  (Zomboid/pzopt/options.ini, what the next launch will read). The Optimizations tab applies on the
+--  next launch, so a change away from the boot value raises the stock "restart required" dialog; the
+--  Profiler tab's keys (entry.live) apply at once when saved (pzopt.Config.reloadLive, pzopt.Overlay.reconfigure).
 --  A key set in the install dir's pzopt.properties or as -Dpzopt.<key> (harness runs) wins over the
 --  file; its control shows that value, is disabled, and the tooltip says what pins it.
 --  The top of the tab is the master switch (key `enabled`): off = every override takes its stock
@@ -25,6 +26,7 @@
 local TAB = "Optimizations"
 local PROFILER_TAB = "Profiler"
 local RESTART_NOTE = "Takes effect on the next launch."
+local LIVE_NOTE = "Applies as soon as you press Apply; no restart needed."
 
 -- The master switch, drawn before the sections with the two buttons.
 local MASTER = { key = "enabled", label = "Optimizations enabled (master switch)",
@@ -506,7 +508,7 @@ local PROFILER_SECTIONS = {
         title = "Performance overlay (F9 or the \"Toggle performance overlay\" key binding; L3 + R3 on a controller)", clip = "spin",
         entries = {
             { key = "overlaySampling", label = "Sample frame times and utilization (needed for F9 / L3 + R3)",
-              tip = "Records every presented frame, times the GPU with GL timer queries and samples the CPU load twice a second on a background thread. Off by default: without it F9 (or L3 + R3 on a controller) only shows a notice. \"Show the overlay from boot\" and \"Log every presented frame\" turn it on too. Applies on the next launch." },
+              tip = "Records every presented frame, times the GPU with GL timer queries and samples the CPU load twice a second on a background thread. Off by default: without it F9 (or L3 + R3 on a controller) only shows a notice. \"Show the overlay from boot\" and \"Log every presented frame\" turn it on too." },
             { key = "overlay", label = "Show the overlay from boot",
               tip = "Frame rate, frame-time tail (p99, p99.9, max, 1%-low, jitter, spikes), GPU busy share, game and render thread load, and a frame-time graph. The key (F9) or L3 + R3 on a controller toggles it any time." },
             { key = "overlayLog", label = "Log every presented frame",
@@ -518,7 +520,7 @@ local PROFILER_SECTIONS = {
             { key = "overlayTree", label = "Game-thread tree",
               choices = { "off", "0", "3", "5", "8" },
               note = { ["0"] = "phases only", ["3"] = "3 sub-phases per phase", ["5"] = "5 sub-phases per phase", ["8"] = "8 sub-phases per phase" },
-              tip = "What the game thread is doing, from its call stack sampled on a background thread: the phases (update / render / lighting) with their share of the time, under each the biggest sub-phases (chunk bakes, zombies, UI draw, frame hand-off...) with a bar, the wait share in red and the hottest methods. Also logged per second to Zomboid/pzopt-gamethread.out for harness/analyze.py. Applies on the next launch." },
+              tip = "What the game thread is doing, from its call stack sampled on a background thread: the phases (update / render / lighting) with their share of the time, under each the biggest sub-phases (chunk bakes, zombies, UI draw, frame hand-off...) with a bar, the wait share in red and the hottest methods. Also logged per second to Zomboid/pzopt-gamethread.out for harness/analyze.py." },
             { key = "overlayVerdict", label = "Verdict line",
               choices = { "off", "short", "detailed" },
               note = { short = "\"at the cap\" / \"GPU bound\" / \"nothing saturated\"", detailed = "+ the two biggest game-thread sub-phases when it is the game thread" },
@@ -594,6 +596,12 @@ local PROFILER_SECTIONS = {
         },
     },
 }
+-- Every Profiler-tab key applies while the game runs (Java: Config.isLive): no restart dialog, "now" in the preview.
+for _, section in ipairs(PROFILER_SECTIONS) do
+    for _, entry in ipairs(section.entries) do
+        entry.live = true
+    end
+end
 
 -- The "Sort by" combo shows the sections in this source order ("natural"), alphabetically (sections by title, settings
 -- by label) or by their effect on one resource. Settings that only make sense next to another one (a setting and its
@@ -628,8 +636,19 @@ local function store(entry, value)
     end
 end
 
+local function noteFor(entry)
+    return entry.live and LIVE_NOTE or RESTART_NOTE
+end
+
+-- After a save: a live key is already in force (UserOptions.set re-read it), any other asks for a restart.
+local function afterStore(option, entry, value)
+    if not entry.live then
+        option:restartRequired(perf():getPzoptOption(entry.key), value)
+    end
+end
+
 local function tooltipFor(entry, pinnedBy)
-    local t = entry.tip .. " " .. RESTART_NOTE .. " Key: " .. entry.key .. "."
+    local t = entry.tip .. " " .. noteFor(entry) .. " Key: " .. entry.key .. "."
     if pinnedBy ~= "" then
         t = t .. " Pinned by " .. pinnedBy .. " for this install; the menu cannot change it."
     end
@@ -1124,8 +1143,9 @@ function PzoptPreview:prerender()
     self:text(getTextManager():WrapText(self.fontM, entry.label, w, 1, "..."), x, y, C_TEXT, self.fontM)
     y = y + self.hM + 2
     local pinnedBy = p:getPzoptOptionPinnedBy(entry.key)
-    local values = "Key " .. entry.key .. "   since this boot: " .. p:getPzoptOption(entry.key)
-        .. "   next launch: " .. row.option:pzoptCurrent()
+    local values = entry.live
+        and ("Key " .. entry.key .. "   now: " .. p:getPzoptOption(entry.key) .. "   after Apply: " .. row.option:pzoptCurrent())
+        or ("Key " .. entry.key .. "   since this boot: " .. p:getPzoptOption(entry.key) .. "   next launch: " .. row.option:pzoptCurrent())
     if pinnedBy ~= "" then values = values .. "   (pinned by " .. pinnedBy .. ")" end
     self:text(getTextManager():WrapText(self.fontS, values, w, 1, "..."), x, y, C_GREY)
     y = y + self.hS + 2
@@ -1151,8 +1171,8 @@ function PzoptPreview:prerender()
     self:text("Effect on your hardware", x, y, C_TEXT, self.fontM)
     y = y + self.hM + 4
     y = self:drawBars(x, y, w, EFFECTS[entry.key] or {})
-        .. "load, chunks sooner), amber = more, blue = idle cores put to work. " .. RESTART_NOTE, x, y + 4, w, C_DIM)
     self:drawWrapped("Against the stock game, from the measurements in docs/archive/2026-09-24/results.md: green = less load (or a shorter "
+        .. "load, chunks sooner), amber = more, blue = idle cores put to work. " .. noteFor(entry), x, y + 4, w, C_DIM)
 end
 
 -- ---------------------------------------------------------------------------------------------------
@@ -1704,7 +1724,7 @@ local function addBoolOption(self, entry, splitpoint, y, BUTTON_HGT)
         if pinnedBy ~= "" then return end
         local value = tostring(self.control:isSelected(1))
         store(entry, value)
-        self:restartRequired(perf():getPzoptOption(entry.key), value)
+        afterStore(self, entry, value)
     end
     -- the "Enable all" button puts the control back to the build's default
     function option.pzoptReset(self)
@@ -1758,7 +1778,7 @@ local function addIntOption(self, entry, splitpoint, y, comboWidth)
         local value = box.selected > 1 and values[box.selected - 1] or ""
         perf():setPzoptOption(entry.key, value)
         local effective = value ~= "" and value or perf():getPzoptOptionDefault(entry.key)
-        self:restartRequired(perf():getPzoptOption(entry.key), effective)
+        afterStore(self, entry, effective)
     end
     function option.pzoptReset(self)
         if pinnedBy ~= "" then return end
@@ -1963,7 +1983,7 @@ local function addBezierOption(self, entry, splitpoint, y, comboWidth, BUTTON_HG
         end
         perf():setPzoptOption(entry.key, value)
         local effective = value ~= "" and value or default
-        self:restartRequired(perf():getPzoptOption(entry.key), effective)
+        afterStore(self, entry, effective)
     end
     function option.pzoptReset(self)
         if pinnedBy ~= "" then return end
@@ -2112,7 +2132,7 @@ end
 local PROFILER_RESET = "Reset to defaults"
 local function addProfilerButtons(self, splitpoint, y)
     local b = self:addButton(splitpoint, y, PROFILER_RESET)
-    b.tooltip = "Puts every setting on this tab back to the build's default. " .. RESTART_NOTE
+    b.tooltip = "Puts every setting on this tab back to the build's default. " .. LIVE_NOTE
     b.target = self
     b.onclick = function(target)
         for _, option in ipairs(target.pzoptProfilerOptions or {}) do
@@ -2219,6 +2239,7 @@ local PAGES = {
     {
         tab = TAB, sections = SECTIONS, master = MASTER, buttons = function(o, splitpoint, y) addAllButtons(o, splitpoint, y); addUpscalerDepsButton(o, splitpoint, y) end,
         panel = "pzoptPanel", options = "pzoptOptions", search = "pzoptSearch", preview = "pzoptPreview",
+        footer = "Changes take effect on the next launch. File: Zomboid/pzopt/options.ini",
         headline = function(p)
             return "All optimizations (since this boot: " .. (p:isPzoptEnabled() and "on" or "OFF: the game is running stock") .. ")"
         end,
@@ -2227,6 +2248,7 @@ local PAGES = {
         tab = PROFILER_TAB, sections = PROFILER_SECTIONS, buttons = addProfilerButtons,
         panel = "pzoptProfilerPanel", options = "pzoptProfilerOptions", search = "pzoptProfilerSearch",
         preview = "pzoptProfilerPreview",
+        footer = "Changes apply as soon as you press Apply, no restart needed. File: Zomboid/pzopt/options.ini",
         -- independent of the Optimizations tab: the overlay also runs with the master switch off (stock game)
         headline = function() return "Performance overlay and game-thread profiler" end,
     },
@@ -2356,7 +2378,7 @@ local function buildSettingsPage(self, page)
     end
     table.sort(S.alphaGroups, function(a, b) return alphaLess(a.sec.title, b.sec.title) end)
     S.footer = capture(function()
-        addSectionLine(self, y, "Changes take effect on the next launch. File: Zomboid/pzopt/options.ini", L.x0, L.lineW)
+        addSectionLine(self, y, page.footer, L.x0, L.lineW)
     end)
     panel.addChild = nil -- back to the class method
     S.total, S.managed = #managed, managed

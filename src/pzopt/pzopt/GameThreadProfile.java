@@ -52,10 +52,19 @@ import zombie.ZomboidFileSystem;
  * well under 1 % of it).
  */
 public final class GameThreadProfile {
-   /** Sampling runs when something shows or logs it: the tree, the flame graph, the detailed verdict, or the frame log (harness runs). */
-   static final boolean ENABLED = !"off".equalsIgnoreCase(Config.OVERLAY_TREE) || !"off".equalsIgnoreCase(Config.OVERLAY_FLAME)
-         || "detailed".equalsIgnoreCase(Config.OVERLAY_VERDICT) || Config.OVERLAY_LOG || Harness.REQUESTED;
-   static final int HZ = Math.max(10, Math.min(1000, Config.GAME_THREAD_PROFILE_HZ));
+   /**
+    * Sampling runs when something shows or logs it: the tree, the flame graph, the detailed verdict, or the frame log
+    * (harness runs). Read live, like the rate: the Profiler tab changes both while the game runs.
+    */
+   static boolean enabled() {
+      return !"off".equalsIgnoreCase(Config.OVERLAY_TREE.trim()) || !"off".equalsIgnoreCase(Config.OVERLAY_FLAME.trim())
+            || "detailed".equalsIgnoreCase(Config.OVERLAY_VERDICT.trim()) || Config.OVERLAY_LOG || Harness.REQUESTED;
+   }
+
+   /** Samples per second, {@code gameThreadProfileHz} clamped to 10..1000. */
+   static int hz() {
+      return Math.max(10, Math.min(1000, Config.GAME_THREAD_PROFILE_HZ));
+   }
    static final int WINDOW_SECONDS = 5;
    private static final int MAX_DEPTH = 128;
    private static final int RING = 16;
@@ -226,9 +235,12 @@ public final class GameThreadProfile {
    private GameThreadProfile() {
    }
 
-   /** From the overlay once the game thread is known; the sampler runs until the JVM exits. */
+   /**
+    * From the overlay once the game thread is known, and again when the Profiler tab changes (a no-op once running);
+    * the sampler runs until the JVM exits, idle while nothing wants its samples.
+    */
    public static synchronized void start(long threadId) {
-      if (!ENABLED || sampler != null) {
+      if (!enabled() || sampler != null) {
          return;
       }
       gameThreadId = threadId;
@@ -240,7 +252,7 @@ public final class GameThreadProfile {
       t.setPriority(Thread.MIN_PRIORITY);
       t.start();
       sampler = t;
-      Log.info("game-thread profile: sampling the game thread's stack at " + HZ + " Hz while the overlay or its log is on");
+      Log.info("game-thread profile: sampling the game thread's stack at " + hz() + " Hz while the overlay or its log is on");
    }
 
    public static boolean running() {
@@ -248,7 +260,6 @@ public final class GameThreadProfile {
    }
 
    private static void loop() {
-      long periodNs = 1_000_000_000L / HZ;
       long next = System.nanoTime();
       long secondEndNs = next + 1_000_000_000L;
       HashMap<String, int[]> counts = new HashMap<>();
@@ -257,6 +268,7 @@ public final class GameThreadProfile {
       long sampleNs = 0L, sampleMaxNs = 0L, stallSince = System.nanoTime(); // time inside the stack capture: an upper bound on the game thread's pause
       int stallSamples = 0;
       while (true) {
+         long periodNs = 1_000_000_000L / hz(); // gameThreadProfileHz, changed in the tab while running
          next += periodNs;
          long wait = next - System.nanoTime();
          if (wait > 0) {
@@ -269,7 +281,7 @@ public final class GameThreadProfile {
             next = System.nanoTime(); // fell far behind (a pause, a debugger): do not burst to catch up
          }
          // devProfileLogOff: a harness run samples only while the overlay is shown (the baseline of the overlay's own cost)
-         boolean wanted = Overlay.isVisible() || Overlay.logging() && !Config.DEV_PROFILE_LOG_OFF;
+         boolean wanted = enabled() && (Overlay.isVisible() || Overlay.logging() && !Config.DEV_PROFILE_LOG_OFF);
          if (wanted) {
             long t0 = System.nanoTime();
             try {
@@ -592,7 +604,7 @@ public final class GameThreadProfile {
     */
    static List<Row> tree(int maxSubs, int maxHot) {
       ArrayList<Row> rows = new ArrayList<>();
-      if (!ENABLED || sampler == null) {
+      if (!enabled() || sampler == null) {
          return rows;
       }
       int[] n = new int[1];
@@ -639,7 +651,7 @@ public final class GameThreadProfile {
 
    /** The overlay's header line for the tree, e.g. {@code "game thread (502 stacks / 5 s)   waiting 24 %"}; empty without data. */
    static String header() {
-      if (!ENABLED || sampler == null) {
+      if (!enabled() || sampler == null) {
          return "";
       }
       int[] n = new int[1];
@@ -656,7 +668,7 @@ public final class GameThreadProfile {
 
    /** The two biggest sub-phases for the verdict line, e.g. {@code "chunk bakes 21 %, zombies 9 %"}; empty without data. */
    static String verdictDetail() {
-      if (!ENABLED || sampler == null) {
+      if (!enabled() || sampler == null) {
          return "";
       }
       int[] n = new int[1];
@@ -699,7 +711,7 @@ public final class GameThreadProfile {
    }
 
    static Node flame() {
-      if (!ENABLED || sampler == null) {
+      if (!enabled() || sampler == null) {
          return null;
       }
       Node root = new Node("game thread");
@@ -781,7 +793,7 @@ public final class GameThreadProfile {
                return;
             }
             log = new BufferedWriter(new FileWriter(new File(dir, OUT_FILE), false), 1 << 16);
-            log.write("# pzopt game-thread stack profile, " + HZ + " Hz; per second: epoch_ms, samples, then key=count (p:phase, s:phase/sub-phase, l:phase/sub/hot method, w:phase/sub/method while not runnable)\n");
+            log.write("# pzopt game-thread stack profile, " + hz() + " Hz; per second: epoch_ms, samples, then key=count (p:phase, s:phase/sub-phase, l:phase/sub/hot method, w:phase/sub/method while not runnable)\n");
          }
          StringBuilder b = new StringBuilder(512);
          b.append(s.epochMs).append('\t').append(s.samples);
@@ -810,7 +822,7 @@ public final class GameThreadProfile {
       if (stackLog == null) {
          String dir = ZomboidFileSystem.instance.getCacheDir();
          stackLog = new BufferedWriter(new FileWriter(new File(dir, STACKS_FILE), false), 1 << 16);
-         stackLog.write("# pzopt game-thread folded stacks, " + HZ + " Hz: 'f <id> <Class.method>' defines a frame id, 't <epoch_ms> <samples>' opens a second, '<id>;<id>;... <count>' is one stack root->leaf\n");
+         stackLog.write("# pzopt game-thread folded stacks, " + hz() + " Hz: 'f <id> <Class.method>' defines a frame id, 't <epoch_ms> <samples>' opens a second, '<id>;<id>;... <count>' is one stack root->leaf\n");
       }
       StringBuilder defs = new StringBuilder(); // new frame ids, written before the second that first uses them
       StringBuilder b = new StringBuilder(1 << 12);

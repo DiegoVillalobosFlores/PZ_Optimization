@@ -11,7 +11,8 @@ import java.util.Properties;
  * status can show it) with -Dpzopt.<key> system properties overriding. Below both sits the
  * player's Zomboid/pzopt/options.ini, written by the Options > Optimizations tab
  * (pzopt.UserOptions); every key is exposed there (booleans as tick boxes, ints as combos) and
- * takes effect on the next launch. A key set in pzopt.properties or -D is shown pinned in the tab.
+ * takes effect on the next launch, except the Profiler tab's (the overlay's), which apply at once
+ * ({@link #reloadLive}). A key set in pzopt.properties or -D is shown pinned in the tab.
  *
  * Keys:
  *   enabled     true/false   master switch: false makes every override take its stock path, exactly as a build
@@ -319,6 +320,9 @@ import java.util.Properties;
 public final class Config {
    /** Every key read at init: key -> {effective value, default}, in declaration order (for the options tab). */
    private static final java.util.LinkedHashMap<String, String[]> REGISTRY = new java.util.LinkedHashMap<>();
+   /** The keys that apply while the game runs (registered by {@link #loadLive}): the Profiler tab's. */
+   private static final java.util.HashSet<String> LIVE = new java.util.HashSet<>();
+   private static boolean loadingLive;
    private static final Properties props = load();
    /** The player's Options > Optimizations choices (Zomboid/pzopt/options.ini), below props and -D. */
    private static final Properties userProps = UserOptions.load();
@@ -603,35 +607,75 @@ public final class Config {
    public static final int DEV_FOG_DEPTH_VIEW = integer("devFogDepthView", 0); // measurement: the composite shows 1 = the scene depth, 2 = the fog texel depth, 3 = the fog buffer alpha (R/G = depth * 255 integer / fraction)
    public static final boolean FOG_DEPTH_COPY = bool("fogDepthCopy", false); // keep the offscreen depth a renderbuffer and copy it for the fog pass (measurement / driver fallback) // measurement: the rectangles with a flat fragment shader (no noise fetches)
    public static final int FOG_MASK_FRAMES = integer("fogMaskFrames", 20); // a chunk's fog masks (which squares take fog) are refreshed this often; 0 = read every square every frame
-   public static final boolean OVERLAY_SAMPLING = bool("overlaySampling", false); // measure at all (ring, GL timer queries, sampler thread); off by default since 2026-09-21
-   public static final boolean OVERLAY = bool("overlay", false);
-   public static final boolean OVERLAY_LOG = bool("overlayLog", false);
+   // The Profiler tab's keys (the overlay and its game-thread profiler): they apply while the game runs. loadLive()
+   // reads them at init and again from reloadLive() when the player changes one (UserOptions.set); pzopt.Overlay and
+   // pzopt.GameThreadProfile read them per use or re-derive their state (Overlay.reconfigure). 2026-09-24.
+   public static volatile boolean OVERLAY_SAMPLING; // measure at all (ring, GL timer queries, sampler thread); off by default since 2026-09-21
+   public static volatile boolean OVERLAY;
+   public static volatile boolean OVERLAY_LOG;
    // The overlay's elements, each a dropdown on the Profiler options tab: "off" or the element's own options.
-   public static final String OVERLAY_STATS = string("overlayStats", "tails"); // off | fps (the fps line) | tails (+ p99 / jitter lines) | full (+ utilization); tails by default since 2026-09-23 (overlay cost pass)
-   public static final String OVERLAY_TREE = string("overlayTree", "5"); // the game-thread tree: off | 0 (phases only) | 3 | 5 | 8 sub-phases per phase
-   public static final String OVERLAY_VERDICT = string("overlayVerdict", "detailed"); // off | short ("GPU bound") | detailed (+ the two biggest game-thread sub-phases)
-   public static final String OVERLAY_GRAPH = string("overlayGraph", "240"); // the frame-time graph: off | 240 | 480 | 960 frames (2 px each)
-   public static final String OVERLAY_FLAME = string("overlayFlame", "off"); // the game-thread flame graph: off | right (900 px column) | right-wide (1400) | below (under the frame graph); off by default since 2026-09-23 (the heaviest element)
-   public static final boolean OVERLAY_TEXTURE = bool("overlayTexture", true); // draw the panel into a texture at each 4 Hz refresh, one quad per frame (Overlay.renderToTexture); false = every glyph as a sprite every frame
-   public static final int OVERLAY_REFRESH_MS = integer("overlayRefreshMs", 250); // how often the overlay's numbers, tree and texture are refreshed
-   public static final int OVERLAY_GRAPH_HZ = integer("overlayGraphHz", 0); // frame-graph redraws per second into the overlay texture; 0 = drawn live every frame (default: 30 Hz measured no cheaper on the Mac)
-   public static final int OVERLAY_FLAME_DEPTH = integer("overlayFlameDepth", 24); // rows of the flame graph (frames from GameWindow.frameStep up)
-   public static final int GAME_THREAD_PROFILE_HZ = integer("gameThreadProfileHz", 25); // game-thread stack samples per second (10..1000); sampling runs when the tree, the flame graph, the detailed verdict or the frame log wants it 25 since 2026-09-23: each capture pauses the game thread ~150 us on the Mac, 1.5 % of wall at 100 Hz
+   public static volatile String OVERLAY_STATS; // off | fps (the fps line) | tails (+ p99 / jitter lines) | full (+ utilization); tails by default since 2026-09-23 (overlay cost pass)
+   public static volatile String OVERLAY_TREE; // the game-thread tree: off | 0 (phases only) | 3 | 5 | 8 sub-phases per phase
+   public static volatile String OVERLAY_VERDICT; // off | short ("GPU bound") | detailed (+ the two biggest game-thread sub-phases)
+   public static volatile String OVERLAY_GRAPH; // the frame-time graph: off | 240 | 480 | 960 frames (2 px each)
+   public static volatile String OVERLAY_FLAME; // the game-thread flame graph: off | right (900 px column) | right-wide (1400) | below (under the frame graph); off by default since 2026-09-23 (the heaviest element)
+   public static volatile boolean OVERLAY_TEXTURE; // draw the panel into a texture at each 4 Hz refresh, one quad per frame (Overlay.renderToTexture); false = every glyph as a sprite every frame
+   public static volatile int OVERLAY_REFRESH_MS; // how often the overlay's numbers, tree and texture are refreshed
+   public static volatile int OVERLAY_GRAPH_HZ; // frame-graph redraws per second into the overlay texture; 0 = drawn live every frame (default: 30 Hz measured no cheaper on the Mac)
+   public static volatile int OVERLAY_FLAME_DEPTH; // rows of the flame graph (frames from GameWindow.frameStep up)
+   public static volatile int GAME_THREAD_PROFILE_HZ; // game-thread stack samples per second (10..1000); sampling runs when the tree, the flame graph, the detailed verdict or the frame log wants it 25 since 2026-09-23: each capture pauses the game thread ~150 us on the Mac, 1.5 % of wall at 100 Hz
+   public static volatile String OVERLAY_FONT; // auto = CodeSmall / CodeMedium / CodeLarge by screen height (Overlay.font), or a UIFont name
+   public static volatile String OVERLAY_CORNER;
+   public static volatile boolean OVERLAY_FPS_COLOR; // colour the fps number (see Overlay.fpsColor)
+   public static volatile boolean OVERLAY_FPS_FOLLOW_CAP; // thresholds are % of the cap when one is set; else the fixed fps ones
+   public static volatile int OVERLAY_FPS_CAP_BLUE_PCT; // "at the cap": at or above this % of it
+   public static volatile int OVERLAY_FPS_CAP_GREEN_PCT;
+   public static volatile int OVERLAY_FPS_CAP_YELLOW_PCT; // below: red
+   public static volatile int OVERLAY_FPS_BLUE_ABOVE; // uncapped / follow-cap off: fixed fps thresholds
+   public static volatile int OVERLAY_FPS_GREEN_ABOVE;
+   public static volatile int OVERLAY_FPS_YELLOW_ABOVE; // below: red
+   public static volatile String OVERLAY_FPS_COLOR_BLUE; // a name Overlay.color knows or RRGGBB hex
+   public static volatile String OVERLAY_FPS_COLOR_GREEN;
+   public static volatile String OVERLAY_FPS_COLOR_YELLOW;
+   public static volatile String OVERLAY_FPS_COLOR_RED;
+
+   static {
+      loadLive();
+   }
+
+   private static void loadLive() {
+      loadingLive = true;
+      OVERLAY_SAMPLING = bool("overlaySampling", false);
+      OVERLAY = bool("overlay", false);
+      OVERLAY_LOG = bool("overlayLog", false);
+      OVERLAY_STATS = string("overlayStats", "tails");
+      OVERLAY_TREE = string("overlayTree", "5");
+      OVERLAY_VERDICT = string("overlayVerdict", "detailed");
+      OVERLAY_GRAPH = string("overlayGraph", "240");
+      OVERLAY_FLAME = string("overlayFlame", "off");
+      OVERLAY_TEXTURE = bool("overlayTexture", true);
+      OVERLAY_REFRESH_MS = integer("overlayRefreshMs", 250);
+      OVERLAY_GRAPH_HZ = integer("overlayGraphHz", 0);
+      OVERLAY_FLAME_DEPTH = integer("overlayFlameDepth", 24);
+      GAME_THREAD_PROFILE_HZ = integer("gameThreadProfileHz", 25);
+      OVERLAY_FONT = string("overlayFont", "auto");
+      OVERLAY_CORNER = string("overlayCorner", "tl");
+      OVERLAY_FPS_COLOR = bool("overlayFpsColor", true);
+      OVERLAY_FPS_FOLLOW_CAP = bool("overlayFpsFollowCap", true);
+      OVERLAY_FPS_CAP_BLUE_PCT = integer("overlayFpsCapBluePct", 98);
+      OVERLAY_FPS_CAP_GREEN_PCT = integer("overlayFpsCapGreenPct", 90);
+      OVERLAY_FPS_CAP_YELLOW_PCT = integer("overlayFpsCapYellowPct", 50);
+      OVERLAY_FPS_BLUE_ABOVE = integer("overlayFpsBlueAbove", 300);
+      OVERLAY_FPS_GREEN_ABOVE = integer("overlayFpsGreenAbove", 150);
+      OVERLAY_FPS_YELLOW_ABOVE = integer("overlayFpsYellowAbove", 100);
+      OVERLAY_FPS_COLOR_BLUE = string("overlayFpsColorBlue", "blue");
+      OVERLAY_FPS_COLOR_GREEN = string("overlayFpsColorGreen", "green");
+      OVERLAY_FPS_COLOR_YELLOW = string("overlayFpsColorYellow", "yellow");
+      OVERLAY_FPS_COLOR_RED = string("overlayFpsColorRed", "red");
+      loadingLive = false;
+   }
+
    public static final int OVERLAY_KEY = integer("overlayKey", 67); // LWJGL 2 code, 67 = F9; used when the Lua binding is absent
-   public static final String OVERLAY_FONT = string("overlayFont", "auto"); // auto = CodeSmall / CodeMedium / CodeLarge by screen height (Overlay.font), or a UIFont name
-   public static final String OVERLAY_CORNER = string("overlayCorner", "tl");
-   public static final boolean OVERLAY_FPS_COLOR = bool("overlayFpsColor", true); // colour the fps number (see Overlay.fpsColor)
-   public static final boolean OVERLAY_FPS_FOLLOW_CAP = bool("overlayFpsFollowCap", true); // thresholds are % of the cap when one is set; else the fixed fps ones
-   public static final int OVERLAY_FPS_CAP_BLUE_PCT = integer("overlayFpsCapBluePct", 98); // "at the cap": at or above this % of it
-   public static final int OVERLAY_FPS_CAP_GREEN_PCT = integer("overlayFpsCapGreenPct", 90);
-   public static final int OVERLAY_FPS_CAP_YELLOW_PCT = integer("overlayFpsCapYellowPct", 50); // below: red
-   public static final int OVERLAY_FPS_BLUE_ABOVE = integer("overlayFpsBlueAbove", 300); // uncapped / follow-cap off: fixed fps thresholds
-   public static final int OVERLAY_FPS_GREEN_ABOVE = integer("overlayFpsGreenAbove", 150);
-   public static final int OVERLAY_FPS_YELLOW_ABOVE = integer("overlayFpsYellowAbove", 100); // below: red
-   public static final String OVERLAY_FPS_COLOR_BLUE = string("overlayFpsColorBlue", "blue"); // a name Overlay.color knows or RRGGBB hex
-   public static final String OVERLAY_FPS_COLOR_GREEN = string("overlayFpsColorGreen", "green");
-   public static final String OVERLAY_FPS_COLOR_YELLOW = string("overlayFpsColorYellow", "yellow");
-   public static final String OVERLAY_FPS_COLOR_RED = string("overlayFpsColorRed", "red");
 
    private Config() {
    }
@@ -660,6 +704,9 @@ public final class Config {
 
    private static <T> T register(String key, T effective, T def) {
       REGISTRY.put(key, new String[] {String.valueOf(effective), String.valueOf(def)});
+      if (loadingLive) {
+         LIVE.add(key);
+      }
       return effective;
    }
 
@@ -702,7 +749,25 @@ public final class Config {
       return key != null && REGISTRY.containsKey(key);
    }
 
-   /** The value in force since boot (before the clamps some keys apply), or null for an unknown key. */
+   /** Does a change of this key apply while the game runs ({@link #reloadLive}) rather than on the next launch? */
+   public static boolean isLive(String key) {
+      return key != null && LIVE.contains(key);
+   }
+
+   /**
+    * The player changed {@code key} (UserOptions.set, game thread): when it is a live key, re-read every live key
+    * through the usual -D > pzopt.properties > options.ini order and return true; the caller then lets the classes
+    * that derive state from them know. A key pinned by -D or pzopt.properties keeps its pinned value.
+    */
+   static synchronized boolean reloadLive(String key) {
+      if (!isLive(key)) {
+         return false;
+      }
+      loadLive();
+      return true;
+   }
+
+   /** The value in force now (since boot for every key but the live ones; before the clamps some keys apply), or null for an unknown key. */
    public static String value(String key) {
       String[] r = key == null ? null : REGISTRY.get(key);
       return r == null ? null : r[0];

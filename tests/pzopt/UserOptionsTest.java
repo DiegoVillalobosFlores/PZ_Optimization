@@ -38,6 +38,18 @@ public class UserOptionsTest {
       Check.check("4".equals(UserOptions.get("bakeBudget")) && UserOptions.read(UserOptions.file()).getProperty("bakeBudget").equals("4"), "set writes");
       UserOptions.set("bakeBudget", "");
       Check.check(UserOptions.get("bakeBudget") == null && UserOptions.read(UserOptions.file()).getProperty("bakeBudget") == null, "empty removes");
+
+      // the Profiler tab's keys apply at once; every other key waits for the next launch
+      Check.check(Config.isLive("overlayRefreshMs") && Config.isLive("overlaySampling") && Config.isLive("gameThreadProfileHz"), "profiler keys live");
+      Check.check(!Config.isLive("bakeBudget") && !Config.isLive("enabled") && !Config.isLive("overlayKey"), "other keys not live");
+      int bake = Config.BAKE_BUDGET;
+      UserOptions.set("bakeBudget", "3");
+      Check.check(Config.BAKE_BUDGET == bake && String.valueOf(bake).equals(Config.value("bakeBudget")), "bakeBudget waits for the next launch");
+      UserOptions.set("bakeBudget", "");
+      UserOptions.set("overlayRefreshMs", "500");
+      Check.check(Config.OVERLAY_REFRESH_MS == 500 && "500".equals(Config.value("overlayRefreshMs")), "overlayRefreshMs applied now: " + Config.OVERLAY_REFRESH_MS);
+      UserOptions.set("overlayRefreshMs", "");
+      Check.check(Config.OVERLAY_REFRESH_MS == 250 && "250".equals(Config.value("overlayRefreshMs")), "default back now");
       System.out.println("UserOptionsTest: ok");
    }
 }

@@ -751,7 +751,7 @@ screen-pixel work, so the gain is the world pass's share. Plan and seam: `docs/p
 
 Tick **"Sample frame times and utilization"** in **Options > Profiler** (a tab of its own right
 after Optimizations, with the same preview panel and search; **Reset to defaults** puts its
-settings back), restart, then press **F9** (key binding "Toggle performance overlay", after "Display FPS") or, on a
+settings back; every setting on it applies when you press Apply, no restart), then press **F9** (key binding "Toggle performance overlay", after "Display FPS") or, on a
 controller, **L3 + R3** (both sticks pressed together).
 Sampling is off by default (F9 / L3 + R3 then only shows a notice pointing at the tick box): it is the
 build's own profiler, drawn by the game itself, so it reads the same on Windows and Linux,

@@ -66,7 +66,7 @@ import zombie.ui.UIFont;
  * The panel is fitted to the screen at every stats refresh (see {@link #layout}): nothing is drawn past its edges.
  *
  * Cost: one nanoTime and a ring write per frame on the render thread, two GL query calls per
- * frame, a stats pass and a layout every {@link #REFRESH_NS} on the game thread (sorting at most a few
+ * frame, a stats pass and a layout every {@link #refreshNs} on the game thread (sorting at most a few
  * thousand floats; every string, width and cut of the panel is made there, not per frame), and a daemon
  * thread that samples the CPU / GPU utilization every {@link #UTIL_NS} (the JMX load calls are slow on
  * Windows and must never run on the game thread). While visible, the panel itself: with
@@ -85,25 +85,26 @@ public final class Overlay {
     * Whether the overlay measures anything: the presented-frame ring, the GL timer queries and the
     * utilization sampler thread. Off unless {@code overlaySampling=true} (the Profiler tab),
     * something that needs the numbers ({@code overlay}, {@code overlayLog}) or a harness run; with
-    * it off the toggle key only shows {@link #NOTICE}. Decided at boot, like every Config key.
+    * it off the toggle key only shows {@link #NOTICE}. Like every setting of the Profiler tab it follows
+    * the tab while the game runs ({@link #reconfigure}); the fields below are set by {@link #configure}.
     */
-   private static final boolean SAMPLING = ACTIVE && (Config.OVERLAY_SAMPLING || Config.OVERLAY || Config.OVERLAY_LOG || Harness.REQUESTED);
-   private static final boolean LOG = SAMPLING && (Config.OVERLAY_LOG || Harness.REQUESTED);
+   private static volatile boolean sampling;
+   private static volatile boolean logFrames;
    private static final long NOTICE_NS = 8_000_000_000L;
    private static final String[] NOTICE = {
       "Performance overlay: sampling is off.",
       "Tick \"Sample frame times and utilization\" under Options > Profiler > Performance overlay,",
-      "then restart the game for it to take effect."
+      "apply, then toggle the overlay again (no restart needed)."
    };
    private static long noticeUntilNs;
    private static final long WINDOW_NS = 5_000_000_000L;
-   private static final long REFRESH_NS = Math.max(50, Math.min(2000, Config.OVERLAY_REFRESH_MS)) * 1_000_000L;
+   private static long refreshNs;
    /** Frame-graph redraws into the panel texture, from {@code overlayGraphHz}; 0 = the bars are drawn live every frame. */
-   private static final long GRAPH_NS = Config.OVERLAY_GRAPH_HZ <= 0 ? 0L : 1_000_000_000L / Math.min(1000, Config.OVERLAY_GRAPH_HZ);
+   private static long graphNs;
    private static final long UTIL_NS = 500_000_000L;
    private static final int RING = 8192;
    /** Frames in the frame-time graph (2 px each), from {@code overlayGraph}; 0 = no graph. */
-   private static final int GRAPH_BARS = graphBars();
+   private static int graphFrames;
    private static final int QUERIES = 8;
    private static final String BIND = "Toggle performance overlay";
 
@@ -143,11 +144,8 @@ public final class Overlay {
    private static final float[] RED = {1f, 0.45f, 0.45f};
    private static final float[] BLUE = {0.45f, 0.7f, 1f};
    /** The four fps tints from the options tab; names or RRGGBB hex, see {@link #color}. */
-   private static final float[] FPS_BLUE = color(Config.OVERLAY_FPS_COLOR_BLUE, BLUE);
-   private static final float[] FPS_GREEN = color(Config.OVERLAY_FPS_COLOR_GREEN, GREEN);
-   private static final float[] FPS_YELLOW = color(Config.OVERLAY_FPS_COLOR_YELLOW, AMBER);
-   private static final float[] FPS_RED = color(Config.OVERLAY_FPS_COLOR_RED, RED);
-   private static volatile boolean visible = Config.OVERLAY;
+   private static float[] tierBlue, tierGreen, tierYellow, tierRed;
+   private static volatile boolean visible;
    private static boolean fontFailed;
    private static UIFont font;
    private static long lastStatsNs;
@@ -160,9 +158,64 @@ public final class Overlay {
    /** The game-thread tree (pzopt.GameThreadProfile), refreshed with the stats; drawn under the text lines. */
    private static String profileHeader = "";
    private static java.util.List<GameThreadProfile.Row> profileRows = java.util.List.of();
-   private static final int PROFILE_SUBS = treeSubs(); // sub-phases shown per phase; -1 = no tree
+   private static volatile int profileSubs; // sub-phases shown per phase; -1 = no tree (read by the sampler thread too)
    private static final int PROFILE_HOT = 2;  // hot methods hinted per sub-phase
-   private static final int STATS_LINES = statsLines(); // of the four stats lines, how many show (fps / tails / full)
+   private static int statsShown; // of the four stats lines, how many show (fps / tails / full)
+   /** The last {@code overlay} ("show from boot") value seen: ticking or unticking it in the tab shows / hides the overlay at once. */
+   private static boolean shownFromBoot;
+
+   static {
+      configure();
+      visible = sampling && Config.OVERLAY;
+      shownFromBoot = Config.OVERLAY;
+   }
+
+   /** Derives the overlay's settings from the Profiler tab's keys (Config's live keys). */
+   private static void configure() {
+      sampling = ACTIVE && (Config.OVERLAY_SAMPLING || Config.OVERLAY || Config.OVERLAY_LOG || Harness.REQUESTED);
+      logFrames = sampling && (Config.OVERLAY_LOG || Harness.REQUESTED);
+      refreshNs = Math.max(50, Math.min(2000, Config.OVERLAY_REFRESH_MS)) * 1_000_000L;
+      graphNs = Config.OVERLAY_GRAPH_HZ <= 0 ? 0L : 1_000_000_000L / Math.min(1000, Config.OVERLAY_GRAPH_HZ);
+      graphFrames = graphBars();
+      tierBlue = color(Config.OVERLAY_FPS_COLOR_BLUE, BLUE);
+      tierGreen = color(Config.OVERLAY_FPS_COLOR_GREEN, GREEN);
+      tierYellow = color(Config.OVERLAY_FPS_COLOR_YELLOW, AMBER);
+      tierRed = color(Config.OVERLAY_FPS_COLOR_RED, RED);
+      profileSubs = treeSubs();
+      statsShown = statsLines();
+      useTexture = Config.OVERLAY_TEXTURE;
+   }
+
+   /**
+    * A Profiler-tab key changed (UserOptions.set, game thread, after Config.reloadLive): the new values apply from
+    * the next frame. Turning sampling on starts the samplers at the next draw; "show from boot" shows / hides the
+    * overlay now; the panel is laid out again in the new font, corner and elements, with fresh stats.
+    */
+   static void reconfigure() {
+      boolean wasLogging = logFrames;
+      configure();
+      if (Config.OVERLAY != shownFromBoot) {
+         shownFromBoot = Config.OVERLAY;
+         visible = Config.OVERLAY;
+      }
+      if (!sampling) {
+         visible = false;
+      }
+      if (wasLogging && !logFrames) {
+         flushLog();
+      }
+      font = null; // overlayFont
+      fontFailed = false;
+      textureFailed = false;
+      laidOut = false;
+      steadyLeftW = 0;
+      lastStatsNs = 0L;
+      noticeUntilNs = 0L;
+      if (sampling && gameThreadId >= 0) {
+         GameThreadProfile.start(gameThreadId); // the tree / flame graph / verdict may have been switched on
+      }
+      Log.info("overlay: Profiler settings applied (sampling " + sampling + ", visible " + visible + ", log " + logFrames + ")");
+   }
 
    private static int graphBars() {
       String v = Config.OVERLAY_GRAPH.trim().toLowerCase(java.util.Locale.ROOT);
@@ -242,7 +295,7 @@ public final class Overlay {
 
    /** Before {@code SpriteRenderer.postRender()}: start the frame's GL_TIME_ELAPSED query. */
    public static void gpuBegin() {
-      if (!SAMPLING || gpuState < 0) {
+      if (!sampling || gpuState < 0) {
          return;
       }
       try {
@@ -308,7 +361,8 @@ public final class Overlay {
 
    /** After {@code Display.update(true)}: one presented frame. */
    public static void onSwap() {
-      if (!SAMPLING) {
+      if (!sampling) {
+         lastSwapNs = 0L; // sampling switched on later: the gap is not a frame
          return;
       }
       long now = System.nanoTime();
@@ -324,7 +378,7 @@ public final class Overlay {
          gpuMs[slot] = pendingGpuMs;
          pendingGpuMs = 0f;
          head = h + 1;
-         if (LOG && h >= LOG_LAG) {
+         if (logFrames && h >= LOG_LAG) {
             logFrame(h - LOG_LAG); // the query for that frame has resolved by now (at most QUERIES in flight)
          }
       }
@@ -391,9 +445,9 @@ public final class Overlay {
       visible = on;
    }
 
-   /** Whether the overlay measures (and so can be shown) this session; without it a toggle only shows {@link #NOTICE}. */
+   /** Whether the overlay measures (and so can be shown) now; without it a toggle only shows {@link #NOTICE}. */
    public static boolean isSampling() {
-      return SAMPLING;
+      return sampling;
    }
 
    /**
@@ -404,7 +458,7 @@ public final class Overlay {
       if (!ACTIVE) {
          return;
       }
-      if (SAMPLING) {
+      if (sampling) {
          visible = !visible;
          steadyLeftW = 0;
          Log.info("overlay: " + (visible ? "shown" : "hidden"));
@@ -416,7 +470,7 @@ public final class Overlay {
 
    /** Whether the frame log is being written (harness runs, {@code overlayLog}): the game-thread profile samples for it too. */
    static boolean logging() {
-      return LOG;
+      return logFrames;
    }
 
    /** From {@code Display.imguiEndFrame()} every game-thread frame: toggle key, stats refresh, draw. */
@@ -428,7 +482,7 @@ public final class Overlay {
       if (toggled()) {
          toggle();
       }
-      if (!SAMPLING) {
+      if (!sampling) {
          if (noticeUntilNs > now && !fontFailed) {
             try {
                renderNotice();
@@ -443,15 +497,15 @@ public final class Overlay {
          gameThreadId = Thread.currentThread().threadId();
          startUtilSampler();
          GameThreadProfile.start(gameThreadId); // what the game thread does, for the verdict and the log
-         Log.info("overlay: panel " + (TEXTURE ? "texture" : "sprites") + ", refresh " + REFRESH_NS / 1_000_000L + " ms, graph "
-               + (GRAPH_NS == 0 ? "every frame" : 1_000_000_000L / GRAPH_NS + " Hz") + ", profile view on the sampler thread");
+         Log.info("overlay: panel " + (useTexture ? "texture" : "sprites") + ", refresh " + refreshNs / 1_000_000L + " ms, graph "
+               + (graphNs == 0 ? "every frame" : 1_000_000_000L / graphNs + " Hz") + ", profile view on the sampler thread");
       }
       if (!visible || fontFailed) {
          laidOut = false;
          return;
       }
       boolean relayout = !laidOut;
-      if (now - lastStatsNs >= REFRESH_NS) {
+      if (now - lastStatsNs >= refreshNs) {
          lastStatsNs = now;
          refreshStats(now);
          relayout = true;
@@ -466,9 +520,9 @@ public final class Overlay {
             laidOutH = core.getScreenHeight();
             layout();
             laidOut = true;
-            textureValid = TEXTURE && !textureFailed && renderToTexture();
+            textureValid = useTexture && !textureFailed && renderToTexture();
             lastGraphNs = now;
-         } else if (textureValid && GRAPH_NS > 0 && now - lastGraphNs >= GRAPH_NS) {
+         } else if (textureValid && graphNs > 0 && now - lastGraphNs >= graphNs) {
             lastGraphNs = now;
             renderGraphToTexture();
          }
@@ -538,6 +592,12 @@ public final class Overlay {
          } catch (InterruptedException e) {
             return;
          }
+         if (!sampling) { // switched off in the Profiler tab: idle until it is on again
+            sampledNs = 0L;
+            gameCpuNs = 0L;
+            renderCpuNs = 0L;
+            continue;
+         }
          long now = System.nanoTime();
          long dt = now - sampledNs;
          long g = 0L, r = 0L;
@@ -564,7 +624,7 @@ public final class Overlay {
          sampledNs = now;
          // The PDH-backed calls: only while someone reads the numbers (the overlay or the frame log),
          // and off the game thread either way.
-         if (os != null && (visible || LOG)) {
+         if (os != null && (visible || logFrames)) {
             try {
                double p = os.getProcessCpuLoad();
                double s = os.getCpuLoad();
@@ -624,7 +684,7 @@ public final class Overlay {
          prev = ms;
       }
       if (count == 0) {
-         lines = STATS_LINES == 0 ? new String[0] : new String[] {"performance overlay: waiting for frames"};
+         lines = statsShown == 0 ? new String[0] : new String[] {"performance overlay: waiting for frames"};
          fpsText = "";
          verdict = "";
          return;
@@ -657,8 +717,8 @@ public final class Overlay {
             String.format(java.util.Locale.ROOT, "GPU %s   game thread %.0f %%   render thread %.0f %%   process %.0f %% of %d cores   machine %.0f %%   heap %.1f/%.1f GB",
                   gpu, gameLoad, renderLoad, processLoad, cores, systemLoad, heapUsed, heapMax),
       };
-      lines = Arrays.copyOf(all, STATS_LINES);
-      if (STATS_LINES == 0) {
+      lines = Arrays.copyOf(all, statsShown);
+      if (statsShown == 0) {
          fpsText = "";
       }
       // what the game thread is doing (stack samples): a tree of phases and sub-phases, biggest first
@@ -711,13 +771,13 @@ public final class Overlay {
       }
       if (cap > 0 && Config.OVERLAY_FPS_FOLLOW_CAP) {
          float pct = fps * 100f / cap;
-         return pct >= Config.OVERLAY_FPS_CAP_BLUE_PCT ? FPS_BLUE
-               : pct >= Config.OVERLAY_FPS_CAP_GREEN_PCT ? FPS_GREEN
-               : pct >= Config.OVERLAY_FPS_CAP_YELLOW_PCT ? FPS_YELLOW : FPS_RED;
+         return pct >= Config.OVERLAY_FPS_CAP_BLUE_PCT ? tierBlue
+               : pct >= Config.OVERLAY_FPS_CAP_GREEN_PCT ? tierGreen
+               : pct >= Config.OVERLAY_FPS_CAP_YELLOW_PCT ? tierYellow : tierRed;
       }
-      return fps > Config.OVERLAY_FPS_BLUE_ABOVE ? FPS_BLUE
-            : fps >= Config.OVERLAY_FPS_GREEN_ABOVE ? FPS_GREEN
-            : fps >= Config.OVERLAY_FPS_YELLOW_ABOVE ? FPS_YELLOW : FPS_RED;
+      return fps > Config.OVERLAY_FPS_BLUE_ABOVE ? tierBlue
+            : fps >= Config.OVERLAY_FPS_GREEN_ABOVE ? tierGreen
+            : fps >= Config.OVERLAY_FPS_YELLOW_ABOVE ? tierYellow : tierRed;
    }
 
    /** A colour name from the options tab or RRGGBB hex; {@code fallback} for anything else. */
@@ -820,7 +880,7 @@ public final class Overlay {
 
    /** Sub-phases per phase the tree shows (-1 = no tree), hot methods per sub-phase, whether the flame graph shows: for the sampler thread's view. */
    static int treeSubsConfigured() {
-      return PROFILE_SUBS;
+      return profileSubs;
    }
 
    static int treeHotConfigured() {
@@ -879,7 +939,7 @@ public final class Overlay {
 
    /** The stats lines with every number at its widest, so the width does not follow the live digits. */
    private static int statsTemplateWidth(TextManager tm, UIFont font, int fpsW) {
-      if (STATS_LINES == 0) {
+      if (statsShown == 0) {
          return 0;
       }
       String[] t = {
@@ -889,7 +949,7 @@ public final class Overlay {
             "GPU 888 %   game thread 888 %   render thread 888 %   process 888 % of 88 cores   machine 888 %   heap 88.8/88.8 GB",
       };
       int w = 0;
-      for (int i = 0; i < Math.min(STATS_LINES, t.length); i++) {
+      for (int i = 0; i < Math.min(statsShown, t.length); i++) {
          w = Math.max(w, (i == 0 ? fpsW : 0) + labelWidth(tm, font, t[i]));
       }
       return w;
@@ -897,7 +957,7 @@ public final class Overlay {
 
    /** Rows the tree reserves: the three in-game phases, each with its sub-phases, whatever the window shows. */
    private static int treeRowsReserved() {
-      return 3 * (1 + Math.max(0, PROFILE_SUBS));
+      return 3 * (1 + Math.max(0, profileSubs));
    }
 
    /** The fixed width of a tree row: bar, a 26-character name, share, a wait share and a 44-character hint. */
@@ -1015,7 +1075,7 @@ public final class Overlay {
    // panel is drawn into an offscreen buffer at each layout, like the stock offscreen UI (UIManager.uiFbo: the same
    // UIFBOStyle premultiplied blend into a transparent target, the same flipped additive composite), and each frame
    // costs one textured quad plus the live bars on top of it.
-   private static final boolean TEXTURE = Config.OVERLAY_TEXTURE;
+   private static boolean useTexture;
    private static boolean textureFailed;
    private static boolean textureValid;
    private static TextureFBO panelFbo;
@@ -1042,7 +1102,7 @@ public final class Overlay {
          sr.glDoStartFrameFx(w, h, -1); // viewport 0,0,w,h and a w x h ortho projection; the end pops both
          sr.setDefaultStyle(UIFBOStyle.instance);
          emitQuads(sr, panelX, panelY);
-         if (GRAPH_NS > 0) {
+         if (graphNs > 0) {
             emitBars(sr, panelX, panelY);
          }
          emitTexts(panelX, panelY);
@@ -1063,7 +1123,7 @@ public final class Overlay {
       sr.setDoAdditive(true);
       sr.renderi((Texture)panelFbo.getTexture(), panelX, panelY + panelH, panelW, -panelH, 1f, 1f, 1f, 1f, null);
       sr.setDoAdditive(false);
-      if (GRAPH_NS == 0) {
+      if (graphNs == 0) {
          emitBars(sr, 0, 0);
       }
    }
@@ -1235,7 +1295,7 @@ public final class Overlay {
       java.util.List<GameThreadProfile.Row> tree = profileRows;
       int indent = tm.MeasureStringX(font, "    ");
       int pctW = tm.MeasureStringX(font, "100 %  ");
-      int barW = Math.min(GRAPH_BARS * 2, 140);
+      int barW = Math.min(graphFrames * 2, 140);
       String[] treeName = new String[tree.size()];
       String[] treePct = new String[tree.size()];
       String[] treeWait = new String[tree.size()];
@@ -1255,7 +1315,7 @@ public final class Overlay {
          int used = treeX[i] + tm.MeasureStringX(font, r.name) + indent + pctW + tm.MeasureStringX(font, treeWait[i]);
          treeHint[i] = r.hint.isEmpty() ? "" : fit(tm, font, r.hint, treeRowMax - used - indent);
       }
-      if (PROFILE_SUBS >= 0) {
+      if (profileSubs >= 0) {
          textW = Math.max(textW, treeRowMax);
       }
       // the frame graph gets a y-axis column (ms ticks) and an x-axis row; the flame graph the panel's width
@@ -1265,7 +1325,7 @@ public final class Overlay {
       }
       int axisW = tm.MeasureStringX(font, yTicks[3]) + pad;
       // a narrow screen shows fewer frames (2 px each) rather than a graph past the screen edge; under 60 none
-      int graphBars = Math.min(GRAPH_BARS, (maxTextW - axisW) / 2);
+      int graphBars = Math.min(graphFrames, (maxTextW - axisW) / 2);
       if (graphBars < 60) {
          graphBars = 0;
       }

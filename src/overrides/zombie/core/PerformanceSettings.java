@@ -77,7 +77,8 @@ public final class PerformanceSettings {
 
    // pzopt: the "Optimizations" options tab (media/lua/client/pzopt/pzopt_optimizations_options.lua)
    // reads and writes the pzopt.Config keys through these; values are strings as in pzopt.properties.
-   // Choices go to Zomboid/pzopt/options.ini (pzopt.UserOptions) and apply on the next launch.
+   // Choices go to Zomboid/pzopt/options.ini (pzopt.UserOptions) and apply on the next launch; the
+   // Profiler tab's keys apply at once (pzopt.Config.reloadLive).
    // The tab is offered whenever the build matches, also when the player switched every optimization
    // off (Config.enabled=false), so it can switch them back on.
    public boolean hasPzoptOptions() {

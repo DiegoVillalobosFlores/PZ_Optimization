@@ -16,9 +16,11 @@ import java.util.TreeMap;
  * {@code -Dpzopt.<key>} and the install dir's {@code pzopt.properties}: the harness writes that
  * file per run, and a run's flags must not depend on what was clicked in the menu.
  *
- * Every key takes effect on the next launch. The tab shows the values that were in force at
- * boot ({@link Config#value}) and the stock "restart required" dialog when a change differs
- * from them. A key that is absent from the file uses the default, so "Default" in the tab
+ * Every key takes effect on the next launch, except the Profiler tab's (the overlay and its
+ * game-thread profiler, {@link Config#isLive}): {@link #set} re-reads those at once and the
+ * overlay picks them up from the next frame. The tab shows the values in force
+ * ({@link Config#value}) and the stock "restart required" dialog when a change to a next-launch
+ * key differs from them. A key that is absent from the file uses the default, so "Default" in the tab
  * removes the key rather than writing the default's value: defaults may change per build and
  * per machine (worker counts).
  *
@@ -67,7 +69,7 @@ public final class UserOptions {
       return live.getProperty(key);
    }
 
-   /** Stores a value (null or empty removes the key) and rewrites the file at once. */
+   /** Stores a value (null or empty removes the key) and rewrites the file at once; a live key (Config.isLive) applies now. */
    public static synchronized void set(String key, String value) {
       if (key == null || key.isEmpty()) {
          return;
@@ -85,10 +87,15 @@ public final class UserOptions {
          }
          live.setProperty(key, value);
       }
+      boolean now = Config.reloadLive(key);
+      if (now) {
+         Overlay.reconfigure();
+      }
       File f = file();
       try {
          write(f, live);
-         Log.info("options: " + key + "=" + (value == null || value.isEmpty() ? "(default)" : value) + " saved to " + f.getPath() + " (applies on the next launch)");
+         Log.info("options: " + key + "=" + (value == null || value.isEmpty() ? "(default)" : value) + " saved to " + f.getPath()
+               + (now ? " (applied now)" : " (applies on the next launch)"));
       } catch (IOException e) {
          Log.warn("options: could not write " + f.getAbsolutePath() + ": " + e);
       }

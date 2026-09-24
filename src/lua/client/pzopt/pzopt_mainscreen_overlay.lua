@@ -4,8 +4,8 @@
 --  PerformanceSettings (pzopt.Overlay.toggle): one more item in the style of the stock ones (ISLabel,
 --  UIFont.Large, the same hover fade and sounds) right below Options in both menus. Its text follows
 --  the overlay's state and names both shortcuts (the bound key, read each frame, so a rebind shows up).
---  With overlaySampling off the overlay cannot show this session: the item stays
---  "SHOW" and a click shows the overlay's own notice (tick the box, restart), like the key does.
+--  With overlaySampling off the overlay cannot show: the item stays "SHOW" and a click shows the
+--  overlay's own notice (tick the box in Options > Profiler and apply, no restart), like the key does.
 --  Controller: the item has its own row in the menu's joypad list right after Options (the D-pad
 --  reaches it like any stock item), A toggles.
 --  Not added when every optimization is off (enabled=false): the overlay is inert then.

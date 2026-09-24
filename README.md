@@ -45,6 +45,7 @@ machine you play on.
    - [macOS](#macos)
    - [Handheld and old laptops](#handheld-and-old-laptops)
    - [Against the Workshop's performance mods](#against-the-workshops-performance-mods)
+   - [Input latency: NVIDIA Reflex-style low latency](#input-latency-nvidia-reflex-style-low-latency)
 3. [Install](#install)
    - [Requirements](#requirements)
    - [Method A: Steam Workshop](#method-a-steam-workshop)
@@ -311,6 +312,34 @@ none touches the per-frame chunk, tree and translucent drawing on the render thr
 world update on the game thread that set the frame time. Multi-Cpu Enhance's
 `-XX:+UseParallelGC` is worse than stock: a 300–350 ms stop-the-world collection landed inside
 every route (the game's own G1 never paused longer than 21 ms).
+
+### Input latency: NVIDIA Reflex-style low latency
+
+![Input -> screen, stock vs this build](docs/media/input-latency-reflex.png)
+
+Measured end to end: a virtual keyboard, mouse and Xbox pad (uinput) press, the game's own stage stamps, and the flip
+that put the frame on screen (X Present). Stock reads the keyboard one frame late (`GameKeyboard` used the previous
+poll), and every frame used input polled right after the previous frame was shown, however long the frame limiter then
+idled. Two fixes are on by default: **fresh keyboard** (`keyboardFresh`) and **input latch** (`inputLatch`: the game asks
+the render thread for a fresh poll the moment its frame starts). Three are options in Options > Optimizations > Input
+latency:
+
+- **Low-latency mode** (`reflexSleep` + `reflexCapFps=-1`): what NVIDIA Reflex does. Each frame measures how long it
+  queued on the way to the screen (the hand-off to the render thread, a vsync swap that blocks, the driver's queue from
+  GL timestamps) and the next one starts that much later; with vsync the frame rate is capped just below the refresh
+  (refresh - refresh²/3600, 157 fps at 165 Hz) so the game can never refill the queue. Vsync on, uncapped:
+  25-28 ms -> 5-10 ms input -> screen.
+- **Boost** (`reflexBoost`, NVIDIA): at a frame cap the GPU idles and clocks down, so the frame it draws takes longer
+  (3.9 ms per frame at 60 fps vs 1.3 ms at 240 on an RTX 4090). This holds the driver's "prefer maximum performance"
+  through NVML while a world is loaded, as Reflex's On + Boost does; the driver drops it when the game exits. ~28 W more
+  at a 60 fps cap.
+- **Cursor latch**, **aim hold** and the other measured options (`cursorLatch`, `aimHoldMs`, `gpuMaxFrames`,
+  `vsyncAdaptive`, `vblankLock`) are described in the tab.
+
+NVIDIA Reflex itself is an SDK for Direct3D and Vulkan; there is none for OpenGL, which the game uses, so these are
+Reflex's methods rebuilt with OpenGL and NVML. Every run and the techniques that did not help (the driver's
+`__GL_MaxFramesAllowed`, adaptive vsync, a vblank-locked start under XWayland):
+[docs/findings-input-latency-2026-09-24.md](docs/findings-input-latency-2026-09-24.md).
 
 ---
 

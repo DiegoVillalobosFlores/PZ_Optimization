@@ -112,7 +112,10 @@ caption and two upscaler sentences were shortened (page 7,899 substituted charac
 all cores" card (`docs/media/zombie-cores-comparison.png` from `harness/zombie-cores-table.py`: the Louisville horde,
 four alternating pairs of the same build with the zombie postupdate pass's keys off vs on, runs `zt4-r-*`; 2026-09-23,
 release 5db6a37): the overlay, render distance and upscaler cards lost their `[h1]` headings (their images carry the
-titles; page 7,892 substituted characters).
+titles; page 7,892 substituted characters). `21` the "New! NVIDIA Reflex-style low latency" card
+(`docs/media/input-latency-reflex.png` from `harness/reflex-table.py`: input -> screen at a 60 fps cap with vsync, stock
+`il-60-base` vs all input-latency keys + `reflexBoost`, mean of `il-60-boost` / `il-60-boostb`; 2026-09-24): the zombie
+card lost its `[h1]`, the upscaler caption was shortened (page 7,891 substituted characters).
 `description.txt` embeds them with `[img]` from the raw GitHub URL of `master`,
 so they render only after the folder is pushed. The same files go in the item's own carousel:
 on the Workshop page, "Add/edit images & videos" takes the JPGs (upload `00` first, it becomes

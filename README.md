@@ -46,6 +46,7 @@ machine you play on.
    - [Handheld and old laptops](#handheld-and-old-laptops)
    - [Against the Workshop's performance mods](#against-the-workshops-performance-mods)
    - [Input latency: NVIDIA Reflex-style low latency](#input-latency-nvidia-reflex-style-low-latency)
+   - [Variable refresh: G-SYNC, FreeSync, ProMotion](#variable-refresh-g-sync-freesync-promotion)
 3. [Install](#install)
    - [Requirements](#requirements)
    - [Method A: Steam Workshop](#method-a-steam-workshop)
@@ -340,6 +341,32 @@ NVIDIA Reflex itself is an SDK for Direct3D and Vulkan; there is none for OpenGL
 Reflex's methods rebuilt with OpenGL and NVML. Every run and the techniques that did not help (the driver's
 `__GL_MaxFramesAllowed`, adaptive vsync, a vblank-locked start under XWayland):
 [docs/findings-input-latency-2026-09-24.md](docs/findings-input-latency-2026-09-24.md).
+
+### Variable refresh: G-SYNC, FreeSync, ProMotion
+
+![Variable refresh, without vs with this build](docs/media/vrr.png)
+
+A variable refresh display shows each frame the moment it is ready, so it only helps when the compositor turns it on and
+the frames arrive evenly. Measured with the flip times of every frame (X Present), the kernel's `VRR_ENABLED` state and
+the game's own per-frame stamps (`harness/pacing.py`):
+
+- **Borderless gets VRR** (`borderlessFullscreen`, Linux, on by default): KDE, GNOME and gamescope enable VRR only for a
+  window in the fullscreen state, and the stock borderless window is a screen-sized plain window, so it never got VRR
+  (0 % of the run). It is now a fullscreen window at the desktop's own mode: no mode switch, it stays up when focus
+  moves away, and the options still say borderless. VRR on for the whole run under XWayland and native Wayland.
+- **Cap inside the range** (`vrr=auto`, `vrrCap`): while the kernel reports VRR on, an uncapped or too-high cap becomes
+  refresh - refresh²/3600 (157 fps at 165 Hz), so frames never fall back to vsync at the ceiling: 21 -> 13 ms from the
+  game's step to the screen.
+- **Even delivery** (`presentPacing=auto`): the game steps at an even rate, but each frame takes a different time to
+  update and draw, and with VRR that difference is on screen. Each swap is held to a high percentile of the recent
+  step -> GPU-done time (GL timestamp queries, never blocking): on-screen judder 3.10 -> 0.95 ms at a 100 fps cap.
+- **macOS ProMotion** (`macPresent`, Apple silicon, off by default): OpenGL frames are shown on the 120 Hz grid, so a
+  90 fps cap alternates 8 and 17 ms. Presenting through Metal (`presentDrawable:afterMinimumDuration:` from a native
+  fullscreen Space, the game's frame upscaled into a native-size drawable) shows any multiple of 4.17 ms: 94 % of
+  steady frames exactly on their slot at 60 fps, 84 % at 80 (M1 Pro). It adds ~10-15 ms of latency, hence opt-in.
+
+Windows (borderless already covers the screen there) and AMD FreeSync are not measured yet; on Windows set Variable
+refresh rate = on in Options > Optimizations. Every run: [docs/findings-vrr-2026-09-24.md](docs/findings-vrr-2026-09-24.md).
 
 ---
 

@@ -398,6 +398,13 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   writes less than the screen: new defaults `dlssPreset=e dlssOutputPct=67 dlssOutputFilter=rcas dlssDirectColor=true`
   (+22 % in the static storm + stock-fog scene, image sharper than full-size K); the drive stays DLSS-negative. The
   120 km/h drive harness no longer swings into the roadside (check `harness: drive t=` telemetry before trusting a drive).
+- Variable refresh (2026-09-24, `docs/findings-vrr-2026-09-24.md`): stock borderless never got VRR (KWin / Mutter /
+  gamescope need a fullscreen window); `borderlessFullscreen` (Linux default) makes it a GLFW monitor window at the desktop
+  mode. `pzopt.Vrr` reads DRM `VRR_ENABLED`; while on, `vrrCap` (157 at 165 Hz) and `presentPacing=auto` (gpu: swap held to
+  GPU-completion lag, judder 3.10 -> 0.95 ms). Mac `macPresent` (Metal bridge, ProMotion 4.17 ms steps, off by default,
+  `devMacPresentCheck` rig). Rigs: `harness/pacing.py`, `presentprobe.c`, `vrrprobe.py` (every run.sh run writes
+  `present.txt` / `vrr.txt`). The desktop's KWin VRR policy is Never by the maintainer's choice: set Automatic only inside
+  the test job. Native-Wayland optimized runs segfault at exit (not VRR code, open).
 - Open plans: `docs/plan-game-load.md`, `docs/plan-vulkan-renderer.md`, `docs/plan-resource-use.md`,
   `docs/plan-zombie-multithread.md` (2026-09-22: the rest of the zombie simulation on all cores, phased).
   The game-thread optimization plans were dropped on 2026-09-21 at the maintainer's request.

@@ -119,7 +119,10 @@ titles; page 7,892 substituted characters). `21` the "New! NVIDIA Reflex-style l
 `il-60-base` vs all input-latency keys + `reflexBoost`, mean of `il-60-boost` / `il-60-boostb`; 2026-09-24): the zombie
 card lost its `[h1]`, the upscaler caption was shortened (page 7,891 substituted characters). `22` the "New! Variable refresh" card
 (`docs/media/vrr.png` from `harness/vrr-table.py`: the desktop VRR runs of `docs/findings-vrr-2026-09-24.md`, without vs with the
-VRR work; 2026-09-24): the low-latency card lost its `[h1]`, the upscaler caption was shortened again.
+VRR work; 2026-09-24): the low-latency card lost its `[h1]`, the upscaler caption was shortened again. `23` the "New! Zombie detail follows the frame cap" card
+(`docs/media/zombie-lod-card.png` from `harness/zombie-lod-card.py`: the Louisville horde at a 144 and a 240 fps cap, `zombieLodDynamic`
+off vs on, runs `lod-144-off` / `lod2-144-off` / `lod2-144-on` / `lod-240-off` / `lod2-240-on`; 2026-09-24, release eb305b6): the VRR card
+lost its `[h1]`, the upscaler card's "Helps when ..." line went (page 7,890 substituted characters).
 `description.txt` embeds them with `[img]` from the raw GitHub URL of `master`,
 so they render only after the folder is pushed. The same files go in the item's own carousel:
 on the Workshop page, "Add/edit images & videos" takes the JPGs (upload `00` first, it becomes

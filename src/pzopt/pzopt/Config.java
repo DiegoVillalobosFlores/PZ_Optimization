@@ -695,6 +695,7 @@ public final class Config {
    public static volatile String OVERLAY_TREE; // the game-thread tree: off | 0 (phases only) | 3 | 5 | 8 sub-phases per phase
    public static volatile String OVERLAY_VERDICT; // off | short ("GPU bound") | detailed (+ the two biggest game-thread sub-phases)
    public static volatile String OVERLAY_GRAPH; // the frame-time graph: off | 240 | 480 | 960 frames (2 px each)
+   public static volatile boolean OVERLAY_POWER; // the power line: CPU / GPU / SoC / battery watts and J per frame (pzopt.Power), 2026-09-24
    public static volatile String OVERLAY_FLAME; // the game-thread flame graph: off | right (900 px column) | right-wide (1400) | below (under the frame graph); off by default since 2026-09-23 (the heaviest element)
    public static volatile boolean OVERLAY_TEXTURE; // draw the panel into a texture at each 4 Hz refresh, one quad per frame (Overlay.renderToTexture); false = every glyph as a sprite every frame
    public static volatile int OVERLAY_REFRESH_MS; // how often the overlay's numbers, tree and texture are refreshed
@@ -730,6 +731,7 @@ public final class Config {
       OVERLAY_VERDICT = string("overlayVerdict", "detailed");
       OVERLAY_GRAPH = string("overlayGraph", "240");
       OVERLAY_FLAME = string("overlayFlame", "off");
+      OVERLAY_POWER = bool("overlayPower", true);
       OVERLAY_TEXTURE = bool("overlayTexture", true);
       OVERLAY_REFRESH_MS = integer("overlayRefreshMs", 250);
       OVERLAY_GRAPH_HZ = integer("overlayGraphHz", 0);

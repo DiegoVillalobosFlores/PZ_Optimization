@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS runs (
   path text, files_mtime double precision, ingested timestamptz DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS runs_started ON runs (started);
+-- route-window power (2026-09-24): the best source of the run (sysmon, else the game's pzopt-power.out, else macpower)
+ALTER TABLE runs ADD COLUMN IF NOT EXISTS cpu_w double precision, ADD COLUMN IF NOT EXISTS total_w double precision,
+  ADD COLUMN IF NOT EXISTS j_per_frame double precision, ADD COLUMN IF NOT EXISTS power_source text;
 
 -- pzopt-frames.out: every game frame (Stats), the harness's own frame source on both stock and optimized
 CREATE TABLE IF NOT EXISTS frames (run text, t timestamptz, rel_s double precision, rt timestamptz, ms real, in_route boolean);
@@ -38,7 +41,14 @@ CREATE TABLE IF NOT EXISTS overlay (run text, t timestamptz, rel_s double precis
 -- sysmon.csv: machine CPU / GPU utilization, clocks, power, VRAM every 0.5 s
 CREATE TABLE IF NOT EXISTS sysmon (run text, t timestamptz, rel_s double precision, rt timestamptz, cpu_pct real,
   busiest_core_pct real, gpu_pct real, gpu_sm_mhz real, gpu_mem_mhz real, gpu_w real, gpu_c real, vram_mib real,
-  game_cpu_pct real, bat_w real);
+  game_cpu_pct real, bat_w real, cpu_w real, soc_w real, total_w real);
+-- power (2026-09-24): cpu_w = CPU package (RAPL), soc_w = an AMD APU's socket, total_w = battery on battery, else CPU
+-- (or socket) + discrete GPU; NULL where the machine has no readable sensor (harness/sysmon.sh, scripts/power-access.sh)
+ALTER TABLE sysmon ADD COLUMN IF NOT EXISTS cpu_w real, ADD COLUMN IF NOT EXISTS soc_w real, ADD COLUMN IF NOT EXISTS total_w real;
+-- the other power traces of a run: source game = the in-game profiler (pzopt-power.out, pzopt.Power, same rails as
+-- sysmon), mac = harness/macpower.py (power.csv: total_w = the SMC's whole-system load, cpu_w / gpu_w from IOReport)
+CREATE TABLE IF NOT EXISTS power (run text, t timestamptz, rel_s double precision, rt timestamptz, source text,
+  cpu_w real, gpu_w real, soc_w real, bat_w real, total_w real, fps real);
 -- pzopt-gamethread.out: per second, share of the game thread's stack samples per key
 -- kind p = phase, s = phase/sub-phase, l = phase/sub/hot method, w = waits
 CREATE TABLE IF NOT EXISTS gamethread (run text, t timestamptz, rel_s double precision, rt timestamptz, kind text,
@@ -85,7 +95,7 @@ CREATE TABLE IF NOT EXISTS counters (run text, grp text, key text, value double 
 DO $$
 DECLARE tbl text;
 BEGIN
-  FOREACH tbl IN ARRAY ARRAY['frames','overlay','sysmon','gamethread','chunks','gc','present','series','stacks','sched','events','inputs','pacing'] LOOP
+  FOREACH tbl IN ARRAY ARRAY['frames','overlay','sysmon','power','gamethread','chunks','gc','present','series','stacks','sched','events','inputs','pacing'] LOOP
     EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON %I (run, rt)', tbl || '_run_rt', tbl);
   END LOOP;
 END $$;
@@ -99,7 +109,10 @@ CREATE TABLE IF NOT EXISTS live_overlay (t timestamptz, fps real, ms real, gpu_m
   game_load real, render_load real);
 CREATE TABLE IF NOT EXISTS live_frames (t timestamptz, ms real);
 CREATE TABLE IF NOT EXISTS live_sysmon (t timestamptz, cpu_pct real, busiest_core_pct real, gpu_pct real,
-  gpu_sm_mhz real, gpu_mem_mhz real, gpu_w real, gpu_c real, vram_mib real, game_cpu_pct real, bat_w real);
+  gpu_sm_mhz real, gpu_mem_mhz real, gpu_w real, gpu_c real, vram_mib real, game_cpu_pct real, bat_w real,
+  cpu_w real, soc_w real, total_w real);
+ALTER TABLE live_sysmon ADD COLUMN IF NOT EXISTS cpu_w real, ADD COLUMN IF NOT EXISTS soc_w real, ADD COLUMN IF NOT EXISTS total_w real;
+CREATE TABLE IF NOT EXISTS live_power (t timestamptz, cpu_w real, gpu_w real, soc_w real, bat_w real, total_w real, fps real);
 CREATE TABLE IF NOT EXISTS live_gamethread (t timestamptz, kind text, name text, samples integer, share real);
 CREATE TABLE IF NOT EXISTS live_state (k text PRIMARY KEY, v text, t timestamptz DEFAULT now());
 CREATE TABLE IF NOT EXISTS live_stacks (t timestamptz, stack_id bigint, samples integer);
@@ -107,6 +120,7 @@ CREATE TABLE IF NOT EXISTS live_inputs (t timestamptz, device text, control text
 CREATE INDEX IF NOT EXISTS live_overlay_t ON live_overlay (t);
 CREATE INDEX IF NOT EXISTS live_frames_t ON live_frames (t);
 CREATE INDEX IF NOT EXISTS live_sysmon_t ON live_sysmon (t);
+CREATE INDEX IF NOT EXISTS live_power_t ON live_power (t);
 CREATE INDEX IF NOT EXISTS live_gamethread_t ON live_gamethread (t);
 CREATE INDEX IF NOT EXISTS live_stacks_t ON live_stacks (t);
 CREATE INDEX IF NOT EXISTS live_stacks_stack_id ON live_stacks (stack_id);

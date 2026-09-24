@@ -45,7 +45,7 @@ import zombie.ui.UIFont;
  * {@link #fpsColor}) and mean frame time, p99 / p99.9 / max, 1 %-low fps, frame-to-frame jitter, spikes (frames above twice the median), and the
  * utilization the objective asks for: GPU busy share (timer queries), the game thread's and the
  * render thread's CPU share of one core, the process's share of all cores and the whole machine's
- * (JMX), plus the heap. A verdict line names what is saturated when the frame rate is under the
+ * (JMX), plus the heap, and the power draw with the energy per frame ({@link Power}, {@code overlayPower}). A verdict line names what is saturated when the frame rate is under the
  * cap; "below cap, nothing saturated" is itself the finding. A bar graph of the last frames sits
  * underneath with the cap's budget marked.
  *
@@ -638,7 +638,24 @@ public final class Overlay {
             }
          }
          gpuLoad = gpuBusyShare(now);
+         // watts (pzopt.Power): for the power line while shown, and pzopt-power.out whenever the frame log is on
+         if ((visible && Config.OVERLAY_POWER) || logFrames) {
+            Power.sample(framesLastSecond(now), logFrames);
+         }
       }
+   }
+
+   /** Frames presented in the last second (reads the ring the render thread writes). */
+   private static int framesLastSecond(long now) {
+      int h = head;
+      int n = 0;
+      for (int i = 1; i <= Math.min(h, RING - 64); i++) {
+         if (now - frameEndNs[(h - i) & (RING - 1)] > 1_000_000_000L) {
+            break;
+         }
+         n++;
+      }
+      return n;
    }
 
    /** GPU busy share over the last second of presented frames (reads the ring the render thread writes). */
@@ -684,7 +701,7 @@ public final class Overlay {
          prev = ms;
       }
       if (count == 0) {
-         lines = statsShown == 0 ? new String[0] : new String[] {"performance overlay: waiting for frames"};
+         lines = statsShown == 0 && !Config.OVERLAY_POWER ? new String[0] : new String[] {"performance overlay: waiting for frames"};
          fpsText = "";
          verdict = "";
          return;
@@ -717,7 +734,10 @@ public final class Overlay {
             String.format(java.util.Locale.ROOT, "GPU %s   game thread %.0f %%   render thread %.0f %%   process %.0f %% of %d cores   machine %.0f %%   heap %.1f/%.1f GB",
                   gpu, gameLoad, renderLoad, processLoad, cores, systemLoad, heapUsed, heapMax),
       };
-      lines = Arrays.copyOf(all, statsShown);
+      lines = Arrays.copyOf(all, statsShown + (Config.OVERLAY_POWER ? 1 : 0));
+      if (Config.OVERLAY_POWER) {
+         lines[statsShown] = Power.overlayLine(fps); // watts per rail and energy per frame (pzopt.Power)
+      }
       if (statsShown == 0) {
          fpsText = "";
       }
@@ -939,8 +959,9 @@ public final class Overlay {
 
    /** The stats lines with every number at its widest, so the width does not follow the live digits. */
    private static int statsTemplateWidth(TextManager tm, UIFont font, int fpsW) {
+      int power = Config.OVERLAY_POWER ? labelWidth(tm, font, Power.TEMPLATE) : 0;
       if (statsShown == 0) {
-         return 0;
+         return power;
       }
       String[] t = {
             "   88.88 ms   cap 8888 fps",
@@ -952,7 +973,7 @@ public final class Overlay {
       for (int i = 0; i < Math.min(statsShown, t.length); i++) {
          w = Math.max(w, (i == 0 ? fpsW : 0) + labelWidth(tm, font, t[i]));
       }
-      return w;
+      return Math.max(w, power);
    }
 
    /** Rows the tree reserves: the three in-game phases, each with its sub-phases, whatever the window shows. */

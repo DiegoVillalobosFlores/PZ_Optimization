@@ -767,6 +767,10 @@ in the menus, on the loading screen and in the world, with no MangoHud or RivaTu
 - **Utilization**: GPU busy share (a GL timer query around the frame's draw commands),
   game-thread and render-thread load as a share of one core, the process's and the machine's
   share of all cores, the heap.
+- **Power**: the watts the machine draws and the energy each frame costs (J/frame = watts / fps):
+  CPU package, GPU board power, an AMD APU's socket, or the whole laptop while on battery, from
+  the counters the system lets a user read (NVIDIA through the driver on Windows and Linux, AMD
+  GPUs and APUs, and on Linux the CPU's RAPL counters, root-only on most distributions).
 - **Game-thread tree**: *what* the game thread is doing, from its call stack sampled 100 times
   a second on a background thread (`pzopt.GameThreadProfile`; a sample stops the thread for tens
   of microseconds): the phases (update / render / lighting) with their share of the time, under
@@ -783,7 +787,8 @@ in the menus, on the loading screen and in the world, with no MangoHud or RivaTu
 
 Every element is a dropdown in the tab's Performance overlay group, off or one of its sizes:
 `overlayStats` (fps / tails / full), `overlayTree` (0 to 8 sub-phases per phase),
-`overlayVerdict` (short / detailed), `overlayGraph` (240 / 480 / 960 frames), `overlayFlame`
+`overlayVerdict` (short / detailed), `overlayPower` (the power line: CPU / GPU / APU / battery watts and the
+energy per frame, from the counters the system lets a user read), `overlayGraph` (240 / 480 / 960 frames), `overlayFlame`
 (a 900 or 1400 px column beside the statistics, or below the frame graph) with
 `overlayFlameDepth` rows, and `gameThreadProfileHz`. Stack sampling only runs while the tree,
 the flame graph, the detailed verdict or the frame log wants it.
@@ -893,6 +898,7 @@ Full list with comments: [`src/pzopt/pzopt/Config.java`](src/pzopt/pzopt/Config.
 | `overlay` / `overlayLog` | `false` / `false` | show the overlay from boot; write `pzopt-overlay.out` (both imply sampling) |
 | `overlayCorner` / `overlayFont` / `overlayKey` | `tl` / `auto` / F9 | placement, font and key binding; `overlayFps*` the colour thresholds |
 | `overlayStats` / `overlayTree` / `overlayVerdict` / `overlayGraph` / `overlayFlame` | `full` / `5` / `detailed` / `240` / `right` | each overlay element, `off` or its size ([Performance overlay](#performance-overlay-f9--l3--r3)) |
+| `overlayPower` | `true` | the power line: watts per rail and J/frame; `pzopt-power.out` with the frame log. CPU watts need readable RAPL counters on Linux (root-only by default) |
 | `overlayFlameDepth` / `gameThreadProfileHz` | `24` / `100` | flame-graph rows above `GameWindow.frameStep`; game-thread stack samples per second (10..1000) |
 
 ---

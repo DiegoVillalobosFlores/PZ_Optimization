@@ -267,7 +267,7 @@
      "rawQuery": true,
      "editorMode": "code",
      "format": "table",
-     "rawSql": "SELECT started, run, fps_mean AS fps, fps_1pct_low AS \"1% low\", p50_ms AS p50, p99_ms AS p99, p99_9_ms AS \"p99.9\", max_ms AS max,\n  over_33ms AS \">33ms\", jitter_ms AS jitter, cpu_pct AS \"CPU %\", busiest_core_pct AS \"busiest core %\", gpu_pct AS \"GPU %\",\n  game_thread_pct AS \"game thread %\", CASE\n  WHEN gpu_pct >= 90 THEN 'GPU-bound'\n  WHEN game_thread_pct >= 90 OR game_load_pct >= 90 THEN 'game thread'\n  WHEN fps_mean >= 235 AND props NOT LIKE '%uncappedFps=true%' THEN 'at 240 cap'\n  WHEN fps_mean IS NULL THEN NULL\n  ELSE 'headroom left' END AS bound, verdict, round(verdict_confidence::numeric, 2) AS conf, valid,\n  variant, machine, mode, preset, chunk_p99_ms AS \"chunk p99\", gc_events AS gc, zoom, resolution, label,\n  lag(run) OVER (PARTITION BY label ORDER BY started) AS previous\nFROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} ORDER BY started DESC",
+     "rawSql": "SELECT started, run, fps_mean AS fps, fps_1pct_low AS \"1% low\", p50_ms AS p50, p99_ms AS p99, p99_9_ms AS \"p99.9\", max_ms AS max,\n  over_33ms AS \">33ms\", jitter_ms AS jitter, cpu_pct AS \"CPU %\", busiest_core_pct AS \"busiest core %\", gpu_pct AS \"GPU %\",\n  game_thread_pct AS \"game thread %\", total_w AS \"W\", j_per_frame AS \"J/frame\", CASE\n  WHEN gpu_pct >= 90 THEN 'GPU-bound'\n  WHEN game_thread_pct >= 90 OR game_load_pct >= 90 THEN 'game thread'\n  WHEN fps_mean >= 235 AND props NOT LIKE '%uncappedFps=true%' THEN 'at 240 cap'\n  WHEN fps_mean IS NULL THEN NULL\n  ELSE 'headroom left' END AS bound, verdict, round(verdict_confidence::numeric, 2) AS conf, valid,\n  variant, machine, mode, preset, chunk_p99_ms AS \"chunk p99\", gc_events AS gc, zoom, resolution, label,\n  lag(run) OVER (PARTITION BY label ORDER BY started) AS previous\nFROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} ORDER BY started DESC",
      "hide": false
     }
    ],
@@ -991,6 +991,38 @@
         "value": 0
        }
       ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "W"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "watt"
+       },
+       {
+        "id": "decimals",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "J/frame"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "joule"
+       },
+       {
+        "id": "decimals",
+        "value": 3
+       }
+      ]
      }
     ]
    },
@@ -1479,14 +1511,144 @@
    }
   },
   {
-   "type": "row",
-   "title": "Objective findings",
-   "collapsed": false,
-   "panels": [],
+   "type": "timeseries",
+   "title": "Power (route mean, whole machine)",
+   "description": "runs.total_w: sysmon's total_w (battery on battery, else CPU package or APU socket + discrete GPU), else the game's pzopt-power.out, else the Mac's macpower system_w. Empty without a CPU reading (scripts/power-access.sh for RAPL).",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT started AS time, label AS metric, total_w AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND total_w IS NOT NULL ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "watt",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 7,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
    "id": 11,
    "gridPos": {
     "x": 0,
     "y": 46,
+    "w": 12,
+    "h": 9
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Energy per frame (route)",
+   "description": "route-mean total watts / route-mean fps",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT started AS time, label AS metric, j_per_frame AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND j_per_frame IS NOT NULL ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "joule",
+     "custom": {
+      "drawStyle": "points",
+      "lineWidth": 1,
+      "pointSize": 7,
+      "showPoints": "always",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 12,
+   "gridPos": {
+    "x": 12,
+    "y": 46,
+    "w": 12,
+    "h": 9
+   }
+  },
+  {
+   "type": "row",
+   "title": "Objective findings",
+   "collapsed": false,
+   "panels": [],
+   "id": 13,
+   "gridPos": {
+    "x": 0,
+    "y": 55,
     "w": 24,
     "h": 1
    }
@@ -1800,10 +1962,10 @@
     },
     "sortBy": []
    },
-   "id": 12,
+   "id": 14,
    "gridPos": {
     "x": 0,
-    "y": 47,
+    "y": 56,
     "w": 24,
     "h": 8
    }

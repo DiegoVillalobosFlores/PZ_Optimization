@@ -1597,13 +1597,304 @@
   },
   {
    "type": "row",
-   "title": "Game thread (pzopt-gamethread.out, share of stack samples)",
+   "title": "Power",
    "collapsed": false,
    "panels": [],
    "id": 20,
    "gridPos": {
     "x": 0,
     "y": 71,
+    "w": 24,
+    "h": 1
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Power (route mean)",
+   "description": "The run's best power source over the route window: sysmon (harness), else the game's pzopt-power.out, else macpower. total = battery on battery, else CPU package (RAPL) or APU socket + discrete GPU; empty without a CPU reading (scripts/power-access.sh).",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "SELECT total_w AS \"total W\", cpu_w AS \"CPU W\", gpu_w AS \"GPU W\", j_per_frame AS \"J/frame\", power_source AS source FROM runs WHERE run = ${run:sqlstring}",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "none",
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "text",
+        "value": null
+       }
+      ]
+     },
+     "decimals": 2
+    },
+    "overrides": []
+   },
+   "options": {
+    "reduceOptions": {
+     "values": false,
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "/.*/"
+    },
+    "colorMode": "none",
+    "graphMode": "none",
+    "textMode": "value_and_name",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "wideLayout": true,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 20
+    }
+   },
+   "id": 21,
+   "gridPos": {
+    "x": 0,
+    "y": 72,
+    "w": 24,
+    "h": 4
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Power (sysmon, every 0.5 s)",
+   "description": "harness/sysmon.sh: CPU package from RAPL, GPU from nvidia-smi / amdgpu hwmon, battery discharge, total as in the stat",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, total_w AS \"total\", cpu_w AS \"CPU package\", soc_w AS \"APU socket\", gpu_w AS \"GPU\", bat_w AS \"battery\"\nFROM sysmon WHERE run = ${run:sqlstring} AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "watt",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 22,
+   "gridPos": {
+    "x": 0,
+    "y": 76,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Power (in game / macpower)",
+   "description": "game = pzopt.Power (the overlay's power line, pzopt-power.out); mac = harness/macpower.py (total = the SMC's whole-system load, display included)",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT rt AS time, source || ' total' AS metric, total_w AS value FROM power WHERE run = ${run:sqlstring} AND total_w IS NOT NULL AND $__timeFilter(rt)\nUNION ALL SELECT rt, source || ' CPU', cpu_w FROM power WHERE run = ${run:sqlstring} AND cpu_w IS NOT NULL AND $__timeFilter(rt)\nUNION ALL SELECT rt, source || ' APU socket', soc_w FROM power WHERE run = ${run:sqlstring} AND soc_w IS NOT NULL AND $__timeFilter(rt)\nUNION ALL SELECT rt, source || ' GPU', gpu_w FROM power WHERE run = ${run:sqlstring} AND gpu_w IS NOT NULL AND $__timeFilter(rt)\nUNION ALL SELECT rt, source || ' battery', bat_w FROM power WHERE run = ${run:sqlstring} AND bat_w IS NOT NULL AND $__timeFilter(rt) ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "watt",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 23,
+   "gridPos": {
+    "x": 12,
+    "y": 76,
+    "w": 12,
+    "h": 8
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Energy per frame (per second)",
+   "description": "total watts / frames per second in each second",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "WITH w AS (SELECT date_trunc('second', rt) AS s, avg(total_w) AS w FROM sysmon WHERE run = ${run:sqlstring} AND total_w IS NOT NULL AND $__timeFilter(rt) GROUP BY 1),\n     f AS (SELECT date_trunc('second', rt) AS s, count(*) / nullif(sum(ms) / 1000, 0) AS fps FROM frames WHERE run = ${run:sqlstring} AND $__timeFilter(rt) GROUP BY 1)\nSELECT w.s AS time, w.w / nullif(f.fps, 0) AS \"J/frame (sysmon)\" FROM w JOIN f USING (s) ORDER BY 1",
+     "hide": false
+    },
+    {
+     "refId": "B",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT date_trunc('second', rt) AS time, avg(total_w) / nullif(avg(fps), 0) AS \"J/frame (in game)\"\nFROM power WHERE run = ${run:sqlstring} AND source = 'game' AND total_w IS NOT NULL AND $__timeFilter(rt) GROUP BY 1 ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "joule",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 24,
+   "gridPos": {
+    "x": 0,
+    "y": 84,
+    "w": 24,
+    "h": 8
+   }
+  },
+  {
+   "type": "row",
+   "title": "Game thread (pzopt-gamethread.out, share of stack samples)",
+   "collapsed": false,
+   "panels": [],
+   "id": 25,
+   "gridPos": {
+    "x": 0,
+    "y": 92,
     "w": 24,
     "h": 1
    }
@@ -1667,10 +1958,10 @@
      "sort": "desc"
     }
    },
-   "id": 21,
+   "id": 26,
    "gridPos": {
     "x": 0,
-    "y": 72,
+    "y": 93,
     "w": 24,
     "h": 9
    }
@@ -1733,10 +2024,10 @@
      "sort": "desc"
     }
    },
-   "id": 22,
+   "id": 27,
    "gridPos": {
     "x": 0,
-    "y": 81,
+    "y": 102,
     "w": 24,
     "h": 9
    }
@@ -1833,10 +2124,10 @@
     },
     "sortBy": []
    },
-   "id": 23,
+   "id": 28,
    "gridPos": {
     "x": 0,
-    "y": 90,
+    "y": 111,
     "w": 8,
     "h": 12
    }
@@ -1933,10 +2224,10 @@
     },
     "sortBy": []
    },
-   "id": 24,
+   "id": 29,
    "gridPos": {
     "x": 8,
-    "y": 90,
+    "y": 111,
     "w": 8,
     "h": 12
    }
@@ -2033,10 +2324,10 @@
     },
     "sortBy": []
    },
-   "id": 25,
+   "id": 30,
    "gridPos": {
     "x": 16,
-    "y": 90,
+    "y": 111,
     "w": 8,
     "h": 12
    }
@@ -2046,10 +2337,10 @@
    "title": "Chunks, GC, flips",
    "collapsed": false,
    "panels": [],
-   "id": 26,
+   "id": 31,
    "gridPos": {
     "x": 0,
-    "y": 102,
+    "y": 123,
     "w": 24,
     "h": 1
    }
@@ -2115,10 +2406,10 @@
      "sort": "desc"
     }
    },
-   "id": 27,
+   "id": 32,
    "gridPos": {
     "x": 0,
-    "y": 103,
+    "y": 124,
     "w": 12,
     "h": 8
    }
@@ -2204,10 +2495,10 @@
      "sort": "desc"
     }
    },
-   "id": 28,
+   "id": 33,
    "gridPos": {
     "x": 12,
-    "y": 103,
+    "y": 124,
     "w": 12,
     "h": 8
    }
@@ -2269,10 +2560,10 @@
      "sort": "desc"
     }
    },
-   "id": 29,
+   "id": 34,
    "gridPos": {
     "x": 0,
-    "y": 111,
+    "y": 132,
     "w": 12,
     "h": 8
    }
@@ -2338,10 +2629,10 @@
      "sort": "desc"
     }
    },
-   "id": 30,
+   "id": 35,
    "gridPos": {
     "x": 12,
-    "y": 111,
+    "y": 132,
     "w": 12,
     "h": 8
    }
@@ -2351,10 +2642,10 @@
    "title": "Drive (path pilot, pzopt-drive.out)",
    "collapsed": false,
    "panels": [],
-   "id": 31,
+   "id": 36,
    "gridPos": {
     "x": 0,
-    "y": 119,
+    "y": 140,
     "w": 24,
     "h": 1
    }
@@ -2416,10 +2707,10 @@
      "sort": "desc"
     }
    },
-   "id": 32,
+   "id": 37,
    "gridPos": {
     "x": 0,
-    "y": 120,
+    "y": 141,
     "w": 12,
     "h": 8
    }
@@ -2481,10 +2772,10 @@
      "sort": "desc"
     }
    },
-   "id": 33,
+   "id": 38,
    "gridPos": {
     "x": 12,
-    "y": 120,
+    "y": 141,
     "w": 12,
     "h": 8
    }
@@ -2494,10 +2785,10 @@
    "title": "Profiler: flame graph (pick the source and threads above; drag across any time panel to narrow the window)",
    "collapsed": false,
    "panels": [],
-   "id": 34,
+   "id": 39,
    "gridPos": {
     "x": 0,
-    "y": 128,
+    "y": 149,
     "w": 24,
     "h": 1
    }
@@ -2531,10 +2822,10 @@
     "overrides": []
    },
    "options": {},
-   "id": 35,
+   "id": 40,
    "gridPos": {
     "x": 0,
-    "y": 129,
+    "y": 150,
     "w": 24,
     "h": 22
    }
@@ -2596,10 +2887,10 @@
      "sort": "desc"
     }
    },
-   "id": 36,
+   "id": 41,
    "gridPos": {
     "x": 0,
-    "y": 151,
+    "y": 172,
     "w": 24,
     "h": 8
    }
@@ -2609,10 +2900,10 @@
    "title": "Scheduler (schedmon.txt: --schedmon), memory pressure, frame pacing",
    "collapsed": false,
    "panels": [],
-   "id": 37,
+   "id": 42,
    "gridPos": {
     "x": 0,
-    "y": 159,
+    "y": 180,
     "w": 24,
     "h": 1
    }
@@ -2674,10 +2965,10 @@
      "sort": "desc"
     }
    },
-   "id": 38,
+   "id": 43,
    "gridPos": {
     "x": 0,
-    "y": 160,
+    "y": 181,
     "w": 12,
     "h": 9
    }
@@ -2739,10 +3030,10 @@
      "sort": "desc"
     }
    },
-   "id": 39,
+   "id": 44,
    "gridPos": {
     "x": 12,
-    "y": 160,
+    "y": 181,
     "w": 12,
     "h": 9
    }
@@ -2817,10 +3108,10 @@
      "sort": "desc"
     }
    },
-   "id": 40,
+   "id": 45,
    "gridPos": {
     "x": 0,
-    "y": 169,
+    "y": 190,
     "w": 12,
     "h": 8
    }
@@ -2882,10 +3173,10 @@
      "sort": "desc"
     }
    },
-   "id": 41,
+   "id": 46,
    "gridPos": {
     "x": 12,
-    "y": 169,
+    "y": 190,
     "w": 12,
     "h": 8
    }
@@ -2951,10 +3242,10 @@
      "sort": "desc"
     }
    },
-   "id": 42,
+   "id": 47,
    "gridPos": {
     "x": 0,
-    "y": 177,
+    "y": 198,
     "w": 24,
     "h": 9
    }
@@ -2964,10 +3255,10 @@
    "title": "Inputs sent to the game (pzopt-input.out: every key / mouse / pad change the game thread saw)",
    "collapsed": false,
    "panels": [],
-   "id": 43,
+   "id": 48,
    "gridPos": {
     "x": 0,
-    "y": 186,
+    "y": 207,
     "w": 24,
     "h": 1
    }
@@ -3045,10 +3336,10 @@
      "mode": "single"
     }
    },
-   "id": 44,
+   "id": 49,
    "gridPos": {
     "x": 0,
-    "y": 187,
+    "y": 208,
     "w": 24,
     "h": 10
    }
@@ -3127,10 +3418,10 @@
      "sort": "desc"
     }
    },
-   "id": 45,
+   "id": 50,
    "gridPos": {
     "x": 0,
-    "y": 197,
+    "y": 218,
     "w": 12,
     "h": 8
    }
@@ -3192,10 +3483,10 @@
      "sort": "desc"
     }
    },
-   "id": 46,
+   "id": 51,
    "gridPos": {
     "x": 12,
-    "y": 197,
+    "y": 218,
     "w": 12,
     "h": 8
    }
@@ -3247,10 +3538,10 @@
     },
     "sortBy": []
    },
-   "id": 47,
+   "id": 52,
    "gridPos": {
     "x": 0,
-    "y": 205,
+    "y": 226,
     "w": 12,
     "h": 12
    }
@@ -3327,10 +3618,10 @@
     },
     "sortBy": []
    },
-   "id": 48,
+   "id": 53,
    "gridPos": {
     "x": 12,
-    "y": 205,
+    "y": 226,
     "w": 12,
     "h": 12
    }
@@ -3340,10 +3631,10 @@
    "title": "Console (pzopt-loadtrace.out: every console line with its epoch)",
    "collapsed": false,
    "panels": [],
-   "id": 49,
+   "id": 54,
    "gridPos": {
     "x": 0,
-    "y": 217,
+    "y": 238,
     "w": 24,
     "h": 1
    }
@@ -3380,10 +3671,10 @@
     "showLabels": false,
     "showCommonLabels": false
    },
-   "id": 50,
+   "id": 55,
    "gridPos": {
     "x": 0,
-    "y": 218,
+    "y": 239,
     "w": 24,
     "h": 14
    }
@@ -3393,10 +3684,10 @@
    "title": "Counters",
    "collapsed": false,
    "panels": [],
-   "id": 51,
+   "id": 56,
    "gridPos": {
     "x": 0,
-    "y": 232,
+    "y": 253,
     "w": 24,
     "h": 1
    }
@@ -3461,10 +3752,10 @@
     },
     "sortBy": []
    },
-   "id": 52,
+   "id": 57,
    "gridPos": {
     "x": 0,
-    "y": 233,
+    "y": 254,
     "w": 24,
     "h": 12
    }

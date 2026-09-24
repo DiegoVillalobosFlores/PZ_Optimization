@@ -180,7 +180,7 @@
      "rawQuery": true,
      "editorMode": "code",
      "format": "table",
-     "rawSql": "SELECT run, variant, machine, mode, preset, verdict, fps_mean AS \"fps\", fps_1pct_low AS \"1% low\", p50_ms AS \"p50\", p99_ms AS \"p99\", p99_9_ms AS \"p99.9\", max_ms AS \"max\", over_33ms AS \">33 ms\", jitter_ms AS \"jitter\", gpu_ms_mean AS \"GPU ms\", cpu_pct AS \"CPU %\", busiest_core_pct AS \"busiest core %\", gpu_pct AS \"GPU %\", game_thread_pct AS \"game thread %\", chunk_p99_ms AS \"chunk p99\", gc_events AS \"GC pauses\" FROM runs WHERE run IN (${runs:sqlstring}) ORDER BY started",
+     "rawSql": "SELECT run, variant, machine, mode, preset, verdict, fps_mean AS \"fps\", fps_1pct_low AS \"1% low\", p50_ms AS \"p50\", p99_ms AS \"p99\", p99_9_ms AS \"p99.9\", max_ms AS \"max\", over_33ms AS \">33 ms\", jitter_ms AS \"jitter\", gpu_ms_mean AS \"GPU ms\", cpu_pct AS \"CPU %\", busiest_core_pct AS \"busiest core %\", gpu_pct AS \"GPU %\", game_thread_pct AS \"game thread %\", chunk_p99_ms AS \"chunk p99\", gc_events AS \"GC pauses\", total_w AS \"power W\", j_per_frame AS \"J/frame\" FROM runs WHERE run IN (${runs:sqlstring}) ORDER BY started",
      "hide": false
     }
    ],
@@ -455,6 +455,38 @@
         "value": 2
        }
       ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "power W"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "watt"
+       },
+       {
+        "id": "decimals",
+        "value": 2
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "J/frame"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "joule"
+       },
+       {
+        "id": "decimals",
+        "value": 2
+       }
+      ]
      }
     ]
    },
@@ -497,7 +529,7 @@
      "rawQuery": true,
      "editorMode": "code",
      "format": "table",
-     "rawSql": "SELECT r.run, round((100.0 * (r.fps_mean - b.fps_mean) / nullif(b.fps_mean, 0))::numeric, 1) AS \"fps\", round((100.0 * (r.fps_1pct_low - b.fps_1pct_low) / nullif(b.fps_1pct_low, 0))::numeric, 1) AS \"1% low\", round((100.0 * (r.p50_ms - b.p50_ms) / nullif(b.p50_ms, 0))::numeric, 1) AS \"p50\", round((100.0 * (r.p99_ms - b.p99_ms) / nullif(b.p99_ms, 0))::numeric, 1) AS \"p99\", round((100.0 * (r.p99_9_ms - b.p99_9_ms) / nullif(b.p99_9_ms, 0))::numeric, 1) AS \"p99.9\", round((100.0 * (r.max_ms - b.max_ms) / nullif(b.max_ms, 0))::numeric, 1) AS \"max\", round((100.0 * (r.over_33ms - b.over_33ms) / nullif(b.over_33ms, 0))::numeric, 1) AS \">33 ms\", round((100.0 * (r.jitter_ms - b.jitter_ms) / nullif(b.jitter_ms, 0))::numeric, 1) AS \"jitter\", round((100.0 * (r.gpu_ms_mean - b.gpu_ms_mean) / nullif(b.gpu_ms_mean, 0))::numeric, 1) AS \"GPU ms\", round((100.0 * (r.cpu_pct - b.cpu_pct) / nullif(b.cpu_pct, 0))::numeric, 1) AS \"CPU %\", round((100.0 * (r.busiest_core_pct - b.busiest_core_pct) / nullif(b.busiest_core_pct, 0))::numeric, 1) AS \"busiest core %\", round((100.0 * (r.gpu_pct - b.gpu_pct) / nullif(b.gpu_pct, 0))::numeric, 1) AS \"GPU %\", round((100.0 * (r.game_thread_pct - b.game_thread_pct) / nullif(b.game_thread_pct, 0))::numeric, 1) AS \"game thread %\", round((100.0 * (r.chunk_p99_ms - b.chunk_p99_ms) / nullif(b.chunk_p99_ms, 0))::numeric, 1) AS \"chunk p99\", round((100.0 * (r.gc_events - b.gc_events) / nullif(b.gc_events, 0))::numeric, 1) AS \"GC pauses\" FROM runs r, runs b WHERE r.run IN (${runs:sqlstring}) AND b.run = ${base:sqlstring} AND r.run <> b.run ORDER BY r.started",
+     "rawSql": "SELECT r.run, round((100.0 * (r.fps_mean - b.fps_mean) / nullif(b.fps_mean, 0))::numeric, 1) AS \"fps\", round((100.0 * (r.fps_1pct_low - b.fps_1pct_low) / nullif(b.fps_1pct_low, 0))::numeric, 1) AS \"1% low\", round((100.0 * (r.p50_ms - b.p50_ms) / nullif(b.p50_ms, 0))::numeric, 1) AS \"p50\", round((100.0 * (r.p99_ms - b.p99_ms) / nullif(b.p99_ms, 0))::numeric, 1) AS \"p99\", round((100.0 * (r.p99_9_ms - b.p99_9_ms) / nullif(b.p99_9_ms, 0))::numeric, 1) AS \"p99.9\", round((100.0 * (r.max_ms - b.max_ms) / nullif(b.max_ms, 0))::numeric, 1) AS \"max\", round((100.0 * (r.over_33ms - b.over_33ms) / nullif(b.over_33ms, 0))::numeric, 1) AS \">33 ms\", round((100.0 * (r.jitter_ms - b.jitter_ms) / nullif(b.jitter_ms, 0))::numeric, 1) AS \"jitter\", round((100.0 * (r.gpu_ms_mean - b.gpu_ms_mean) / nullif(b.gpu_ms_mean, 0))::numeric, 1) AS \"GPU ms\", round((100.0 * (r.cpu_pct - b.cpu_pct) / nullif(b.cpu_pct, 0))::numeric, 1) AS \"CPU %\", round((100.0 * (r.busiest_core_pct - b.busiest_core_pct) / nullif(b.busiest_core_pct, 0))::numeric, 1) AS \"busiest core %\", round((100.0 * (r.gpu_pct - b.gpu_pct) / nullif(b.gpu_pct, 0))::numeric, 1) AS \"GPU %\", round((100.0 * (r.game_thread_pct - b.game_thread_pct) / nullif(b.game_thread_pct, 0))::numeric, 1) AS \"game thread %\", round((100.0 * (r.chunk_p99_ms - b.chunk_p99_ms) / nullif(b.chunk_p99_ms, 0))::numeric, 1) AS \"chunk p99\", round((100.0 * (r.gc_events - b.gc_events) / nullif(b.gc_events, 0))::numeric, 1) AS \"GC pauses\", round((100.0 * (r.total_w - b.total_w) / nullif(b.total_w, 0))::numeric, 1) AS \"power W\", round((100.0 * (r.j_per_frame - b.j_per_frame) / nullif(b.j_per_frame, 0))::numeric, 1) AS \"J/frame\" FROM runs r, runs b WHERE r.run IN (${runs:sqlstring}) AND b.run = ${base:sqlstring} AND r.run <> b.run ORDER BY r.started",
      "hide": false
     }
    ],
@@ -1128,6 +1160,126 @@
       "matcher": {
        "id": "byName",
        "options": "GC pauses"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "green",
+           "value": null
+          },
+          {
+           "color": "text",
+           "value": -2
+          },
+          {
+           "color": "red",
+           "value": 2
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background",
+         "mode": "basic"
+        }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "special",
+          "options": {
+           "match": "null",
+           "result": {
+            "text": "-",
+            "color": "transparent"
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "power W"
+      },
+      "properties": [
+       {
+        "id": "unit",
+        "value": "percent"
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "green",
+           "value": null
+          },
+          {
+           "color": "text",
+           "value": -2
+          },
+          {
+           "color": "red",
+           "value": 2
+          }
+         ]
+        }
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "thresholds"
+        }
+       },
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background",
+         "mode": "basic"
+        }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "special",
+          "options": {
+           "match": "null",
+           "result": {
+            "text": "-",
+            "color": "transparent"
+           }
+          }
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "J/frame"
       },
       "properties": [
        {
@@ -1811,14 +1963,278 @@
    }
   },
   {
-   "type": "row",
-   "title": "Distributions over the route",
-   "collapsed": false,
-   "panels": [],
+   "type": "timeseries",
+   "title": "Power, whole machine (sysmon total)",
+   "description": "battery on battery, else CPU package / APU socket + discrete GPU; runs without a CPU reading have no line (see GPU power)",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT date_trunc('second', rt) AS time, run AS metric, avg(total_w) AS value FROM sysmon WHERE run IN (${runs:sqlstring}) AND $__timeFilter(rt) GROUP BY 1, 2 ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "watt",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
    "id": 12,
    "gridPos": {
     "x": 0,
     "y": 50,
+    "w": 12,
+    "h": 9
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "GPU power (sysmon)",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT date_trunc('second', rt) AS time, run AS metric, avg(gpu_w) AS value FROM sysmon WHERE run IN (${runs:sqlstring}) AND $__timeFilter(rt) GROUP BY 1, 2 ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "watt",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 13,
+   "gridPos": {
+    "x": 12,
+    "y": 50,
+    "w": 12,
+    "h": 9
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "CPU package power (sysmon, RAPL)",
+   "description": "",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT date_trunc('second', rt) AS time, run AS metric, avg(cpu_w) AS value FROM sysmon WHERE run IN (${runs:sqlstring}) AND $__timeFilter(rt) GROUP BY 1, 2 ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "watt",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 14,
+   "gridPos": {
+    "x": 0,
+    "y": 59,
+    "w": 12,
+    "h": 9
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Power in game / macpower (total)",
+   "description": "pzopt-power.out (pzopt.Power) or the Mac's power.csv (system_w)",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "time_series",
+     "rawSql": "SELECT date_trunc('second', rt) AS time, run AS metric, avg(total_w) AS value FROM power WHERE run IN (${runs:sqlstring}) AND $__timeFilter(rt) GROUP BY 1, 2 ORDER BY 1",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "watt",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "pointSize": 4,
+      "showPoints": "never",
+      "fillOpacity": 8,
+      "spanNulls": false,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": 3000
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "id": 15,
+   "gridPos": {
+    "x": 12,
+    "y": 59,
+    "w": 12,
+    "h": 9
+   }
+  },
+  {
+   "type": "row",
+   "title": "Distributions over the route",
+   "collapsed": false,
+   "panels": [],
+   "id": 16,
+   "gridPos": {
+    "x": 0,
+    "y": 68,
     "w": 24,
     "h": 1
    }
@@ -1886,10 +2302,10 @@
      "mode": "multi"
     }
    },
-   "id": 13,
+   "id": 17,
    "gridPos": {
     "x": 0,
-    "y": 51,
+    "y": 69,
     "w": 12,
     "h": 10
    }
@@ -1969,10 +2385,10 @@
     },
     "sortBy": []
    },
-   "id": 14,
+   "id": 18,
    "gridPos": {
     "x": 12,
-    "y": 51,
+    "y": 69,
     "w": 12,
     "h": 10
    }
@@ -1982,10 +2398,10 @@
    "title": "Profiler: diff flame graph (base run vs the other run; drag across a time panel to narrow both)",
    "collapsed": false,
    "panels": [],
-   "id": 15,
+   "id": 19,
    "gridPos": {
     "x": 0,
-    "y": 61,
+    "y": 79,
     "w": 24,
     "h": 1
    }
@@ -2019,10 +2435,10 @@
     "overrides": []
    },
    "options": {},
-   "id": 16,
+   "id": 20,
    "gridPos": {
     "x": 0,
-    "y": 62,
+    "y": 80,
     "w": 24,
     "h": 22
    }

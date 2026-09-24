@@ -136,6 +136,13 @@ def summarize(run, skip_seconds=20):
         sm = sysmon_summary(sysmon, bench)
         if sm:
             out["sysmon"] = sm
+    # power (2026-09-24): the in-game sampler (pzopt.Power, cpu_w / gpu_w / soc_w / bat_w / total_w) and the Mac's
+    # harness/macpower.py (system_w = the whole machine), same epoch_ms-first CSV shape as sysmon.csv
+    for fname, key in (("pzopt-power.out", "power_game"), ("power.csv", "power_mac")):
+        if (run / fname).exists() and bench.exists():
+            pw = sysmon_summary(run / fname, bench)
+            if pw:
+                out[key] = pw
     threads = run / "pzopt-threads.out"
     if threads.exists():
         out["threads"] = thread_summary(threads)
@@ -329,6 +336,37 @@ def sysmon_summary(path, bench):
     return out or None
 
 
+def power_watts(s):
+    """(total W, source, {rail: mean W}) over the route window: the harness sampler (sysmon.csv) first, then the game's
+    pzopt-power.out, then the Mac's power.csv (system_w is its whole machine). total is None when the CPU side is unknown."""
+    def mean(d, k):
+        v = (d or {}).get(k)
+        return v["mean"] if v else None
+    found = []
+    for key, src, rails in (("sysmon", "sysmon", ("cpu_w", "soc_w", "gpu_w", "bat_w")), ("power_game", "in game", ("cpu_w", "soc_w", "gpu_w", "bat_w")),
+                            ("power_mac", "macpower", ("cpu_w", "gpu_w"))):
+        d = s.get(key)
+        got = {k: mean(d, k) for k in rails if mean(d, k) is not None}
+        total = mean(d, "system_w" if key == "power_mac" else "total_w")
+        if got or total is not None:
+            found.append((total, src, got))
+    # the first source with a total (a Mac run's sysmon.csv may carry GPU watts only), else the first with any rail
+    return next((f for f in found if f[0] is not None), found[0] if found else (None, None, {}))
+
+
+def power_line(s):
+    total, src, rails = power_watts(s)
+    if src is None:
+        return None
+    names = {"cpu_w": "CPU", "soc_w": "APU socket", "gpu_w": "GPU", "bat_w": "battery"}
+    parts = [f"{names[k]} {v:.1f} W" for k, v in rails.items()]
+    fps = (s.get("frames") or {}).get("fps_mean")
+    head = f"power ({src}, route window): " + (f"total {total:.1f} W" if total is not None else "total n/a (no CPU reading)")
+    if total is not None and fps:
+        head += f" = {total / fps:.3f} J/frame at {fps:.0f} fps"
+    return head + ("; " + ", ".join(parts) if parts else "")
+
+
 def thread_summary(path):
     """pzopt-threads.out: per-thread CPU over the route, written by pzopt.Harness."""
     out = {"threads": []}
@@ -465,6 +503,9 @@ def print_summary(s):
             return f"{k} {d['mean']:.0f}{unit} (p10 {d['p10']:.0f}, p90 {d['p90']:.0f})" if d else None
         parts = [x for x in (f("cpu_pct", "%"), f("cpu_busiest_core_pct", "%"), f("game_cpu_pct", "% of a core"), f("gpu_pct", "%"), f("gpu_sm_mhz", "MHz"), f("gpu_w", "W"), f("bat_w", "W battery")) if x]
         print(f"machine (sysmon, {sm[next(iter(sm))]['n']} samples in the route window): " + "; ".join(parts))
+    pw = power_line(s)
+    if pw:
+        print(pw)
     g = s.get("gamethread")
     if g:
         # the tree, biggest first at every level; waits in brackets where they happened; the hottest methods as a hint

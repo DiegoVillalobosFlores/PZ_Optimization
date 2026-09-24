@@ -257,7 +257,7 @@ def runs_dashboard():
         "Runs", f"""
 SELECT started, run, fps_mean AS fps, fps_1pct_low AS "1% low", p50_ms AS p50, p99_ms AS p99, p99_9_ms AS "p99.9", max_ms AS max,
   over_33ms AS ">33ms", jitter_ms AS jitter, cpu_pct AS "CPU %", busiest_core_pct AS "busiest core %", gpu_pct AS "GPU %",
-  game_thread_pct AS "game thread %", {BOUND} AS bound, verdict, round(verdict_confidence::numeric, 2) AS conf, valid,
+  game_thread_pct AS "game thread %", total_w AS "W", j_per_frame AS "J/frame", {BOUND} AS bound, verdict, round(verdict_confidence::numeric, 2) AS conf, valid,
   variant, machine, mode, preset, chunk_p99_ms AS "chunk p99", gc_events AS gc, zoom, resolution, label,
   lag(run) OVER (PARTITION BY label ORDER BY started) AS previous
 FROM runs WHERE {where} ORDER BY started DESC""",
@@ -273,6 +273,7 @@ FROM runs WHERE {where} ORDER BY started DESC""",
             ov("jitter", unit="ms", decimals=2),
             *[ov(n, thresholds=UTIL_STEPS, color_cell=True, decimals=0, unit="percent") for n in ("CPU %", "busiest core %", "GPU %", "game thread %")],
             ov("chunk p99", unit="ms", decimals=0),
+            ov("W", unit="watt", decimals=0), ov("J/frame", unit="joule", decimals=3),
         ]), 24, 14)
     L.row("Trends (one point per run, series = label)")
     trend = lambda col: f"SELECT started AS time, label AS metric, {col} AS value FROM runs WHERE {where} AND {col} IS NOT NULL ORDER BY 1"  # noqa: E731
@@ -282,6 +283,10 @@ FROM runs WHERE {where} ORDER BY started DESC""",
     L.add(ts_panel("GPU busy (route mean)", [q(trend("gpu_pct"))], unit="percent", points=True, point_size=7, minv=0, maxv=100, legend="right"), 12, 9)
     L.add(ts_panel("Busiest core (route mean)", [q(trend("busiest_core_pct"))], unit="percent", points=True, point_size=7, minv=0, maxv=100, legend="right"), 12, 9)
     L.add(ts_panel("Chunk latency p99 (enqueue → publish)", [q(trend("chunk_p99_ms"))], points=True, point_size=7, legend="right"), 12, 9)
+    L.add(ts_panel("Power (route mean, whole machine)", [q(trend("total_w"))], unit="watt", points=True, point_size=7, legend="right",
+                   desc="runs.total_w: sysmon's total_w (battery on battery, else CPU package or APU socket + discrete GPU), else the game's pzopt-power.out, else the Mac's macpower system_w. Empty without a CPU reading (scripts/power-access.sh for RAPL)."), 12, 9)
+    L.add(ts_panel("Energy per frame (route)", [q(trend("j_per_frame"))], unit="joule", points=True, point_size=7, legend="right",
+                   desc="route-mean total watts / route-mean fps"), 12, 9)
     L.row("Objective findings")
     L.add(table_panel(
         "Below the cap with hardware left over", f"""
@@ -391,6 +396,30 @@ FROM sysmon WHERE run = {RUN} AND $__timeFilter(rt) ORDER BY 1""")], unit="none"
     L.add(table_panel("CPU per thread (route)", f"SELECT thread, cpu_ms AS \"CPU ms\", share * 100 AS \"% of wall\" FROM threads WHERE run = {RUN} ORDER BY share DESC LIMIT 40",
                       overrides=[ov("% of wall", unit="percent", gauge=True, max=100, min=0, thresholds=[("green", None), ("orange", 75), ("red", 90)]), ov("thread", width=260)]), 24, 9)
 
+    L.row("Power")
+    L.add(stat_panel("Power (route mean)", f"SELECT total_w AS \"total W\", cpu_w AS \"CPU W\", gpu_w AS \"GPU W\", j_per_frame AS \"J/frame\", power_source AS source {one}",
+                     decimals=2, color_mode="none", value_size=20,
+                     desc="The run's best power source over the route window: sysmon (harness), else the game's pzopt-power.out, else macpower. total = battery on battery, else CPU package (RAPL) or APU socket + discrete GPU; empty without a CPU reading (scripts/power-access.sh)."), 24, 4)
+    L.add(ts_panel("Power (sysmon, every 0.5 s)", [q(f"""
+SELECT rt AS time, total_w AS "total", cpu_w AS "CPU package", soc_w AS "APU socket", gpu_w AS "GPU", bat_w AS "battery"
+FROM sysmon WHERE run = {RUN} AND $__timeFilter(rt) ORDER BY 1""")], unit="watt", minv=0,
+        desc="harness/sysmon.sh: CPU package from RAPL, GPU from nvidia-smi / amdgpu hwmon, battery discharge, total as in the stat"), 12, 8)
+    L.add(ts_panel("Power (in game / macpower)", [q(f"""
+SELECT rt AS time, source || ' total' AS metric, total_w AS value FROM power WHERE run = {RUN} AND total_w IS NOT NULL AND $__timeFilter(rt)
+UNION ALL SELECT rt, source || ' CPU', cpu_w FROM power WHERE run = {RUN} AND cpu_w IS NOT NULL AND $__timeFilter(rt)
+UNION ALL SELECT rt, source || ' APU socket', soc_w FROM power WHERE run = {RUN} AND soc_w IS NOT NULL AND $__timeFilter(rt)
+UNION ALL SELECT rt, source || ' GPU', gpu_w FROM power WHERE run = {RUN} AND gpu_w IS NOT NULL AND $__timeFilter(rt)
+UNION ALL SELECT rt, source || ' battery', bat_w FROM power WHERE run = {RUN} AND bat_w IS NOT NULL AND $__timeFilter(rt) ORDER BY 1""")],
+        unit="watt", minv=0, desc="game = pzopt.Power (the overlay's power line, pzopt-power.out); mac = harness/macpower.py (total = the SMC's whole-system load, display included)"), 12, 8)
+    L.add(ts_panel("Energy per frame (per second)", [q(f"""
+WITH w AS (SELECT date_trunc('second', rt) AS s, avg(total_w) AS w FROM sysmon WHERE run = {RUN} AND total_w IS NOT NULL AND $__timeFilter(rt) GROUP BY 1),
+     f AS (SELECT date_trunc('second', rt) AS s, count(*) / nullif(sum(ms) / 1000, 0) AS fps FROM frames WHERE run = {RUN} AND $__timeFilter(rt) GROUP BY 1)
+SELECT w.s AS time, w.w / nullif(f.fps, 0) AS "J/frame (sysmon)" FROM w JOIN f USING (s) ORDER BY 1"""),
+                                                      q(f"""
+SELECT date_trunc('second', rt) AS time, avg(total_w) / nullif(avg(fps), 0) AS "J/frame (in game)"
+FROM power WHERE run = {RUN} AND source = 'game' AND total_w IS NOT NULL AND $__timeFilter(rt) GROUP BY 1 ORDER BY 1""", ref="B")],
+        unit="joule", minv=0, desc="total watts / frames per second in each second"), 24, 8)
+
     L.row("Game thread (pzopt-gamethread.out, share of stack samples)")
     L.add(ts_panel("Phases", [q(f"SELECT rt AS time, name AS metric, share * 100 AS value FROM gamethread WHERE run = {RUN} AND kind = 'p' AND $__timeFilter(rt) ORDER BY 1")],
                    unit="percent", stack=True, minv=0, maxv=100, legend="right"), 24, 9)
@@ -484,7 +513,7 @@ METRICS = [("fps_mean", "fps", "none", True), ("fps_1pct_low", "1% low", "none",
            ("p99_9_ms", "p99.9", "ms", False), ("max_ms", "max", "ms", False), ("over_33ms", ">33 ms", "none", False), ("jitter_ms", "jitter", "ms", False),
            ("gpu_ms_mean", "GPU ms", "ms", False), ("cpu_pct", "CPU %", "percent", None), ("busiest_core_pct", "busiest core %", "percent", None),
            ("gpu_pct", "GPU %", "percent", None), ("game_thread_pct", "game thread %", "percent", None), ("chunk_p99_ms", "chunk p99", "ms", False),
-           ("gc_events", "GC pauses", "none", False)]
+           ("gc_events", "GC pauses", "none", False), ("total_w", "power W", "watt", False), ("j_per_frame", "J/frame", "joule", False)]
 
 
 def compare_dashboard():
@@ -511,6 +540,12 @@ def compare_dashboard():
     L.add(ts_panel("Busiest core (sysmon)", [q(per_sec("avg(busiest_core_pct)", "sysmon"))], unit="percent", minv=0, maxv=100), 12, 9)
     L.add(ts_panel("Game thread load (overlay)", [q(per_sec("avg(game_load)", "overlay"))], unit="percent", minv=0, maxv=100), 12, 9)
     L.add(ts_panel("Chunk latency p99 per second", [q(per_sec("percentile_cont(0.99) WITHIN GROUP (ORDER BY total_ms)", "chunks"))], log=True), 12, 9)
+    L.add(ts_panel("Power, whole machine (sysmon total)", [q(per_sec("avg(total_w)", "sysmon"))], unit="watt", minv=0,
+                   desc="battery on battery, else CPU package / APU socket + discrete GPU; runs without a CPU reading have no line (see GPU power)"), 12, 9)
+    L.add(ts_panel("GPU power (sysmon)", [q(per_sec("avg(gpu_w)", "sysmon"))], unit="watt", minv=0), 12, 9)
+    L.add(ts_panel("CPU package power (sysmon, RAPL)", [q(per_sec("avg(cpu_w)", "sysmon"))], unit="watt", minv=0), 12, 9)
+    L.add(ts_panel("Power in game / macpower (total)", [q(per_sec("avg(total_w)", "power"))], unit="watt", minv=0,
+                   desc="pzopt-power.out (pzopt.Power) or the Mac's power.csv (system_w)"), 12, 9)
     L.row("Distributions over the route")
     L.add({"type": "barchart", "title": "Frame-time percentiles", "datasource": DS, "targets": [q(f"""
 SELECT p.label AS percentile, x.run, percentile_cont(p.q) WITHIN GROUP (ORDER BY x.ms) AS ms
@@ -575,6 +610,15 @@ FROM live_gamethread WHERE kind = 'l' AND t > now() - interval '10 seconds' GROU
                       overrides=[ov("share", unit="percent", decimals=1, gauge=True, min=0, max=25)]), 8, 9)
     L.add(ts_panel("GPU power / clocks / VRAM", [q("SELECT t AS time, gpu_w AS \"GPU W\", gpu_sm_mhz AS \"SM MHz\", vram_mib AS \"VRAM MiB\" FROM live_sysmon WHERE $__timeFilter(t) ORDER BY 1")],
                    unit="none", overrides=[ov("GPU W", unit="watt"), ov("SM MHz", axis="right"), ov("VRAM MiB", unit="mbytes", axis="right")]), 24, 7)
+    L.add(stat_panel("Power, last 5 s", f"""
+SELECT coalesce((SELECT avg(total_w) FROM live_sysmon WHERE {last5}), (SELECT avg(total_w) FROM live_power WHERE {last5})) AS "total W",
+  coalesce((SELECT avg(cpu_w) FROM live_sysmon WHERE {last5}), (SELECT avg(cpu_w) FROM live_power WHERE {last5})) AS "CPU W",
+  coalesce((SELECT avg(gpu_w) FROM live_sysmon WHERE {last5}), (SELECT avg(gpu_w) FROM live_power WHERE {last5})) AS "GPU W",
+  (SELECT avg(total_w) / nullif(avg(fps), 0) FROM live_power WHERE {last5}) AS "J/frame" """, decimals=2, color_mode="none",
+                     desc="sysmon while a harness run is going, else the game's own sampler (pzopt-power.out, written while the overlay's frame log is on)"), 6, 8)
+    L.add(ts_panel("Power", [q("SELECT t AS time, total_w AS \"total (sysmon)\", cpu_w AS \"CPU (sysmon)\", soc_w AS \"APU socket (sysmon)\", gpu_w AS \"GPU (sysmon)\", bat_w AS \"battery (sysmon)\" FROM live_sysmon WHERE $__timeFilter(t) ORDER BY 1"),
+                             q("SELECT t AS time, total_w AS \"total (game)\", cpu_w AS \"CPU (game)\", soc_w AS \"APU socket (game)\", gpu_w AS \"GPU (game)\", bat_w AS \"battery (game)\" FROM live_power WHERE $__timeFilter(t) ORDER BY 1", ref="B")],
+                   unit="watt", minv=0), 18, 8)
     L.add(flame_panel("Game thread flame graph, last 10 s", flame_sql("false").replace(
         "SELECT stack_id, sum(samples) AS c FROM stacks WHERE false GROUP BY 1",
         "SELECT stack_id, sum(samples) AS c FROM live_stacks WHERE t > now() - interval '10 seconds' GROUP BY 1")), 24, 18)

@@ -36,7 +36,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
-from analyze import summarize  # noqa: E402
+from analyze import power_watts, summarize  # noqa: E402
 from compare import latency  # noqa: E402
 
 REPO = HERE.parents[1]
@@ -267,7 +267,8 @@ def parse_overlay(p, start_offset=0, state=None):
     return rows, start_offset
 
 
-SYSMON_COLS = ["cpu_pct", "busiest_core_pct", "gpu_pct", "gpu_sm_mhz", "gpu_mem_mhz", "gpu_w", "gpu_c", "vram_mib", "game_cpu_pct", "bat_w"]
+SYSMON_COLS = ["cpu_pct", "busiest_core_pct", "gpu_pct", "gpu_sm_mhz", "gpu_mem_mhz", "gpu_w", "gpu_c", "vram_mib", "game_cpu_pct", "bat_w",
+               "cpu_w", "soc_w", "total_w"]
 SYSMON_SRC = {"cpu_busiest_core_pct": "busiest_core_pct"}
 
 
@@ -282,6 +283,28 @@ def parse_sysmon_lines(lines, header):
         if t is None:
             continue
         rows.append((t / 1e3, *[num(d.get(next((k for k, v in SYSMON_SRC.items() if v == c), c))) for c in SYSMON_COLS]))
+    return rows
+
+
+POWER_COLS = ["cpu_w", "gpu_w", "soc_w", "bat_w", "total_w", "fps"]
+# CSV column -> power column per source file (pzopt-power.out already uses the table's names)
+POWER_SRC = {"game": {}, "mac": {"system_w": "total_w"}}
+
+
+def parse_power_lines(lines, header, source):
+    """pzopt-power.out (the game's pzopt.Power) / power.csv (harness/macpower.py): epoch_ms-first CSV rows ->
+    (epoch_s, *POWER_COLS); columns a source lacks are NULL."""
+    ren = POWER_SRC[source]
+    cols = [ren.get(h, h) for h in header]
+    rows = []
+    for line in lines:
+        parts = line.rstrip("\n").split(",")
+        if parts[0] == "epoch_ms" or len(parts) != len(cols):
+            continue
+        d = dict(zip(cols, parts))
+        t = num(d.get("epoch_ms"))
+        if t is not None:
+            rows.append((t / 1e3, *[num(d.get(c)) for c in POWER_COLS]))
     return rows
 
 
@@ -687,6 +710,7 @@ def run_row(run, s, lat, judge, t_route):
     machine = opts.get("machine") or "desktop"
     gl = env.get("opengl", "").replace("OpenGL version: ", "")
     gpu = re.sub(r"^GPU: |, vendor.*$", "", env.get("gpu", ""))
+    total_w, power_src, rails = power_watts(s)
     return {
         "run": run.name,
         "label": re.sub(r"-\d{8}-\d{6}$", "", run.name),
@@ -739,6 +763,10 @@ def run_row(run, s, lat, judge, t_route):
         "gpu_w": g(sm, "gpu_w", "mean"),
         "gpu_c": g(sm, "gpu_c", "mean"),
         "vram_mib": g(sm, "vram_mib", "max"),
+        "cpu_w": rails.get("cpu_w"),
+        "total_w": total_w,
+        "j_per_frame": total_w / fr["fps_mean"] if total_w is not None and fr.get("fps_mean") else None,
+        "power_source": power_src,
         "process_cores": th.get("process_share"),
         "game_thread_pct": threads["MainThread"] * 100 if "MainThread" in threads else None,
         "render_thread_pct": threads["main"] * 100 if "main" in threads else None,
@@ -802,7 +830,7 @@ def build_script(run):
     row = run_row(run, s, lat, judge, (origin if r0 else None, end))
     q = name.replace("'", "''")
     out = ["BEGIN;\n"]
-    for tbl in ("runs", "frames", "overlay", "sysmon", "gamethread", "chunks", "gc", "present", "series", "threads", "counters",
+    for tbl in ("runs", "frames", "overlay", "sysmon", "power", "gamethread", "chunks", "gc", "present", "series", "threads", "counters",
                 "stacks", "sched", "events", "inputs", "run_inputs", "pacing"):
         out.append(f"DELETE FROM {tbl} WHERE run = '{q}';\n")
     out.append(copy_block("runs", list(row) + ["files_mtime"], [list(row.values()) + [newest_mtime(run)]]))
@@ -814,6 +842,11 @@ def build_script(run):
         lines = (run / "sysmon.csv").read_text(errors="replace").splitlines()
         rows = parse_sysmon_lines(lines, lines[0].split(",")) if lines else []
         out.append(copy_block("sysmon", ["run", "t", "rel_s", "rt", *SYSMON_COLS], ((name, *times(r[0]), *r[1:]) for r in rows)))
+    for fname, source in (("pzopt-power.out", "game"), ("power.csv", "mac")):
+        if (run / fname).exists():
+            lines = (run / fname).read_text(errors="replace").splitlines()
+            rows = parse_power_lines(lines, lines[0].split(","), source) if lines else []
+            out.append(copy_block("power", ["run", "t", "rel_s", "rt", "source", *POWER_COLS], ((name, *times(r[0]), source, *r[1:]) for r in rows)))
     if (run / "pzopt-gamethread.out").exists():
         rows = parse_gamethread_lines((run / "pzopt-gamethread.out").read_text(errors="replace").splitlines())
         out.append(copy_block("gamethread", ["run", "t", "rel_s", "rt", "kind", "name", "samples", "share"],
@@ -948,6 +981,8 @@ class Live:
         self.gt = Tail(ZOMBOID / "pzopt-gamethread.out")
         self.stacks = Tail(ZOMBOID / "pzopt-stacks.out")
         self.inputs = Tail(ZOMBOID / "pzopt-input.out")
+        # the header is fixed (pzopt.Power): a tail that starts mid-file has not seen it
+        self.power, self.power_hdr = Tail(ZOMBOID / "pzopt-power.out"), ["epoch_ms", *POWER_COLS]
         self.stack_frames, self.stack_state, self.known_stacks = {}, {}, set()
         self.sysmon, self.sysmon_hdr, self.run = None, None, None
         self.ov_origin, self.frame_cur = None, None
@@ -1027,6 +1062,13 @@ class Live:
         rows = [(ts(r[0]), *r[1:]) for r in parse_inputs_lines(self.inputs.read())]
         if rows:
             out.append(copy_block("live_inputs", ["t", "device", "control", "value"], rows))
+        lines = self.power.read()
+        if lines and lines[0].startswith("epoch_ms"):
+            self.power_hdr = lines[0].split(",")
+        if lines:
+            rows = [(ts(r[0]), *r[1:]) for r in parse_power_lines(lines, self.power_hdr, "game")]
+            if rows:
+                out.append(copy_block("live_power", ["t", *POWER_COLS], rows))
         d = self.current_run_dir()
         if d is not None and d != self.run:
             self.run, self.sysmon, self.sysmon_hdr = d, Tail(d / "sysmon.csv"), None
@@ -1044,7 +1086,7 @@ class Live:
 
     def prune(self, stacks=False):
         sql = "".join(f"DELETE FROM {t} WHERE t < now() - interval '6 hours';\n"
-                      for t in ("live_overlay", "live_frames", "live_sysmon", "live_gamethread", "live_stacks", "live_inputs"))
+                      for t in ("live_overlay", "live_frames", "live_sysmon", "live_power", "live_gamethread", "live_stacks", "live_inputs"))
         if stacks:  # stack definitions no run and no live sample points at any more (re-imports, deleted runs)
             sql += ("DELETE FROM stack_defs d WHERE NOT EXISTS (SELECT 1 FROM stacks s WHERE s.stack_id = d.id) "
                     "AND NOT EXISTS (SELECT 1 FROM live_stacks l WHERE l.stack_id = d.id);\n")

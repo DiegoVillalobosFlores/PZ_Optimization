@@ -761,6 +761,7 @@ public final class Harness {
             Hdr.requestDump("shot"); // HDR output: the same held frame as float dumps (and every [sweep] set of hdrTune)
             new File(ZomboidFileSystem.instance.getCacheDir(), "pzopt-shot.now").createNewFile();
             Log.info("harness: screenshot requested at epoch_ms=" + System.currentTimeMillis());
+            logGridCoverage(IsoPlayer.players[0]);
          } catch (Exception e) {
             Log.warn("harness: screenshot failed: " + e);
          }
@@ -1377,25 +1378,64 @@ public final class Harness {
     * route / hold / shot that follows is seen from that floor (the cutaways, the upper-level chunk textures and
     * the view cone of an upper floor). Logs where it went, or that no such square was loaded.
     */
+   /**
+    * chunkGridFollowView rig (2026-09-24), logged with every screenshot: the chunk grid's tile bounds against the
+    * player and, for each screen corner, how many tiles the level-0 ground seen there lies outside the grid (0 =
+    * inside; above 0 = a dark corner at the widest zoom).
+    */
+   private static void logGridCoverage(IsoPlayer p) {
+      zombie.iso.IsoChunkMap cm = zombie.iso.IsoWorld.instance.currentCell.getChunkMap(0);
+      int x0 = cm.getWorldXMin() * 8, y0 = cm.getWorldYMin() * 8, w = zombie.iso.IsoChunkMap.chunkWidthInTiles;
+      float sw = zombie.iso.IsoCamera.getOffscreenWidth(0), sh = zombie.iso.IsoCamera.getOffscreenHeight(0);
+      float[][] corners = {{0, 0}, {sw, 0}, {0, sh}, {sw, sh}};
+      String[] names = {"TL", "TR", "BL", "BR"};
+      StringBuilder sb = new StringBuilder();
+      for (int i = 0; i < 4; i++) {
+         float gx = zombie.iso.IsoUtils.XToIso(0, corners[i][0], corners[i][1], 0.0F);
+         float gy = zombie.iso.IsoUtils.YToIso(0, corners[i][0], corners[i][1], 0.0F);
+         float out = Math.max(0.0F, Math.max(Math.max(x0 - gx, gx - (x0 + w)), Math.max(y0 - gy, gy - (y0 + w))));
+         sb.append(String.format(java.util.Locale.ROOT, " %s=%.1f(%.0f,%.0f)", names[i], out, gx, gy));
+      }
+      Log.info(String.format(java.util.Locale.ROOT, "harness: grid coverage: player %.1f,%.1f,%.2f grid x %d..%d y %d..%d (%d chunks, centre chunk %d,%d) corners outside the grid, tiles:%s",
+            p.getX(), p.getY(), p.getZ(), x0, x0 + w, y0, y0 + w, zombie.iso.IsoChunkMap.chunkGridWidth, cm.worldX, cm.worldY, sb));
+   }
+
    private static void goUpstairs(IsoPlayer p, int z) {
       zombie.iso.IsoCell cell = zombie.iso.IsoWorld.instance.currentCell;
       int px = p.getXi(), py = p.getYi();
-      for (int r = 0; r <= 60; r++) {
+      // upstairs_roof=true (2026-09-24, chunkGridFollowView rig): an outdoor square (a flat roof) instead of a room, so
+      // the ground around the building is drawn and the screen corners show whether the chunk grid reaches them
+      boolean roof = "true".equals(HarnessFlags.get("upstairs_roof", "false"));
+      int reach = roof ? 90 : 60;
+      int top = -1;
+      for (int r = 0; r <= reach; r++) {
          for (int y = py - r; y <= py + r; y++) {
             for (int x = px - r; x <= px + r; x++) {
                if (Math.max(Math.abs(x - px), Math.abs(y - py)) != r) continue; // the ring at distance r
                zombie.iso.IsoGridSquare sq = cell.getGridSquare(x, y, z);
-               if (sq == null || sq.getFloor() == null || !sq.isFree(false) || sq.getRoom() == null) continue;
+               if (sq == null || sq.getFloor() == null || !sq.isFree(false) || (roof ? sq.getRoom() != null : sq.getRoom() == null)) {
+                  if (sq == null && roof && top < z) { // the highest level with a floor, for the warning below
+                     for (int lz = z - 1; lz > top; lz--) {
+                        zombie.iso.IsoGridSquare s2 = cell.getGridSquare(x, y, lz);
+                        if (s2 != null && s2.getFloor() != null) {
+                           top = lz;
+                           break;
+                        }
+                     }
+                  }
+                  continue;
+               }
                p.teleportTo(x + 0.5F, y + 0.5F, z);
                Harness.x = x + 0.5F; // the route continues from here, on this level (its teleports would put the player back)
                Harness.y = y + 0.5F;
                routeZ = z;
-               Log.info("harness: upstairs: moved the player to " + x + "," + y + "," + z + " (room " + sq.getRoom().getName() + ", " + r + " tiles from " + px + "," + py + ")");
+               Log.info("harness: upstairs: moved the player to " + x + "," + y + "," + z + " (" + (roof ? "roof" : "room " + sq.getRoom().getName()) + ", " + r + " tiles from " + px + "," + py + ")");
                return;
             }
          }
       }
-      Log.warn("harness: upstairs: no loaded square with a floor at level " + z + " within 60 tiles of " + px + "," + py);
+      Log.warn("harness: upstairs: no loaded " + (roof ? "outdoor" : "room") + " square with a floor at level " + z + " within " + reach + " tiles of " + px + "," + py
+            + (roof ? " (highest level with a floor there: " + top + ")" : ""));
    }
 
    /**

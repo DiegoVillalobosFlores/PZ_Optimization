@@ -29,6 +29,16 @@ public class ChunkGridTest {
             }
          }
       }
+      // height shift: 3 tiles per level, none at or below level 0, capped at the extra half-width over stock
+      Check.check(ChunkGrid.heightShiftTiles(0.0F, 25, 19) == 0, "level 0: no shift");
+      Check.check(ChunkGrid.heightShiftTiles(-2.0F, 25, 19) == 0, "basement: no shift");
+      Check.check(ChunkGrid.heightShiftTiles(2.0F, 25, 19) == 6, "level 2: 6 tiles");
+      Check.check(ChunkGrid.heightShiftTiles(1.5F, 25, 19) == 5, "on the stairs: rounded (4.5 -> 5)");
+      Check.check(ChunkGrid.heightShiftTiles(8.0F, 25, 19) == 24, "level 8 on 25 over 19: the cap, 3 chunks");
+      Check.check(ChunkGrid.heightShiftTiles(20.0F, 25, 19) == 24, "level 20 on 25 over 19: capped");
+      Check.check(ChunkGrid.heightShiftTiles(5.0F, 19, 19) == 0, "stock width: no shift");
+      Check.check(ChunkGrid.heightShiftTiles(5.0F, 15, 19) == 0, "narrower than stock: no shift");
+      Check.check(ChunkGrid.heightShiftTiles(Float.NaN, 25, 19) == 0, "NaN height: no shift");
       System.out.println("ChunkGridTest ok");
    }
 }

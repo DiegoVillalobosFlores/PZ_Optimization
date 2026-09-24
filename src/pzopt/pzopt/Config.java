@@ -32,6 +32,10 @@ import java.util.Properties;
  *                            edge at wide zoom; larger = more of everything. "auto" = wide enough to fill the screen at the
  *                            widest zoom, never below stock (25 at 5120x2160, 21 at 3840x2160, stock 19 at 1080p;
  *                            pzopt.ChunkGrid). 0 = stock (default 0; IsoChunkMap.CalcChunkWidth)
+ *   chunkGridFollowView true/false  with a chunkGridWidth wider than stock, the grid centre follows the ground the camera
+ *                            looks at on an upper floor (3 tiles north and west per level), so the screen corners stay
+ *                            filled upstairs as on the ground floor; the player stays at least as deep inside the grid as
+ *                            in a stock one. Single player only (default true; pzopt.ChunkGrid.heightShiftTiles)
  *   dev         true/false   development assertions, e.g. game-thread-only code reached from a worker (default false)
  *   luaChecksumExempt true/false  the pzopt Lua files (media/lua/{shared,client}/pzopt/) are left out of the multiplayer
  *                            Lua checksum a client sends to the server, like SandboxVars.lua is in stock: a server without
@@ -340,6 +344,7 @@ public final class Config {
    public static final String CHUNK_GRID_SETTING = string("chunkGridWidth", "0"); // chunks per side of the player's chunk grid, or "auto"; 0 = the stock screen-size value (IsoChunkMap.CalcChunkWidth, pzopt.ChunkGrid)
    public static final boolean CHUNK_GRID_AUTO = "auto".equalsIgnoreCase(CHUNK_GRID_SETTING);
    public static final int CHUNK_GRID_WIDTH = CHUNK_GRID_AUTO ? 0 : Math.max(0, parseInt("chunkGridWidth", CHUNK_GRID_SETTING, 0));
+   public static final boolean CHUNK_GRID_FOLLOW_VIEW = bool("chunkGridFollowView", true); // a grid wider than stock moves 3 tiles north + west per level the player stands on, the ground the camera looks at (IsoChunkMap.ProcessChunkPos, pzopt.ChunkGrid.heightShiftTiles)
    public static final boolean DEV = bool("dev", false);
    public static final boolean LUA_CHECKSUM_EXEMPT = bool("luaChecksumExempt", true); // NetChecksum skips media/lua/*/pzopt/ files: they only exist on clients
    public static final boolean UPDATE_CHECK = bool("updateCheck", true); // main menu: check the GitHub releases for a newer build and offer the update item (pzopt.Updater)

@@ -30,6 +30,26 @@ public final class ChunkGrid {
       return chunks | 1;
    }
 
+   /** The stock width CalcChunkWidth computed before the setting replaced it (0 = not computed yet). */
+   public static int stock;
+
+   /**
+    * How many tiles north and west of the player the grid centre moves at height z (2026-09-24). The camera centres on
+    * the player's screen position, height included: a level is 96 px (1x tiles), a tile step 16 px, so on level z the
+    * ground under the screen centre is 3z tiles north and 3z tiles west of the player, and a player-centred grid leaves
+    * the top screen corners dark from the second floor up on a grid sized for level 0. Following that ground point keeps
+    * level 0 covered as on the ground floor. Capped so the player stays at least as far from every grid edge as in a
+    * stock-width grid (the world is never simulated nearer than vanilla): 0 for grids no wider than stock, 3 chunks for
+    * 25 over a stock 19 (level 8). Levels below 0 draw no surface above them, so no shift.
+    */
+   public static int heightShiftTiles(float z, int gridWidth, int stockWidth) {
+      if (!(z > 0.0F)) {
+         return 0;
+      }
+      int cap = Math.max(0, gridWidth / 2 - stockWidth / 2) * 8;
+      return Math.min(Math.round(3.0F * z), cap);
+   }
+
    public static int width(int stock, boolean auto, int fixed, int screenW, int screenH, float maxZoom) {
       int w;
       if (auto) {

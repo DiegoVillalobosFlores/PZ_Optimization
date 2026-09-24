@@ -1124,6 +1124,20 @@ zoom plus one chunk (the player sits anywhere in the centre chunk), never below 
 zoom 2.5 needs 41). One `[pzopt] chunk grid:` console line gives the width and its inputs. Tests:
 `tests/pzopt/ChunkGridTest`. The key is read as a string now (`Config.CHUNK_GRID_SETTING`).
 
+Edit of 2026-09-24 (`chunkGridFollowView`, default on; the maintainer's report "on a higher z-level it reverts to the
+vanilla distance"): the camera centres on the player's screen position with the height in it (`PlayerCamera`, a level
+is 96 px at 1x tiles, a tile step 16 px), so on level z the ground under the screen centre lies 3z tiles north and 3z
+tiles west of the player, while `ProcessChunkPos` centres the grid on the player's x / y. A grid sized for level 0
+(`auto`: about one chunk to spare) then shows unloaded ground in both top screen corners from about level 2 at the
+widest zoom; the south-east quarter of the grid is off the bottom of the screen. `CalcChunkWidth` now remembers the
+stock width (`pzopt.ChunkGrid.stock`, only when the setting replaced it), and `ProcessChunkPos` subtracts
+`pzopt.ChunkGrid.heightShiftTiles(z, width, stock)` from the target x and y, after the stock driving look-ahead (the
+same kind of centre offset): 3 tiles per level, rounded, none at or below level 0, capped at the extra half-width over
+stock (3 chunks for 25 over 19, i.e. levels up to 8) so the player is never nearer a grid edge than in a stock grid.
+Grids no wider than stock, `chunkGridWidth=0`, `enabled=false` and multiplayer (the server loads a player-centred area:
+`ServerMap`, `LoadedAreas` use `onlineChunkGridWidth` around the player) keep the stock centring. Climbing stairs
+moves the grid one row / column when the shifted point crosses a chunk border, like walking.
+
 ## zombie.iso.fboRenderChunk.FBORenderCell (edit of 2026-09-20 evening, occlusion grid on lighting-only frames)
 
 `renderTilesInternal` decides whether to rebuild the occluded-squares grid through

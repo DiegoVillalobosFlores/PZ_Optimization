@@ -449,6 +449,8 @@ local SECTIONS = {
                        ["21"] = "168 tiles, fills 4K", ["23"] = "184 tiles", ["25"] = "200 tiles, fills 5120x2160", ["27"] = "216 tiles",
                        ["31"] = "248 tiles" },
               tip = "How many chunks (8 tiles each) per side are loaded, simulated, lit and drawn around you. Vanilla picks it from the screen size but stops at 19 (152 tiles), sized for 1080p: on a 4K or ultrawide screen the world ends before the screen corners at the widest zooms. Auto picks the smallest grid that fills your screen at the widest zoom, never less than vanilla (21 at 3840x2160, 25 at 5120x2160, vanilla at 1080p). Smaller than vanilla = less world to update every frame, which helps CPU-limited setups (heavy mod lists, NPC mods), with the world ending nearer the screen edge. Larger = more CPU, RAM and VRAM and longer loads; zombies, vehicles and sounds are simulated further out. Only the grid size changes; zombie AI, streaming and culling are untouched." },
+            { key = "chunkGridFollowView", label = "Render distance follows the view upstairs",
+              tip = "The camera looks at you from above, so on an upper floor the ground in the middle of the screen is 3 tiles north and 3 tiles west of you per level. With a render distance wider than vanilla the grid then moves with that ground point, so the screen corners stay filled upstairs as on the ground floor (25 at 5120x2160 up to level 8). You always stay at least as far from every grid edge as in vanilla; a grid no wider than vanilla never moves. Off = the grid stays centred on you and the top corners go dark from the second or third floor at the widest zoom. Single player only. Applies on the next launch." },
         },
     },
     {
@@ -777,7 +779,7 @@ local KEY_CLIP = {
     playerLosFast = "player", zombieSpotFast = "player", charDrawPrep = "horde", zombieAtlasFast = "horde", charDrawThreads = "horde",
     actionSnapshotFilter = "zgt", emitterParamSkip = "zgt", separateFast = "zgt", separateParallel = "zgt", sleepCheckMemo = "zgt",
     stateParamMemo = "zgt", actionGroupCache = "zgt", profilerThreadMemo = "zgt", zombieSimLodTiles = "zgt", zombieSimLodSteps = "zgt",
-    zombieCheckSpread = "zgt", chunkGridWidth = "grid",
+    zombieCheckSpread = "zgt", chunkGridWidth = "grid", chunkGridFollowView = "grid",
     zombieLodDynamic = "horde", zombieLodMin3d = "horde", zombieLodMinBlend = "horde", zombieLodUncappedFps = "horde",
     animBonesParallel = "zombies", vehicleCull = "zombies", frameThreads = "zombies", actionEvalParallel = "zombies", ecsLookupFast = "zombies",
     actionConditionFast = "zombies", skinTransformsPrecompute = "zombies", skinPalettePrecompute = "zombies", shadowPrep = "zombies",
@@ -965,6 +967,7 @@ local EFFECTS = {
     wake = { chunks = -2 },
     chunkHandoffDivisor = { cpu = -1, chunks = 1 },
     chunkGridWidth = { cpu = -2, gpu = -1, ram = -1, vram = -1, load = -1 }, -- the bars describe the smaller grids
+    chunkGridFollowView = { chunks = -1 }, -- the upstairs screen corners are filled; same chunk count
     hotsaveStaged = { cpu = -1 },
     hotsaveIntervalSec = { cpu = -2, disk = -2 },
     -- boot

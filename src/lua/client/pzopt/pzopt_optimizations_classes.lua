@@ -21,6 +21,7 @@ PzoptOptionClasses = {
     centerFirstLoad = { "pzopt.CenterFirstLoad" },
     charDrawPrep = { "pzopt.CharDraw" },
     charDrawThreads = { "pzopt.CharDraw" },
+    chunkGridFollowView = { "IsoChunkMap" },
     chunkGridWidth = { "IsoChunkMap" },
     chunkHandoffDivisor = { "IsoChunkMap" },
     chunkMapFast = { "IsoChunkMap" },

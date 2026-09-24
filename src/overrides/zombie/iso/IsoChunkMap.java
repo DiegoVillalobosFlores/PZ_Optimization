@@ -127,6 +127,7 @@ public final class IsoChunkMap {
          // "auto" = wide enough to fill the screen at the widest zoom); odd like stock so the player's chunk stays the centre
          if (pzopt.Overrides.enabled() && (pzopt.Config.CHUNK_GRID_AUTO || pzopt.Config.CHUNK_GRID_WIDTH > 0)) { // pzopt
             int pzoptStock = chunkGridWidth; // pzopt
+            pzopt.ChunkGrid.stock = pzoptStock; // pzopt: the cap of the height shift in ProcessChunkPos
             chunkGridWidth = pzopt.ChunkGrid.width(pzoptStock, pzopt.Config.CHUNK_GRID_AUTO, pzopt.Config.CHUNK_GRID_WIDTH, // pzopt
                Core.getInstance().getScreenWidth(), Core.getInstance().getScreenHeight(), Core.getInstance().getMaxZoom()); // pzopt
             pzopt.Log.info("chunk grid: " + chunkGridWidth + " (setting " + pzopt.Config.CHUNK_GRID_SETTING + ", stock " + pzoptStock // pzopt
@@ -980,6 +981,15 @@ public final class IsoChunkMap {
          x1 += Math.round(p.getForwardDirectionX() * s);
          y1 += Math.round(p.getForwardDirectionY() * s);
       }
+
+      // pzopt: chunkGridFollowView, a grid wider than stock follows the ground point the camera looks at on an upper
+      // floor (3 tiles north and west per level, capped so the player stays as deep inside as in a stock grid). Single
+      // player only: a multiplayer server loads a player-centred area (ServerMap, LoadedAreas)
+      if (pzopt.Config.CHUNK_GRID_FOLLOW_VIEW && pzopt.ChunkGrid.stock > 0 && pzopt.Overrides.enabled() && !GameClient.client && !GameServer.server) { // pzopt
+         int pzoptShift = pzopt.ChunkGrid.heightShiftTiles(chr.getZ(), chunkGridWidth, pzopt.ChunkGrid.stock); // pzopt
+         x1 -= pzoptShift; // pzopt
+         y1 -= pzoptShift; // pzopt
+      } // pzopt
 
       int x = PZMath.fastfloor(x1 / 8.0F);
       int y = PZMath.fastfloor(y1 / 8.0F);

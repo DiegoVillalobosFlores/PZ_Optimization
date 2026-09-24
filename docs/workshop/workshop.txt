@@ -11,7 +11,7 @@ description=
 description=[url=https://github.com/xD3I/PZ_Optimization#readme][img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/00-showcase-thumbnail.gif[/img][/url]
 description=[i]Uncapped at 5120x2160, the in-game overlay (F9 / L3 + R3) live at the bottom; video on the repository page.[/i]
 description=
-description=[h1]New! HDR output (Linux)[/h1]
+description=[h1]New! HDR output (Linux, macOS)[/h1]
 description=[img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/24-hdr.jpg[/img]
 description=
 description=[img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/23-zombie-detail.jpg[/img]
@@ -84,6 +84,6 @@ description=[img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/d
 description=All of them measure within noise of stock: [b]Project Zomboid Optimiser[/b] (Lua debug toggles, shader copies), [b]Tempo[/b] (chunk finalizing, not the queue wait that is the tail), [b]Multi-Cpu Enhance[/b] (a ParallelGC launcher JSON: 300 ms pauses, worse than stock), [b]Every Texture Optimized[/b] (VRAM, not frame time), [b]Lugli[/b] and [b]Zed's Better FPS[/b] (ZombieBuddy patches off the per-frame chunk, tree and translucent drawing). This item: 481 / 246 / 456 fps, p99 8.8 / 13.8 / 8.5 ms.
 description=
 description=[h1]This build[/h1]
-description=Game revision b0bbce05d5 (Build 42.20.4), repository commit ecc868d, 485 files, zip sha256 f8065003c23042ee7989eb5384c2d61ed682b6755afeba2eca37a5d2fedccedd.
+description=Game revision b0bbce05d5 (Build 42.20.4), repository commit a183c76, 485 files, zip sha256 1d0e9e617b5ea2da638fa07304d835a4117c5f0661b15205874dc7c750dfa2b6.
 tags=Build 42;
 visibility=public

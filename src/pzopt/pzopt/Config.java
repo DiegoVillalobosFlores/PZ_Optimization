@@ -613,7 +613,7 @@ public final class Config {
    public static final int HDR_GLINT_PCT = integer("hdrGlintPct", 100); // sun glints and sky reflections on water and puddles, lamp glints at night, % strength (0 = off, shaders stay stock)
    public static final int HDR_SUN_PCT = integer("hdrSunPct", 60); // sunlit outdoors on a clear day brighter than the SDR picture by this %, scaled by sun height and clouds (0 = daylight as SDR)
    public static final int HDR_SATURATION_PCT = integer("hdrSaturationPct", 0); // extra world chroma, %
-   public static final boolean HDR_UNTESTED_PLATFORMS = bool("hdrUntestedPlatforms", false); // dev: allow the untested Windows (scRGB) / macOS (EDR) HDR paths; HDR is Linux-only without it
+   public static final boolean HDR_UNTESTED_PLATFORMS = bool("hdrUntestedPlatforms", false); // dev: allow the untested Windows (scRGB) HDR path; HDR is Linux / macOS without it
    public static final String HDR_TUNE = string("hdrTune", "");
    public static final boolean HDR_WIN_FLIP = bool("hdrWinFlip", true); // Windows HDR: write the interop texture upside down (D3D rows run top-down); false if a driver maps it the other way
    public static final String HDR_DUMP_AT = string("hdrDumpAt", ""); // dev: seconds after the world is up at which frames are dumped (with the tune file's [sweep] sets), e.g. "20,35" // dev: tuning file re-read once a second (key=value lines, [sweep] sets for pzopt-hdr.req dumps)

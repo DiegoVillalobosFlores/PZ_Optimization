@@ -124,6 +124,7 @@ public final class HdrMac {
          commandBuffers[k] = null;
       }
       encode(k);
+      Hdr.alphaGainFrame(backFbo, fbos[k], width, height, Math.min(headroom, Hdr.GAIN_MAX)); // tune file, frame dumps
       GL11.glFlush(); // the GL -> Metal hand-off on one device
       MemorySegment drawable = sendP(layer, "nextDrawable");
       if (drawable.address() == 0L) {
@@ -195,6 +196,14 @@ public final class HdrMac {
       EXTFramebufferObject.glBindFramebufferEXT(EXTFramebufferBlit.GL_READ_FRAMEBUFFER_EXT, 0);
       EXTFramebufferObject.glBindFramebufferEXT(EXTFramebufferBlit.GL_DRAW_FRAMEBUFFER_EXT, backFbo);
       EXTFramebufferBlit.glBlitFramebufferEXT(0, 0, width, height, 0, 0, width, height, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
+      // the SDR frame into GL's front buffer too: nothing is swapped any more, and the game's screenshots (Core.
+      // TakeFullScreenshot) read GL_FRONT, which would stay black under the Metal layer
+      EXTFramebufferObject.glBindFramebufferEXT(EXTFramebufferBlit.GL_READ_FRAMEBUFFER_EXT, backFbo);
+      EXTFramebufferObject.glBindFramebufferEXT(EXTFramebufferBlit.GL_DRAW_FRAMEBUFFER_EXT, 0);
+      int prevDrawBuffer = GL11.glGetInteger(GL11.GL_DRAW_BUFFER);
+      GL11.glDrawBuffer(GL11.GL_FRONT);
+      EXTFramebufferBlit.glBlitFramebufferEXT(0, 0, width, height, 0, 0, width, height, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
+      GL11.glDrawBuffer(prevDrawBuffer);
       EXTFramebufferObject.glBindFramebufferEXT(EXTFramebufferBlit.GL_DRAW_FRAMEBUFFER_EXT, fbos[k]);
       GL11.glViewport(0, 0, width, height);
       GL20.glUseProgram(encodeProgram);
@@ -319,8 +328,12 @@ public final class HdrMac {
          if (screen.address() == 0L) {
             screen = sendP(cls("NSScreen"), "mainScreen");
          }
+         double was = headroom;
          headroom = sendD(screen, "maximumExtendedDynamicRangeColorComponentValue");
          potentialHeadroom = sendD(screen, "maximumPotentialExtendedDynamicRangeColorComponentValue");
+         if (Math.abs(headroom - was) > 0.05 && ready) {
+            Log.info(String.format(Locale.ROOT, "hdr mac: EDR headroom %.2f -> %.2f (potential %.2f)", was, headroom, potentialHeadroom));
+         }
          // the encoded peak is where the panel is now (EDR headroom rises once EDR content is on screen), in HDR's units
          HdrWayland.encRef = 1.0;
          HdrWayland.encMax = Math.max(1.0, headroom);

@@ -227,11 +227,36 @@ SDR decode), so the HDR container at expansion 0 reproduces the SDR window exact
   night avg 2 / 3 / 7, p99.9 142 / 149 / 475; day avg 43 / 42 / 71, p99.9 350 / 346 / 529; storm avg 7 / 8 / 15,
   p99.9 138 / 149 / 268 (stock / HDR / enhanced). The plain expansion only moves the rare near-white pixels.
 
+- **13:15-13:30 macOS EDR, first run on the MacBook (M1 Pro, macOS 27, GL "2.1 Metal - 91.7").** Found before
+  running: Core creates the window with `PixelFormat(32, 0, 24, 8, 0)`, no alpha, so the alpha-carried world gain would
+  have read 1.0 everywhere (SDR inside an EDR layer); `Hdr.windowHints` now asks for 8 alpha bits on the alpha-gain
+  platforms (macOS, Windows) and `windowCreated` refuses the Mac path with fewer than 8. Mac frame dumps added
+  (`Hdr.alphaGainFrame` / `writeAlphaGainDump`: pre = the 8-bit back buffer, post = the IOSurface Metal presents, in %
+  of the SDR white, rows turned so hdrframe.py shows the glass picture; the log line compares row profiles for the
+  orientation, since ssh screencapture is blocked); `run-mac.sh` collects `~/Zomboid/pzopt-hdr` into `<run>/hdr`.
+  Run `mac-hdrmac1-torch` (night, torch, spinning route, `hdr=true hdrUntestedPlatforms=true hdrDumpAt=10,18,26`): EDR
+  layer on first try, headroom 1.20 at creation -> 16.00 once EDR content is on screen, game 1920x1200 = drawable (no
+  upscale), orientation upright in all three dumps (row-profile r 0.86-0.92 upright vs negative flipped). Inside the store
+  (t10) the torch pool reaches 3.8x SDR white (5 % of pixels above white, 2 % above 2x); outdoors on grass (t18 / t26) the
+  pool stays at 1.0-1.35x; UI at SDR white. Cost vs `mac-hdrmac1-off` (same build, `hdr=false`): both 59.8 fps at the
+  Mac's 60 cap, GPU 50 -> 54 %, p99 41.4 -> 47.2 ms, >33 ms frames 48 -> 67 (one run each; the tail is the Mac's own,
+  game thread 93 % of a core in both). Stats / bloom stay off on the 2.1 context.
+- **13:25-13:35 macOS opened** (`Hdr.REQUESTED` takes macOS without `hdrUntestedPlatforms`; Windows still needs it).
+  On macOS only the light map and lightning apply: the composite is not patched on the 2.1 context, so sunlight, glints,
+  bloom, night ITM, saturation and world brightness are Linux only (said in the Options tips), and `hdrUiNits` /
+  `hdrPeakNits` are ignored (EDR has no nits: 1.0 is the screen's SDR white; a UI white of 200 would have turned the gain
+  headroom into 16 / 200 < 1, i.e. off). Run `mac-hdrmac2-options`: the game's own screenshot was black, because
+  `Core.TakeFullScreenshot` reads GL_FRONT and nothing is swapped under the Metal layer (the same holds for MacPresent);
+  HdrMac now blits the SDR frame into GL_FRONT each frame. `mac-hdrmac3-options` (harness `options_search=HDR`): the tab
+  shows the HDR section and the macOS notes. `mac-hdrmac4-fs` (borderless): game 1512x982 -> EDR drawable 3024x1964
+  through MPSImageBilinearScale, headroom 16, upright in all dumps, torch indoors 3.7x SDR white, 59.5 fps at the
+  60 cap, p99 41.1 ms, GPU 63 % (54 % windowed at 1920x1200 without the upscale). Not checked: lightning and headlights.
+
 ## State (2026-09-24 10:10)
 
 `hdr=true` on KDE Plasma 6 with HDR on gives: UI at the desktop's white, the world as SDR in daylight, lamp / torch /
 headlight / fire light 2-4x brighter with a hot core at each source and the light's colour, lightning strikes up to the
 panel peak, soft roll-off, +~0 ms a frame on KDE (no encode pass) / +0.3 ms elsewhere (encode). Showcase:
-`docs/media/hdr-showcase-sdr-vs-hdr.mp4`. Untested: macOS EDR (`HdrMac`, needs the maintainer's OK to use the Mac),
+`docs/media/hdr-showcase-sdr-vs-hdr.mp4`. macOS EDR (`HdrMac`) is on since 13:35 (MacBook Pro XDR: 16x headroom, lights and lightning only). Untested:
 Windows scRGB (`HdrWin`, needs a Windows boot). Open: the Options-tab section is written but not yet verified in the
 menus; daylight has no HDR content (PZ has no speculars / sky to expand).

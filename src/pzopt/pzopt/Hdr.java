@@ -47,10 +47,10 @@ public final class Hdr {
    private Hdr() {
    }
 
-   // Linux only until the Windows (HdrWin) and macOS (HdrMac) paths have run once: both are native interop written without
-   // the hardware; hdrUntestedPlatforms=true lets a test run use them
+   // Linux and macOS (HdrMac ran on a MacBook Pro XDR panel, 2026-09-24); Windows (HdrWin) is native interop written without
+   // the hardware, hdrUntestedPlatforms=true lets a test run use it
    public static final boolean REQUESTED = Overrides.enabled() && Config.HDR
-         && (Config.HDR_UNTESTED_PLATFORMS || System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("linux"));
+         && (Config.HDR_UNTESTED_PLATFORMS || System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("linux") || HdrMac.MAC);
 
    /** Output is really HDR (FP16 back buffer + an attached image description). Render thread writes it once. */
    public static volatile boolean active;
@@ -292,6 +292,10 @@ public final class Hdr {
          GLFW.glfwWindowHint(GLFW.GLFW_GREEN_BITS, 16);
          GLFW.glfwWindowHint(GLFW.GLFW_BLUE_BITS, 16);
          GLFW.glfwWindowHint(GLFW.GLFW_ALPHA_BITS, 16);
+      } else if (REQUESTED && (HdrMac.MAC || HdrWin.WINDOWS)) {
+         // the alpha-gain platforms carry the world gain in the back buffer's alpha; Core asks for PixelFormat(32, 0, ...),
+         // i.e. no alpha, and an alpha-less back buffer reads 1.0 (gain 1: SDR in an HDR swap chain)
+         GLFW.glfwWindowHint(GLFW.GLFW_ALPHA_BITS, 8);
       }
    }
 
@@ -310,10 +314,16 @@ public final class Hdr {
             return;
          }
          if (HdrMac.MAC) {
+            int alphaBits = GL11.glGetInteger(GL11.GL_ALPHA_BITS);
+            if (alphaBits < 8) {
+               state = "no alpha channel in the back buffer (" + alphaBits + " bits): the world gain has nowhere to go";
+               Log.warn("hdr: " + state);
+               return;
+            }
             alphaGain = true;
             active = true; // HdrMac sets it back to false if the EDR layer cannot be made
             state = "macOS EDR (Metal layer, extended linear sRGB)";
-            Log.info("hdr: macOS: EDR output through a Metal layer; world gain carried in the back buffer's alpha");
+            Log.info("hdr: macOS: EDR output through a Metal layer; world gain carried in the back buffer's alpha (" + alphaBits + " bits)");
             return;
          }
          if (GLFW.glfwGetPlatform() != GLFW.GLFW_PLATFORM_WAYLAND) {
@@ -762,12 +772,13 @@ public final class Hdr {
       GL20.glUniform4f(d, t.gamma, statsTex != 0 ? 1F : 0F, t.bloom, bloomReady && t.bloom > 0F ? 1F : 0F);
    }
 
+   // macOS EDR has no nits: 1.0 is the screen's SDR white at its current brightness, so hdrUiNits / hdrPeakNits do not apply
    static float uiNits(Tune t) {
-      return t.uiNits > 0 ? t.uiNits : (float)HdrWayland.encRef;
+      return t.uiNits > 0 && !HdrMac.MAC ? t.uiNits : (float)HdrWayland.encRef;
    }
 
    static float peakNits(Tune t) {
-      return t.peakNits > 0 ? Math.min(t.peakNits, (float)HdrWayland.encMax) : (float)HdrWayland.encMax;
+      return t.peakNits > 0 && !HdrMac.MAC ? Math.min(t.peakNits, (float)HdrWayland.encMax) : (float)HdrWayland.encMax;
    }
 
    // ---- world passes before the composite: average luminance (GPU mip chain, no read-back) and bloom ----
@@ -1534,7 +1545,107 @@ public final class Hdr {
       }
    }
 
+   private static int dumpPreFbo, dumpPostFbo;
+   private static double dumpHeadroom = 1.0;
+
+   /** HdrMac.present(), render thread, after the EDR encode: the tune file and the frame dumps of the alpha-gain path. */
+   static void alphaGainFrame(int preFbo, int postFbo, int w, int h, double headroom) {
+      frames++;
+      try {
+         reloadTune();
+         copyW = w;
+         copyH = h;
+         dumpPreFbo = preFbo;
+         dumpPostFbo = postFbo;
+         dumpHeadroom = Math.max(1.0, headroom);
+         dumpIfRequested();
+      } catch (Throwable t) {
+         Log.warn("hdr: dump failed: " + t);
+      }
+   }
+
+   /**
+    * Alpha-gain dump (macOS EDR): pre = the 8-bit back buffer, post = the EDR surface Metal presents (1.0 = SDR white),
+    * its rows turned bottom-up like GL's so hdrframe.py shows the picture as it reaches the screen. The json's units are
+    * % of the SDR white (uiNits 100), there is no absolute nits scale on macOS. Logs which way up the surface is.
+    */
+   private static void writeAlphaGainDump(String tag) {
+      int w = copyW, h = copyH;
+      File dir = new File(ZomboidFileSystem.instance.getCacheDir(), "pzopt-hdr");
+      dir.mkdirs();
+      java.nio.FloatBuffer pre = BufferUtils.createFloatBuffer(w * h * 3), post = BufferUtils.createFloatBuffer(w * h * 3);
+      int prevRead = GL11.glGetInteger(org.lwjgl.opengl.EXTFramebufferBlit.GL_READ_FRAMEBUFFER_BINDING_EXT); // EXT: the macOS context is legacy 2.1
+      org.lwjgl.opengl.EXTFramebufferObject.glBindFramebufferEXT(org.lwjgl.opengl.EXTFramebufferBlit.GL_READ_FRAMEBUFFER_EXT, dumpPreFbo);
+      GL11.glReadPixels(0, 0, w, h, GL11.GL_RGB, GL11.GL_FLOAT, pre);
+      org.lwjgl.opengl.EXTFramebufferObject.glBindFramebufferEXT(org.lwjgl.opengl.EXTFramebufferBlit.GL_READ_FRAMEBUFFER_EXT, dumpPostFbo);
+      GL11.glReadPixels(0, 0, w, h, GL11.GL_RGB, GL11.GL_FLOAT, post);
+      org.lwjgl.opengl.EXTFramebufferObject.glBindFramebufferEXT(org.lwjgl.opengl.EXTFramebufferBlit.GL_READ_FRAMEBUFFER_EXT, prevRead);
+      double hr = dumpHeadroom;
+      String meta = String.format(java.util.Locale.ROOT, "{\"tag\":\"%s\",\"w\":%d,\"h\":%d,\"units\":\"%% of SDR white\",\"encMax\":%.1f,\"encRef\":100.0,\"headroom\":%.3f,\"potentialHeadroom\":%.3f,\"uiNits\":100.0,\"peakNits\":%.1f,\"zoom\":%.4f,\"flash\":%.3f,\"daylight\":%.3f,\"lightReady\":%b,\"tune\":\"%s\"}",
+            tag, w, h, hr * 100.0, hr, HdrMac.potentialHeadroom, hr * 100.0, Core.getInstance().getZoom(0), flash, HdrGlint.daylight, HdrLight.ready, tune);
+      Thread writer = new Thread(() -> {
+         try {
+            ByteBuffer preOut = BufferUtils.createByteBuffer(w * h * 3 * 2), postOut = BufferUtils.createByteBuffer(w * h * 3 * 2);
+            double[] preRows = new double[h], postRows = new double[h];
+            long above = 0;
+            float max = 0F;
+            for (int y = 0; y < h; y++) {
+               int src = (h - 1 - y) * w * 3; // the surface's row 0 is Metal's top row
+               double pr = 0, qr = 0;
+               for (int i = 0; i < w * 3; i++) {
+                  float p = pre.get(y * w * 3 + i), q = post.get(src + i);
+                  preOut.putShort((y * w * 3 + i) * 2, Float.floatToFloat16(p));
+                  postOut.putShort((y * w * 3 + i) * 2, Float.floatToFloat16((float)(q / hr)));
+                  pr += p;
+                  qr += q;
+                  max = Math.max(max, q);
+                  if (q > 1.0F) {
+                     above++;
+                  }
+               }
+               preRows[y] = pr;
+               postRows[y] = qr;
+            }
+            double upright = correlation(preRows, postRows, false), flipped = correlation(preRows, postRows, true);
+            write(new File(dir, tag + ".pre.f16"), preOut);
+            write(new File(dir, tag + ".post.f16"), postOut);
+            Files.writeString(new File(dir, tag + ".json").toPath(), meta);
+            Log.info(String.format(java.util.Locale.ROOT, "hdr mac: dumped %s %dx%d: headroom %.2f (potential %.2f), max %.2fx SDR white, %.2f %% of channels above SDR white;"
+                  + " orientation %s (row profile r = %.3f upright, %.3f flipped)", tag, w, h, hr, HdrMac.potentialHeadroom, max, above * 100.0 / (w * h * 3.0),
+                  upright >= flipped ? "upright" : "UPSIDE DOWN", upright, flipped));
+         } catch (IOException e) {
+            Log.warn("hdr: dump failed: " + e);
+         }
+      }, "pzopt-hdr-dump");
+      writer.setDaemon(true);
+      writer.start();
+   }
+
+   /** Pearson r of two row profiles (b read bottom-up when flipped). */
+   private static double correlation(double[] a, double[] b, boolean flipped) {
+      int n = a.length;
+      double ma = 0, mb = 0;
+      for (int i = 0; i < n; i++) {
+         ma += a[i];
+         mb += b[flipped ? n - 1 - i : i];
+      }
+      ma /= n;
+      mb /= n;
+      double sab = 0, saa = 0, sbb = 0;
+      for (int i = 0; i < n; i++) {
+         double x = a[i] - ma, y = b[flipped ? n - 1 - i : i] - mb;
+         sab += x * y;
+         saa += x * x;
+         sbb += y * y;
+      }
+      return saa > 0 && sbb > 0 ? sab / Math.sqrt(saa * sbb) : 0;
+   }
+
    private static void writeDump(String tag) throws IOException {
+      if (alphaGain) {
+         writeAlphaGainDump(tag);
+         return;
+      }
       int w = copyW, h = copyH;
       File dir = new File(ZomboidFileSystem.instance.getCacheDir(), "pzopt-hdr");
       dir.mkdirs();

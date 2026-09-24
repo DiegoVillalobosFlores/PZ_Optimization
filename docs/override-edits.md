@@ -3263,7 +3263,10 @@ All hooks are no-ops unless `hdr=true`; findings and numbers in `docs/findings-h
   after the default hints and, once the context is current, lets `Hdr.windowCreated` check the back buffer is float and
   attach the HDR image description to the window's wl_surface; `swapBuffers` first runs `Hdr.beforeSwap` (the encode
   pass: SDR-encoded extended frame -> extended linear with the output's own luminances) and, on macOS, presents through
-  `HdrMac` (an EDR Metal layer) instead of glfwSwapBuffers.
+  `HdrMac` (an EDR Metal layer) instead of glfwSwapBuffers. On macOS (and Windows) `create` asks for 8 alpha bits
+  instead: Core's `PixelFormat(32, 0, 24, 8, 0)` has none, and the alpha-carried world gain needs them (2026-09-24,
+  first Mac run). HdrMac also copies the SDR frame into GL_FRONT each frame, because Core's screenshot reads GL_FRONT and
+  nothing is swapped any more.
 - **zombie.core.textures.MultiTextureFBO2.render**: before the composite quads, the world passes are queued (average
   luminance mip chain, bloom chain; the light map is built on a worker and queued from here); after them, on 8-bit back
   buffers (macOS), the alpha-only pass that carries the world gain in the back buffer's alpha.

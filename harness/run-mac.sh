@@ -188,6 +188,7 @@ done
 out="$RUNS/$label-$(date +%Y%m%d-%H%M%S)"; mkdir -p "$out"
 rm -f "$ZOMBOID"/pzopt-*.out "$ZOMBOID/console.txt" "$ZOMBOID/pzopt-schedule.out" "$ZOMBOID/pzopt-logdone"
 rm -f "$ZOMBOID"/Screenshots/pzopt-*.png
+rm -rf "$ZOMBOID/pzopt-hdr"   # HDR frame dumps (pzopt.Hdr) of the previous run
 rm -f "$PZ_DIR"/hs_err_pid*.log "$ZOMBOID"/hs_err_pid*.log
 jvm_opts=()
 while IFS= read -r a; do
@@ -261,6 +262,7 @@ for h in "$PZ_DIR"/hs_err_pid*.log "$ZOMBOID"/hs_err_pid*.log; do [[ -f "$h" ]] 
 [[ -f "$ZOMBOID/console.txt" ]] && cp "$ZOMBOID/console.txt" "$out/console.txt" || echo "no console.txt written" >&2
 cp "$ZOMBOID"/pzopt-*.out "$out/" 2>/dev/null || true
 cp "$ZOMBOID"/Screenshots/pzopt-*.png "$out/" 2>/dev/null || true   # harness screenshots (options_tab rig)
+[[ -d "$ZOMBOID/pzopt-hdr" ]] && mv "$ZOMBOID/pzopt-hdr" "$out/hdr"   # HDR frame dumps (tools/hdr/hdrframe.py)
 cp "$PZ_DIR/pzopt.properties" "$out/pzopt.properties"
 cp "$FLAG_FILE" "$out/pzopt-harness.txt"
 { echo "layout=mac"; echo "mode=$mode"; echo "crashed=$crashed"; echo "attempts=1"; echo "jfr=0"; echo "game_profiler=0"; echo "gc=default"

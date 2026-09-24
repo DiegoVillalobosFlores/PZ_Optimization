@@ -50,7 +50,19 @@ local pending = nil
 local quitAtMs = nil
 -- options_tab=<tab name> (2026-09-24, menu checks without xdotool, e.g. on the Mac): stay on the main menu, open
 -- Options on that tab, log the tab names, 3 s later write Zomboid/Screenshots/pzopt-options.png, quit 2 s after.
+-- options_search=<text> (Optimizations tab): typed into the tab's search box 1 s after opening, so a section far down
+-- the page is on the screenshot (e.g. options_search=HDR).
 local optionsCheck = nil
+
+local function findSearchBox(el, depth)
+    if not el or depth > 8 then return nil end
+    if el.Type == "ISTextEntryBox" and el.tooltip and string.find(el.tooltip, "Type words from a setting", 1, true) then return el end
+    for _, ch in pairs(el.children or {}) do
+        local f = findSearchBox(ch, depth + 1)
+        if f then return f end
+    end
+    return nil
+end
 
 local function optionsTick()
     local c = optionsCheck
@@ -66,6 +78,11 @@ local function optionsTick()
         local found = mo.tabs:activateView(c.tab)
         print("[pzopt-harness] options: tabs " .. table.concat(names, " | ") .. "; " .. c.tab .. (found and " shown" or " NOT FOUND"))
         c.openedMs = now
+    elseif c.search and not c.searched and now - c.openedMs >= 1000 then
+        c.searched = true
+        local box = findSearchBox(ms.mainOptions, 0)
+        if box then box:setText(c.search) end
+        print("[pzopt-harness] options: search '" .. c.search .. "'" .. (box and " typed" or ": search box NOT FOUND"))
     elseif not c.shotMs and now - c.openedMs >= 3000 then
         getCore():TakeFullScreenshot("pzopt-options.png")
         print("[pzopt-harness] options: screenshot requested")
@@ -90,7 +107,7 @@ local function onMainMenuEnter()
     if flags.options_tab and flags.options_tab ~= "" then
         if optionsCheck == nil then
             appendFlag("consumed=1")
-            optionsCheck = { tab = flags.options_tab }
+            optionsCheck = { tab = flags.options_tab, search = flags.options_search ~= "" and flags.options_search or nil }
         end
         return
     end

@@ -103,5 +103,6 @@ public final class WaterShader extends Shader {
       GL20.glUniform2f(this.waterParamWind, texd.u0, texd.u1);
       GL20.glUniform1f(this.waterParamWindSpeed, texd.u2);
       GL20.glUniform1f(this.waterParamRainIntensity, texd.u3);
+      pzopt.HdrGlint.surfaceUniforms(); // pzopt: HDR output, sun / sky / lamp glints on the water (bound program)
    }
 }

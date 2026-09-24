@@ -3247,3 +3247,25 @@ Edit: stock's unused local `tcountMax` becomes the dynamic model cap (`tcount < 
 blend test reads a local that is `numberZombiesBlended` unless the key lowers it. Both `510` literals stay, so
 ZBBetterFPS' cull-cap transformer (it rewrites exactly two `SIPUSH 510` sites and disables itself otherwise) still
 applies, and its lower counts win. `tests/pzopt/ZombieLodTest`.
+
+### HDR output (`hdr` and the `hdr*` keys, 2026-09-24; pzopt.Hdr, HdrWayland, HdrLight, HdrFlash, HdrMac)
+
+All hooks are no-ops unless `hdr=true`; findings and numbers in `docs/findings-hdr-2026-09-24.md`.
+
+- **zombie.core.opengl.ShaderUnit** (new override): the unit's processed source passes through `pzopt.Hdr.patchShader`
+  right before it is handed to the driver. For the world composite (`screen.frag`) the stock `main` is renamed and a new
+  `main` calls it, then expands the finished SDR pixel to HDR (light-map gain, night ITM, lightning, bloom), still
+  gamma-encoded relative to the UI white. The patched source is test-compiled first; if the driver rejects it the stock
+  source is used and a warning is logged (the first try went black because the game's util/math.h hides the builtin
+  `max(vec3, float)`). Every other shader is untouched; on macOS nothing is patched.
+- **org.lwjglx.opengl.Display**: `init` selects the Wayland platform when HDR is asked for on a Wayland session (the
+  colour-management protocol does not exist for X11 windows); `create` asks GLFW for a 16-bit float default framebuffer
+  after the default hints and, once the context is current, lets `Hdr.windowCreated` check the back buffer is float and
+  attach the HDR image description to the window's wl_surface; `swapBuffers` first runs `Hdr.beforeSwap` (the encode
+  pass: SDR-encoded extended frame -> extended linear with the output's own luminances) and, on macOS, presents through
+  `HdrMac` (an EDR Metal layer) instead of glfwSwapBuffers.
+- **zombie.core.textures.MultiTextureFBO2.render**: before the composite quads, the world passes are queued (average
+  luminance mip chain, bloom chain; the light map is built on a worker and queued from here); after them, on 8-bit back
+  buffers (macOS), the alpha-only pass that carries the world gain in the back buffer's alpha.
+- **zombie.iso.weather.WeatherShader.startRenderThread**: after the stock uniforms, `Hdr.worldUniforms` sets the
+  expansion's uniforms on the bound composite program (glProgramUniform from another pass never reached it).

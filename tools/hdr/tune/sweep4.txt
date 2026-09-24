@@ -1,0 +1,8 @@
+light=1 itm=0
+[sweep]
+sdr light=0
+dbg debugView=1
+dbgflip debugView=1 lightFlipY=0
+L100
+L100p70 paperPct=70
+L100bloom bloom=0.5

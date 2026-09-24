@@ -636,7 +636,11 @@ public final class Model extends Asset {
                effect.setTint(tintR, tintG, tintB);
                float targetDepth = PerformanceSettings.fboRenderChunk ? instData.modelInstance.targetDepth : 0.5F;
                effect.setTargetDepth(targetDepth);
+               boolean pzoptGlint = pzopt.HdrGlint.vehicleOn(effect.isVehicleShader()); // pzopt: HDR output, the car's speculars / lamps into the glint target
                this.mesh.Draw(effect);
+               if (pzoptGlint) {
+                  pzopt.HdrGlint.vehicleOff(); // pzopt: HDR output
+               }
                effect.End();
             }
 

@@ -1,0 +1,1 @@
+light=0 glint=0 sunMax=1 bloom=0 flashMax=1

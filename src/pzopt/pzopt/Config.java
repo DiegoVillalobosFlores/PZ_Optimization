@@ -602,6 +602,21 @@ public final class Config {
    public static final boolean VBO_FAST_QUADS = bool("vboFastQuads", true); // VBORenderer.addQuad writes the four vertices with one position advance
    public static final boolean FOG_PASS = bool("fogPass", true); // ImprovedFog as one batch into a scaled, depth-copied fog buffer (pzopt.FogPass)
    public static final int FOG_SCALE_PCT = integer("fogScalePct", 25); // fog buffer size per axis, % of the viewport
+   public static final boolean HDR = bool("hdr", false); // HDR output (pzopt.Hdr): FP16 window on Wayland tagged with the output's HDR image description, world highlights expanded, UI at the desktop's white
+   public static final String HDR_ENCODE = string("hdrEncode", "auto").toLowerCase(java.util.Locale.ROOT); // on: ext_linear description + encode pass at the swap (standard, exact roll-off); off: no description, the compositor's own SDR decode shows the FP16 values above 1.0 (KWin; ~0.3 ms a frame cheaper at 4K); auto: off on KDE Plasma, on elsewhere
+   public static final int HDR_UI_NITS = integer("hdrUiNits", 0); // UI / SDR white on the panel in cd/m², 0 = the desktop's reference white
+   public static final int HDR_PAPER_PCT = integer("hdrPaperPct", 100); // world paper white, % of the UI white (lower = more room for highlights)
+   public static final int HDR_PEAK_NITS = integer("hdrPeakNits", 0); // brightest highlight in cd/m², 0 = the panel's peak
+   public static final int HDR_ITM_PCT = integer("hdrItmPct", 50); // highlight expansion strength (0 = the SDR picture in an HDR container)
+   public static final int HDR_BLOOM_PCT = integer("hdrBloomPct", 30); // bloom from the expanded highlights, % strength (0 = off)
+   public static final int HDR_LIGHT_PCT = integer("hdrLightPct", 100); // light-map gain: lit squares (lamps, torches, fire) brightened by their light over the ambient, % strength
+   public static final int HDR_GLINT_PCT = integer("hdrGlintPct", 100); // sun glints and sky reflections on water and puddles, lamp glints at night, % strength (0 = off, shaders stay stock)
+   public static final int HDR_SUN_PCT = integer("hdrSunPct", 60); // sunlit outdoors on a clear day brighter than the SDR picture by this %, scaled by sun height and clouds (0 = daylight as SDR)
+   public static final int HDR_SATURATION_PCT = integer("hdrSaturationPct", 0); // extra world chroma, %
+   public static final boolean HDR_UNTESTED_PLATFORMS = bool("hdrUntestedPlatforms", false); // dev: allow the untested Windows (scRGB) / macOS (EDR) HDR paths; HDR is Linux-only without it
+   public static final String HDR_TUNE = string("hdrTune", "");
+   public static final boolean HDR_WIN_FLIP = bool("hdrWinFlip", true); // Windows HDR: write the interop texture upside down (D3D rows run top-down); false if a driver maps it the other way
+   public static final String HDR_DUMP_AT = string("hdrDumpAt", ""); // dev: seconds after the world is up at which frames are dumped (with the tune file's [sweep] sets), e.g. "20,35" // dev: tuning file re-read once a second (key=value lines, [sweep] sets for pzopt-hdr.req dumps)
    public static final boolean DEV_FOG_NO_DRAW = bool("devFogNoDraw", false); // measurement: the fog pass does everything but the rectangle draw call
    public static final boolean DEV_FOG_FLAT = bool("devFogFlat", false);
    public static final int DEV_FOG_DEPTH_VIEW = integer("devFogDepthView", 0); // measurement: the composite shows 1 = the scene depth, 2 = the fog texel depth, 3 = the fog buffer alpha (R/G = depth * 255 integer / fraction)

@@ -1588,6 +1588,13 @@ public final class FBORenderCell {
 
       try {
          pzopt.GpuSections.begin("water"); /* pzopt: GPU section */ this.renderWater(playerIndex); pzopt.GpuSections.end("water");
+         if (pzopt.HdrGlint.queueGlintOnly()) { // pzopt: HDR output, water + puddle glints after everything that can stand on them
+            this.pzoptWaterOnly = true; // pzopt: HDR output, only the water shader draws in the glint-only pass
+            this.renderWater(playerIndex); // pzopt: HDR output
+            this.pzoptWaterOnly = false; // pzopt: HDR output
+            this.renderPuddles(playerIndex); // pzopt: HDR output
+            pzopt.HdrGlint.queueOff(); // pzopt: HDR output
+         }
       } catch (Throwable var26) {
          if (var30 != null) {
             try {
@@ -6120,6 +6127,8 @@ public final class FBORenderCell {
       }
    }
 
+   private boolean pzoptWaterOnly; // pzopt: HDR glint-only pass: renderWater draws the water shader only
+
    private void renderWater(int playerIndex) {
       if (DebugOptions.instance.weather.waterPuddles.getValue()
          && DebugOptions.instance.terrain.renderTiles.water.getValue()
@@ -6173,12 +6182,12 @@ public final class FBORenderCell {
 
                if (!this.waterSquares.isEmpty()) {
                   IsoWater.getInstance().render(this.waterSquares, z);
-                  if (DebugOptions.instance.fboRenderChunk.renderWaterFlow.getValue()) {
+                  if (DebugOptions.instance.fboRenderChunk.renderWaterFlow.getValue() && !this.pzoptWaterOnly) { // pzopt: HDR glint-only pass
                      this.renderWaterFlow(this.waterSquares);
                   }
                }
 
-               for (int i = 0; i < this.waterAttachSquares.size(); i++) {
+               for (int i = 0; i < (this.pzoptWaterOnly ? 0 : this.waterAttachSquares.size()); i++) { // pzopt: HDR glint-only pass draws no sprites
                   IsoGridSquare square = this.waterAttachSquares.get(i);
                   IsoObject[] objects = (IsoObject[])square.getObjects().getElements();
                   int numObjects = square.getObjects().size();
@@ -6198,7 +6207,7 @@ public final class FBORenderCell {
                   }
                }
 
-               if (!this.fishSplashSquares.isEmpty()) {
+               if (!this.fishSplashSquares.isEmpty() && !this.pzoptWaterOnly) { // pzopt: HDR glint-only pass draws no sprites
                   this.renderFishSplashes(playerIndex, this.fishSplashSquares);
                }
             }

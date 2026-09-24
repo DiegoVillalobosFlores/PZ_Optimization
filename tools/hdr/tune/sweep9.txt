@@ -1,0 +1,7 @@
+light=1 lightMax=4 lightCurve=1.5 itm=0.5 thresholdNight=0.12 bloom=0.3 lightReach=0.6
+[sweep]
+sdr light=0 itm=0 bloom=0
+base
+max6 lightMax=6
+bloom08 bloom=0.8
+dbg debugView=1

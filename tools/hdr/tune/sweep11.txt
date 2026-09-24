@@ -1,0 +1,5 @@
+[sweep]
+sdr light=0 itm=0 bloom=0
+base
+bloomdbg debugView=4 bloom=1
+exc debugView=1

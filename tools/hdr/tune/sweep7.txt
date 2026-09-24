@@ -1,0 +1,12 @@
+light=1 itm=0.5 thresholdNight=0.12 itmDay=0 lightMax=4 lightCurve=1.5
+[sweep]
+sdr light=0 itm=0
+base
+m3 lightMax=3
+m6 lightMax=6
+c1 lightCurve=1
+c25 lightCurve=2.5
+noitm itm=0
+p70 paperPct=70
+bloom1 bloom=1
+bloom2 bloom=2

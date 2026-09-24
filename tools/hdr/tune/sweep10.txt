@@ -1,0 +1,11 @@
+# defaults come from Config / Tune (light 100, bloom 30, itm 50 night, lightMax 4, curve 1.5, hot 0.7, tint 0.6, reach 0.6)
+[sweep]
+sdr light=0 itm=0 bloom=0
+base
+tint0 lightTint=0
+tint1 lightTint=1
+hot0 lightHot=0
+hot1 lightHot=1
+bloom0 bloom=0
+bloom1 bloom=1
+sat10 saturation=0.1

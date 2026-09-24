@@ -1,0 +1,7 @@
+[sweep]
+sdr light=0 itm=0 bloom=0 glint=0 sunMax=1
+g0 glint=0 sunMax=1
+g0fl1 glint=0 sunMax=1 flashMax=1
+nosun sunMax=1
+nsfl1 sunMax=1 flashMax=1
+dbg1 debugView=1

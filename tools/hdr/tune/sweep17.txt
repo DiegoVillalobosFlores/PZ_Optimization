@@ -1,0 +1,8 @@
+[sweep]
+sdr light=0 itm=0 bloom=0 glint=0 sunMax=1
+base
+nosun sunMax=1
+ns-light0 sunMax=1 light=0
+ns-itm0 sunMax=1 itm=0
+ns-bloom0 sunMax=1 bloom=0
+ns-all0 sunMax=1 light=0 itm=0 bloom=0

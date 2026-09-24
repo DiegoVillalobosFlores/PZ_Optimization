@@ -302,6 +302,7 @@ public final class MultiTextureFBO2 {
 
          max = Math.max(max, IsoPlayer.numPlayers - 1);
          pzopt.Upscaler.queueResolve(); // pzopt: upscaler, the low-res world image is resolved to the screen size on the render thread before the quads below
+         pzopt.Hdr.queueWorldStats(); // pzopt: HDR output, the world's average luminance for the composite's expansion
          pzopt.GpuSections.begin("screen"); // pzopt: GPU section (the full-size screen-shader composite)
 
          for (int playerIndex = 0; playerIndex <= max; playerIndex++) {
@@ -336,6 +337,7 @@ public final class MultiTextureFBO2 {
             IndieGL.EndShader();
          }
 
+         pzopt.Hdr.queueGainAlpha(); // pzopt: HDR output on 8-bit back buffers (macOS EDR bridge): the world gain into alpha
          pzopt.GpuSections.end("screen"); // pzopt: GPU section
          pzopt.Upscaler.queueCompositeFlush(); // pzopt: upscaler, dlssFlushAfterComposite
          IsoPlayer.forEachPlayer(MultiTextureFBO2::renderCursor);

@@ -1,0 +1,10 @@
+[sweep]
+sdr light=0 itm=0 bloom=0 glint=0 sunMax=1
+base
+nosun sunMax=1
+sun14 sunMax=1.4
+sun2 sunMax=2
+noglint glint=0
+glint2 glint=2
+sky1 skyReflect=1.2
+lean0 sunLean=0

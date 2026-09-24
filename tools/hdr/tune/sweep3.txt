@@ -1,0 +1,10 @@
+[sweep]
+sdr itm=0 light=0
+dbg itm=0 light=1 debugView=1
+dbgflip itm=0 light=1 debugView=1 lightFlipY=0
+L50 itm=0 light=0.5
+L100 itm=0 light=1
+L100c06 itm=0 light=1 lightCurve=0.6
+L100p70 itm=0 light=1 paperPct=70
+L100bloom itm=0 light=1 bloom=0.5
+combo itm=0.5 thresholdNight=0.1 light=1 paperPct=80 bloom=0.4

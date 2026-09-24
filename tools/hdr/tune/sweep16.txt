@@ -1,0 +1,8 @@
+[sweep]
+sdr light=0 itm=0 bloom=0 glint=0 sunMax=1
+base
+nosun sunMax=1
+noglint glint=0
+sg4 sunGlint=4
+sg12 sunGlint=12
+dbg5 debugView=5

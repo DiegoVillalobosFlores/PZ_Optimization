@@ -160,7 +160,7 @@ public final class FogPass {
    private static java.lang.reflect.Field fboIdField;
 
    /** TextureFBO keeps its framebuffer name private; 0 when it cannot be read. */
-   private static int fboId(zombie.core.textures.TextureFBO fbo) {
+   static int fboId(zombie.core.textures.TextureFBO fbo) {
       try {
          if (fboIdField == null) {
             java.lang.reflect.Field f = zombie.core.textures.TextureFBO.class.getDeclaredField("id");

@@ -149,6 +149,7 @@ public class WeatherShader extends Shader {
       GL20.glUniform4f(this.varInfo, texd.vars[18], texd.vars[19], texd.vars[20], texd.vars[21]);
       GL20.glUniform1f(this.drunkFactor, texd.vars[22]);
       GL20.glUniform1f(this.blurFactor, texd.vars[23]);
+      pzopt.Hdr.worldUniforms(); // pzopt: HDR output, the world expansion's uniforms on the bound composite program
    }
 
    public void onCompileSuccess(ShaderProgram sender) {

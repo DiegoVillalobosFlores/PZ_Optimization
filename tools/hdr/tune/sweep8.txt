@@ -1,0 +1,13 @@
+light=1 lightMax=4 lightCurve=1.5 itm=0.5 thresholdNight=0.12 bloom=0.3 lightReach=0.6
+[sweep]
+sdr light=0 itm=0 bloom=0
+base
+reach0 lightReach=0
+reach1 lightReach=1
+max6 lightMax=6
+c1 lightCurve=1
+bloom0 bloom=0
+bloom08 bloom=0.8
+p80 paperPct=80
+noitm itm=0
+dbg debugView=1

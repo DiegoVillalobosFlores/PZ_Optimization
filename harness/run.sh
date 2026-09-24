@@ -124,6 +124,7 @@ while [[ $# -gt 0 ]]; do
     --inputlag) inputlag=1; pad_script="$2"; shift 2 ;; # in-game input-lag profile: uinput keyboard + mouse + pad (see below)
     --record) record=1; shift ;;
     --launcher) launcher="$2"; shift 2 ;;                # auto|steam|direct (see the header)
+    --wrap) wrap_cmd="$2"; shift 2 ;;                    # direct launcher only: command prefix for the game, e.g. "gamescope --hdr-enabled -f --" (HDR pass)
     --option) game_options+=("$2"); shift 2 ;;           # key=value written into ~/Zomboid/options.ini for the run (restored on exit)                     # screen recording of the run (gpu-screen-recorder, first monitor, native res, AV1 HDR) -> <run>/recording.mp4
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -526,6 +527,7 @@ fi
 while :; do
   attempt=$((attempt+1))
   rm -f "$ZOMBOID/Lua/pzopt-pad-ready.txt" "$ZOMBOID/Lua/pzopt-inputlag-ready.txt"
+  rm -rf "$ZOMBOID/pzopt-hdr"   # HDR frame dumps (pzopt.Hdr) of the previous run
   rm -f "$ZOMBOID"/pzopt-*.out "$ZOMBOID/console.txt" "$ZOMBOID/pzopt-shot.now" "$ZOMBOID/pzopt-shot2.now" "$ZOMBOID/Screenshots/pzopt-shot.png" "$ZOMBOID/Screenshots/pzopt-shot2.png"
   restore_harness_flag; write_flags; write_launch_env
   launch_epoch=$(date +%s)
@@ -585,7 +587,8 @@ while :; do
         overlay="$HOME/.local/share/Steam/ubuntu12_64/gameoverlayrenderer.so"
         export MANGOHUD=1 LD_PRELOAD="${overlay:+$( [[ -f "$overlay" ]] && echo "$overlay:" )}/usr/lib/mangohud/libMangoHud_opengl.so"
       fi
-      cd "$PZ_DIR/.." && exec setsid "$GAME_WRAPPER" </dev/null >"$out/launcher-stdout.txt" 2>&1
+      # shellcheck disable=SC2086  # --wrap is a command line, split on purpose
+      cd "$PZ_DIR/.." && exec setsid ${wrap_cmd:-} "$GAME_WRAPPER" </dev/null >"$out/launcher-stdout.txt" 2>&1
     ) &
   else
     steam -applaunch $APPID >/dev/null 2>&1 &
@@ -760,6 +763,7 @@ done
 [[ -f "$ZOMBOID/console.txt" ]] || { echo "fresh game produced no console.txt" >&2; exit 1; }
 cp "$ZOMBOID/console.txt" "$out/console.txt"
 cp "$ZOMBOID"/pzopt-*.out "$out/" 2>/dev/null || true
+[[ -d "$ZOMBOID/pzopt-hdr" ]] && mv "$ZOMBOID/pzopt-hdr" "$out/hdr"   # HDR frame dumps (tools/hdr/hdrframe.py)
 [[ -f "$ZOMBOID/Screenshots/pzopt-shot.png" ]] && cp "$ZOMBOID/Screenshots/pzopt-shot.png" "$out/shot-game.png"
 [[ -f "$ZOMBOID/Screenshots/pzopt-shot2.png" ]] && cp "$ZOMBOID/Screenshots/pzopt-shot2.png" "$out/shot2-game.png"
 cp "$PZ_DIR/pzopt.properties" "$out/pzopt.properties"

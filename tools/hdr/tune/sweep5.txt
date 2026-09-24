@@ -1,0 +1,7 @@
+light=1 itm=0
+[sweep]
+sdr light=0
+grid debugView=2
+gridflip debugView=2 lightFlipY=0
+raw debugView=3
+exc debugView=1

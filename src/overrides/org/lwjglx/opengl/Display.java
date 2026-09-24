@@ -80,7 +80,7 @@ public class Display {
 
    public static void init() {
       if (LWJGLUtil.getPlatform() == 1) {
-         if ("1".equals(System.getProperty("zomboid.wayland")) && GLFW.glfwPlatformSupported(393219)) {
+         if (("1".equals(System.getProperty("zomboid.wayland")) || pzopt.Hdr.wantsWayland()) && GLFW.glfwPlatformSupported(393219)) { // pzopt: HDR output needs the Wayland platform
             GLFW.glfwInitHint(327683, 393219);
          } else {
             GLFW.glfwInitHint(327683, 393220);
@@ -144,6 +144,7 @@ public class Display {
 
       boolean bDebug = Core.debug && "true".equalsIgnoreCase(System.getProperty("org.lwjgl.util.Debug"));
       GLFW.glfwWindowHint(139271, bDebug ? 1 : 0);
+      pzopt.Hdr.windowHints(); // pzopt: HDR output, an FP16 default framebuffer
       // pzopt: create the window at the size and mode the game asks for a moment later (Core.width x Core.height,
       // fullscreen per the option) instead of the shim's 640x480 placeholder that Core.setDisplayModeInternal
       // resizes. Under NVIDIA PRIME render offload on XWayland (Dell GTX 960M, 2026-09-22) the GL drawable kept the
@@ -216,6 +217,7 @@ public class Display {
       GLFW.glfwShowWindow(Display.Window.handle);
       GLFW.glfwMakeContextCurrent(Display.Window.handle);
       capabilities = GL.createCapabilities();
+      pzopt.Hdr.windowCreated(Display.Window.handle); // pzopt: HDR output, tag the surface with an HDR image description
       GLFW.glfwSwapInterval(0);
       GL11.glClearColor(0.0F, 0.0F, 0.0F, 1.0F);
       GL11.glClear(16640);
@@ -363,6 +365,13 @@ public class Display {
    }
 
    public static void swapBuffers() throws LWJGLException {
+      pzopt.Hdr.beforeSwap(); // pzopt: HDR output, encode the frame for the HDR surface
+      if (pzopt.HdrMac.present(Display.Window.handle)) { // pzopt: HDR output on macOS, presented through an EDR Metal layer
+         return;
+      }
+      if (pzopt.HdrWin.present(Display.Window.handle)) { // pzopt: HDR output on Windows, presented through a DXGI scRGB swap chain
+         return;
+      }
       if (pzoptHudSwap()) {
          return;
       }

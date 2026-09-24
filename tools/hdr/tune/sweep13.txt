@@ -1,0 +1,6 @@
+[sweep]
+sdr light=0 itm=0 bloom=0 glint=0 sunMax=1
+base
+noglint glint=0
+nosun sunMax=1
+car2 carGlass=6 carPaint=1.6

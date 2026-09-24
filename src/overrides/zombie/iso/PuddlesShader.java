@@ -88,5 +88,6 @@ public final class PuddlesShader extends Shader {
       );
       GL20.glUniform1f(this.waterReflectionParam, sb.getTextureShift());
       GL20.glUniformMatrix4fv(this.puddlesParams, true, w.getPuddlesParams(z));
+      pzopt.HdrGlint.surfaceUniforms(); // pzopt: HDR output, sun / sky / lamp glints on the puddles (bound program)
    }
 }

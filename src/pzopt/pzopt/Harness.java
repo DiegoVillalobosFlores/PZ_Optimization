@@ -555,6 +555,12 @@ public final class Harness {
                if (closeCurtains || "curtains".equals(HarnessFlags.get("find", ""))) {
                   findCurtains(p, closeCurtains); // dev: curtain screenshot rig (issue #4)
                }
+               if ("water".equals(HarnessFlags.get("find", ""))) {
+                  findWater(p); // dev: HDR water glint scenes
+               }
+               if ("shore".equals(HarnessFlags.get("find", ""))) {
+                  goToShore(p); // dev: HDR water glint scenes, the player on dry land with the water in view
+               }
                int upstairs = Integer.parseInt(HarnessFlags.get("upstairs", "0").trim());
                upstairsAt = Float.parseFloat(HarnessFlags.get("upstairs_at", "0").trim());
                if (upstairs > 0 && upstairsAt <= 0f) {
@@ -751,6 +757,7 @@ public final class Harness {
          shotRequested = true;
          try {
             Core.getInstance().TakeFullScreenshot("pzopt-shot.png");
+            Hdr.requestDump("shot"); // HDR output: the same held frame as float dumps (and every [sweep] set of hdrTune)
             new File(ZomboidFileSystem.instance.getCacheDir(), "pzopt-shot.now").createNewFile();
             Log.info("harness: screenshot requested at epoch_ms=" + System.currentTimeMillis());
          } catch (Exception e) {
@@ -1395,6 +1402,64 @@ public final class Harness {
     * open curtain in that range through the game's own ToggleDoor (map curtains always load open; the bench save is
     * a copy, so nothing persists), so the bake shows the reporter's state.
     */
+   /** find=shore: teleport to the nearest dry square with at least 20 water squares within 5 tiles. */
+   private static void goToShore(IsoPlayer p) {
+      zombie.iso.IsoCell cell = zombie.iso.IsoWorld.instance.currentCell;
+      int px = (int)p.getX(), py = (int)p.getY();
+      for (int r = 0; r <= 110; r++) {
+         for (int y = py - r; y <= py + r; y++) {
+            for (int x = px - r; x <= px + r; x++) {
+               if (Math.max(Math.abs(x - px), Math.abs(y - py)) != r) {
+                  continue;
+               }
+               zombie.iso.IsoGridSquare sq = cell.getGridSquare(x, y, 0);
+               if (sq == null || sq.isWaterSquare() || sq.getFloor() == null || !sq.isFree(false)) {
+                  continue;
+               }
+               int water = 0;
+               for (int dy = -5; dy <= 5; dy++) {
+                  for (int dx = -5; dx <= 5; dx++) {
+                     zombie.iso.IsoGridSquare w = cell.getGridSquare(x + dx, y + dy, 0);
+                     water += w != null && w.isWaterSquare() ? 1 : 0;
+                  }
+               }
+               if (water >= 20) {
+                  p.setX(x + 0.5F);
+                  p.setY(y + 0.5F);
+                  p.setLastX(x + 0.5F);
+                  p.setLastY(y + 0.5F);
+                  p.setCurrent(sq);
+                  Log.info("harness: find=shore: moved to " + x + "," + y + " (" + water + " water squares within 5 tiles, " + r + " tiles from " + px + "," + py + ")");
+                  return;
+               }
+            }
+         }
+      }
+      Log.warn("harness: find=shore: no shore within 110 tiles of " + px + "," + py);
+   }
+
+   /** find=water: the water squares in the loaded grid around the player, nearest first (HDR glint scenes). */
+   private static void findWater(IsoPlayer p) {
+      zombie.iso.IsoCell cell = zombie.iso.IsoWorld.instance.currentCell;
+      int px = (int)p.getX(), py = (int)p.getY(), n = 0;
+      java.util.ArrayList<int[]> found = new java.util.ArrayList<>();
+      for (int y = py - 120; y <= py + 120; y++) {
+         for (int x = px - 120; x <= px + 120; x++) {
+            zombie.iso.IsoGridSquare sq = cell.getGridSquare(x, y, 0);
+            if (sq != null && sq.isWaterSquare()) {
+               n++;
+               found.add(new int[] {x, y, (x - px) * (x - px) + (y - py) * (y - py)});
+            }
+         }
+      }
+      found.sort((a, b) -> Integer.compare(a[2], b[2]));
+      StringBuilder sb = new StringBuilder();
+      for (int i = 0; i < Math.min(8, found.size()); i++) {
+         sb.append(' ').append(found.get(i)[0]).append(',').append(found.get(i)[1]);
+      }
+      Log.info("harness: find=water: " + n + " water squares within 120 tiles of " + px + "," + py + "; nearest:" + sb);
+   }
+
    private static void findCurtains(IsoPlayer p, boolean close) {
       zombie.iso.IsoCell cell = zombie.iso.IsoWorld.instance.currentCell;
       int px = p.getXi(), py = p.getYi();

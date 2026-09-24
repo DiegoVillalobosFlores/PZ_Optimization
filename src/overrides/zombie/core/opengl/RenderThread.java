@@ -171,6 +171,7 @@ public class RenderThread {
       }
 
       shutdown();
+      pzopt.Hdr.beforeExit(); // pzopt: native Wayland, terminate GLFW here (NVIDIA EGL segfaulted in the VM thread's exit)
       System.exit(0);
    }
 

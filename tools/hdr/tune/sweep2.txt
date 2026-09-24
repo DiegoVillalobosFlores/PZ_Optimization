@@ -1,0 +1,11 @@
+[sweep]
+sdr itm=0
+base
+n08 thresholdNight=0.08
+n08p70 thresholdNight=0.08 paperPct=70
+n05c1 thresholdNight=0.05 curve=1.0
+p50 paperPct=50 thresholdNight=0.1
+day40 thresholdDay=0.4
+day70 thresholdDay=0.7
+p70d45 paperPct=70 thresholdDay=0.45 thresholdNight=0.1
+sat15 saturation=0.15

@@ -71,6 +71,10 @@ public final class Scene {
    private static String weather = "";
    private static float fog = -1f;
    private static String torch = "";
+   private static int fires; // fire=N: N fires lit near the player at the route start (HDR scenes)
+   private static boolean headlights;
+   private static float puddles = -1F; // puddles=V: wet ground and puddle size pinned to V (0..1) through the puddles' admin overrides (HDR glint scenes) // headlights=on: the player's vehicle keeps its headlights on (HDR night drives)
+   private static String lights = ""; // lights=on: grid power on and every light switch within 50 tiles on (HDR scenes)
    private static boolean visible;
    private static float thunderSecs = 6f;
    private static float population = -1f;
@@ -118,6 +122,10 @@ public final class Scene {
       soundParts = Boolean.parseBoolean(HarnessFlags.get("sound_parts", "false"));
       soundFixed = Boolean.parseBoolean(HarnessFlags.get("sound_fixed", "false"));
       helicopter = Boolean.parseBoolean(HarnessFlags.get("helicopter", "false"));
+      fires = Integer.parseInt(HarnessFlags.get("fire", "0").trim());
+      lights = HarnessFlags.get("lights", "").trim().toLowerCase(java.util.Locale.ROOT);
+      headlights = "on".equalsIgnoreCase(HarnessFlags.get("headlights", "").trim());
+      puddles = Float.parseFloat(HarnessFlags.get("puddles", "-1").trim());
       if (soundRadius > 0) {
          Log.info("harness: sound=" + soundRadius + " every " + soundEvery + " frame(s) from the player's square, hearing="
                + zombie.SandboxOptions.instance.lore.hearing.getValue() + " (1=pinpoint x3, 2=normal x1, 3=poor x0.45)" + (soundParts ? ", parts timed" : "") + (soundFixed ? ", fixed square" : ""));
@@ -235,6 +243,11 @@ public final class Scene {
 
    /** Per-frame upkeep while the run is live: keep the overrides pinned and fire the scheduled lightning. */
    static void tick(IsoPlayer p, long nowNs) {
+      if (headlights && p.getVehicle() != null && p.getVehicle().hasHeadlights() && !p.getVehicle().getHeadlightsOn()) {
+         p.getVehicle().setHeadlightsOn(true);
+         Log.info("harness: headlights on (" + p.getVehicle().getScriptName() + "), battery " + p.getVehicle().getBatteryCharge()
+               + ", can emit light " + p.getVehicle().getHeadlightCanEmmitLight());
+      }
       keepWornItems(p); // the bench player keeps their glasses (screen blur otherwise; see pinWornItems)
       ThumpRig.tick(p, nowNs); // thump=N: zombies thumping a door off-screen (the thump-burst repro)
       if (zombiesOff) {
@@ -365,6 +378,68 @@ public final class Scene {
       if (helicopter) {
          startHelicopter();
       }
+      if (fires > 0) {
+         startFires();
+      }
+      if (puddles >= 0F) {
+         zombie.iso.IsoPuddles ip = zombie.iso.IsoPuddles.getInstance();
+         for (int id : new int[] {1, 3}) { // wet ground, puddle size
+            ip.getPuddlesFloat(id).setEnableAdmin(true);
+            ip.getPuddlesFloat(id).setAdminValue(puddles);
+         }
+         Log.info("harness: puddles pinned to " + puddles + " (wet ground + puddle size, admin override)");
+      }
+      if ("on".equals(lights)) {
+         lightsOn();
+      }
+   }
+
+   /** fire=N: N fires in a row 4 tiles south-east of the player, 2 tiles apart (IsoFireManager, may spread). */
+   private static void startFires() {
+      try {
+         IsoPlayer p = IsoPlayer.getInstance();
+         zombie.iso.IsoCell cell = zombie.iso.IsoWorld.instance.currentCell;
+         int px = (int)p.getX(), py = (int)p.getY(), pz = (int)p.getZ(), lit = 0;
+         for (int i = 0; i < fires; i++) {
+            zombie.iso.IsoGridSquare sq = cell.getGridSquare(px + 4 + 2 * i, py + 4 - i, pz);
+            if (sq != null) {
+               zombie.iso.objects.IsoFireManager.StartFire(cell, sq, true, 100);
+               lit++;
+            }
+         }
+         Log.info("harness: fire=" + fires + ": " + lit + " fires started near " + px + "," + py + "," + pz);
+      } catch (Exception e) {
+         Log.warn("harness: fire start failed: " + e);
+      }
+   }
+
+   /** lights=on: grid power on, then every light switch within 50 tiles (levels 0-3) switched on, electricity check ignored. */
+   private static void lightsOn() {
+      try {
+         zombie.iso.IsoWorld.instance.setHydroPowerOn(true);
+         IsoPlayer p = IsoPlayer.getInstance();
+         zombie.iso.IsoCell cell = zombie.iso.IsoWorld.instance.currentCell;
+         int px = (int)p.getX(), py = (int)p.getY(), on = 0;
+         for (int z = 0; z < 4; z++) {
+            for (int y = py - 50; y <= py + 50; y++) {
+               for (int x = px - 50; x <= px + 50; x++) {
+                  zombie.iso.IsoGridSquare sq = cell.getGridSquare(x, y, z);
+                  if (sq == null) {
+                     continue;
+                  }
+                  for (int i = 0; i < sq.getObjects().size(); i++) {
+                     if (sq.getObjects().get(i) instanceof zombie.iso.objects.IsoLightSwitch ls && !ls.isActivated()) {
+                        ls.setActive(true, false, true);
+                        on++;
+                     }
+                  }
+               }
+            }
+         }
+         Log.info("harness: lights=on: hydro power on, " + on + " light switches switched on within 50 tiles of " + px + "," + py);
+      } catch (Exception e) {
+         Log.warn("harness: lights on failed: " + e);
+      }
    }
 
    /** helicopter=true: the stock event, started at the route start and placed 40 tiles from the player. */
@@ -440,7 +515,7 @@ public final class Scene {
    }
 
    static boolean requested() {
-      return timeOfDay >= 0f || !weather.isEmpty() || fog >= 0f || !torch.isEmpty() || visible || population >= 0f || carSpawn > 0 || seeAll || zombiesOff || soundRadius > 0 || helicopter;
+      return timeOfDay >= 0f || !weather.isEmpty() || fog >= 0f || !torch.isEmpty() || visible || population >= 0f || carSpawn > 0 || seeAll || zombiesOff || soundRadius > 0 || helicopter || fires > 0 || !lights.isEmpty() || headlights || puddles >= 0F;
    }
 
    /** Flag see_all=true: read by the LightingJNI override on every player update (false until apply() ran). */

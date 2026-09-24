@@ -1,0 +1,7 @@
+[sweep]
+sdr light=0 itm=0 bloom=0 glint=0 sunMax=1
+g0 glint=0 sunMax=1
+nosun sunMax=1
+gzero sunMax=1 sunGlint=0 skyReflect=0 lampGlint=0 carGlass=0 carPaint=0 vehLamp=0
+gsky sunMax=1 sunGlint=0 lampGlint=0 carGlass=0 carPaint=0 vehLamp=0
+sdr2 light=0 itm=0 bloom=0 glint=0 sunMax=1

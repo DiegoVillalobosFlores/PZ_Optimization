@@ -1,0 +1,12 @@
+# first sweep: every set is dumped on the same held frame (shot_at)
+[sweep]
+sdr itm=0 paperPct=100
+base
+paper70 paperPct=70
+paper50 paperPct=50
+thrlow thresholdNight=0.08 thresholdDay=0.4
+curve1 curve=1.2
+lumkey chroma=0
+maxkey chroma=1
+sat15 saturation=0.15
+p60strong paperPct=60 curve=1.5 thresholdNight=0.12 chroma=0.8

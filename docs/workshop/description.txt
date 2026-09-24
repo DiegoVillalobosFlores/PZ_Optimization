@@ -8,7 +8,9 @@ https://github.com/xD3I/PZ_Optimization
 [url=https://github.com/xD3I/PZ_Optimization#readme][img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/00-showcase-thumbnail.gif[/img][/url]
 [i]Uncapped at 5120x2160, the in-game overlay (F9 / L3 + R3) live at the bottom; video on the repository page.[/i]
 
-[h1]New! HDR output (Linux, macOS)[/h1]
+[h1]New! Power efficiency[/h1]
+[img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/25-power-efficiency.jpg[/img]
+
 [img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/24-hdr.jpg[/img]
 
 [img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/23-zombie-detail.jpg[/img]
@@ -78,7 +80,7 @@ Left: stock, cap removed. Right: the overrides, uncapped. Big number = 1 s avera
 [h1]Compared with the other performance mods[/h1]
 The most-subscribed Build 42 performance mods on the same three routes (120 km/h drive, the drive in a thunderstorm, a Rosewood spin), uncapped, one at a time; fps mean / p99 frame time:
 [img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/10-workshop-mods-comparison.jpg[/img]
-All of them measure within noise of stock: [b]Project Zomboid Optimiser[/b] (Lua debug toggles, shader copies), [b]Tempo[/b] (chunk finalizing, not the queue wait that is the tail), [b]Multi-Cpu Enhance[/b] (a ParallelGC launcher JSON: 300 ms pauses, worse than stock), [b]Every Texture Optimized[/b] (VRAM, not frame time), [b]Lugli[/b] and [b]Zed's Better FPS[/b] (ZombieBuddy patches off the per-frame chunk, tree and translucent drawing). This item: 481 / 246 / 456 fps, p99 8.8 / 13.8 / 8.5 ms.
+All of them measure within noise of stock: [b]Project Zomboid Optimiser[/b] (Lua debug toggles, shader copies), [b]Tempo[/b] (chunk finalizing), [b]Multi-Cpu Enhance[/b] (ParallelGC: 300 ms pauses, worse than stock), [b]Every Texture Optimized[/b] (VRAM, not frame time), [b]Lugli[/b] and [b]Zed's Better FPS[/b] (ZombieBuddy patches off the per-frame drawing). This item: 481 / 246 / 456 fps, p99 8.8 / 13.8 / 8.5 ms.
 
 [h1]This build[/h1]
 Game revision @REV@ (Build @VERSION@), repository commit @COMMIT@, @NFILES@ files, zip sha256 @SHA@.

@@ -126,6 +126,10 @@ lost its `[h1]`, the upscaler card's "Helps when ..." line went (page 7,890 subs
 (`docs/media/hdr-card.png` from `harness/hdr-card.py`: stock SDR vs HDR at the defaults, panel nits of the panes of
 `docs/media/hdr-stock-vs-hdr-vs-enhanced.mp4` (runs `hdrvid-*`) and the frame cost of `hdrperf-off` / `hdrperf-enc-false`; 2026-09-24,
 release ecc868d): the zombie-detail card lost its `[h1]`, the upscaler caption lost its console line (page 7,847 substituted characters).
+`25` the "New! Power efficiency" card (`docs/media/power-efficiency.png` from `harness/power-table.py`: package power at a
+120 fps cap on the 100 s walk, stock / the previous release / this one, the flip in balanced and power-saver and the MacBook's
+system power, runs of `docs/findings-ecores-2026-09-24.md`; 2026-09-24): the HDR card lost its `[h1]`, the mods-comparison
+caption lost three parentheticals (page 7,873 substituted characters).
 `description.txt` embeds them with `[img]` from the raw GitHub URL of `master`,
 so they render only after the folder is pushed. The same files go in the item's own carousel:
 on the Workshop page, "Add/edit images & videos" takes the JPGs (upload `00` first, it becomes

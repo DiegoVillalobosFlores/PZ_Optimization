@@ -11,7 +11,9 @@ description=
 description=[url=https://github.com/xD3I/PZ_Optimization#readme][img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/00-showcase-thumbnail.gif[/img][/url]
 description=[i]Uncapped at 5120x2160, the in-game overlay (F9 / L3 + R3) live at the bottom; video on the repository page.[/i]
 description=
-description=[h1]New! Zombie detail follows the frame cap[/h1]
+description=[h1]New! HDR output (Linux)[/h1]
+description=[img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/24-hdr.jpg[/img]
+description=
 description=[img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/23-zombie-detail.jpg[/img]
 description=
 description=[img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/22-vrr.jpg[/img]
@@ -26,7 +28,7 @@ description=[img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/d
 description=
 description=[img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/17-upscaler.jpg[/img]
 description=The world renders smaller (Quality 67 %, Performance 50 % per axis) and is scaled up under the full-resolution UI. FSR 1.0: any GPU, ~0.1 ms; DLSS: RTX (see the README), also accumulates detail across frames.
-description=Turn it on: Options > Optimizations > Upscaling > Upscaler = fsr1, pick the quality, restart (console.txt: "[pzopt] upscaler: fsr1 at 50 %").
+description=Turn it on: Options > Optimizations > Upscaling > Upscaler = fsr1, pick the quality, restart.
 description=
 description=[h1]What it does[/h1]
 description=Project Zomboid loads and bakes the map in chunks; on stock, the loading, baking and lighting work of a busy screen lands in the same frame and shows as stutter while driving or turning. These overrides move that work off the game thread, spread it over frames, and cache what stock recomputes every frame (puddles, rain, cutaways, lights, sound zones). At 5120x2160 on an RTX 4090: driving p99 frame time 19 -> 8 ms, uncapped ~270 -> ~500 fps, thunderstorms 83 -> 188 fps.
@@ -41,7 +43,7 @@ description=Launch to main menu and Continue to world ready, same save: stock 7.
 description=[img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/01-boot-load.jpg[/img]
 description=
 description=[h1]How it works[/h1]
-description=The launcher (ProjectZomboid64.json) searches the game folder before projectzomboid.jar, so a loose .class file with the same name as one in the jar replaces it. The item holds those files (470 files: 86 shadowed game classes, the pzopt package, Lua, preview clips, a manifest) under [b]pzopt-classes[/b]; projectzomboid.jar is never modified. A guard checks the game revision and the sha256 of every shadowed stock class at start-up; on any difference the game runs as stock (one log line).
+description=The launcher (ProjectZomboid64.json) searches the game folder before projectzomboid.jar, so a loose .class file with the same name as one in the jar replaces it. The item holds those files (485 files: 87 shadowed game classes, the pzopt package, Lua, preview clips, a manifest) under [b]pzopt-classes[/b]; projectzomboid.jar is never modified. A guard checks the game revision and the sha256 of every shadowed stock class at start-up; on any difference the game runs as stock (one log line).
 description=
 description=[h1]Install on Windows[/h1]
 description=1. Subscribe, let Steam download the item, close the game.
@@ -82,6 +84,6 @@ description=[img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/d
 description=All of them measure within noise of stock: [b]Project Zomboid Optimiser[/b] (Lua debug toggles, shader copies), [b]Tempo[/b] (chunk finalizing, not the queue wait that is the tail), [b]Multi-Cpu Enhance[/b] (a ParallelGC launcher JSON: 300 ms pauses, worse than stock), [b]Every Texture Optimized[/b] (VRAM, not frame time), [b]Lugli[/b] and [b]Zed's Better FPS[/b] (ZombieBuddy patches off the per-frame chunk, tree and translucent drawing). This item: 481 / 246 / 456 fps, p99 8.8 / 13.8 / 8.5 ms.
 description=
 description=[h1]This build[/h1]
-description=Game revision b0bbce05d5 (Build 42.20.4), repository commit d01292e, 470 files, zip sha256 c1be00f567d1e44e8aae2b082ce6ab8c7eed30bd85efe7118ef07e9228de6b8c.
+description=Game revision b0bbce05d5 (Build 42.20.4), repository commit ecc868d, 485 files, zip sha256 f8065003c23042ee7989eb5384c2d61ed682b6755afeba2eca37a5d2fedccedd.
 tags=Build 42;
 visibility=public

@@ -183,6 +183,22 @@ echo "layout=$LAYOUT install=$PZ_DIR user-dir=$ZOMBOID"
 # peer's `queue.sh wait ...; grep ... ProjectZomboid64.json`: job 1484 (2026-09-23) waited 8.5 min after the game quit.
 GAME_PATTERN='^([^ ]*[/\\])?ProjectZomboid64(\.exe)?( |$)'
 if pgrep -f "$GAME_PATTERN" >/dev/null; then echo "the game is already running" >&2; exit 1; fi
+# A run that dies hard (SIGKILL, power cut, the whole-system freezes of 2026-09-22/24) never reaches the EXIT
+# trap, and the per-run pzopt.properties it wrote stays in the install dir: every later boot pins those keys in
+# the Optimizations tab, and a stock run's `enabled=false` leaves the mod OFF for the player (found 2026-09-24).
+# Recover here, before this run takes its own backup: a .pzopt-orig is the player's file, so it goes back;
+# a pzopt.properties identical to the last run's copy is ours, so it goes away; anything else is the player's.
+recover_props() {
+  if [[ -f "$PZ_DIR/pzopt.properties.pzopt-orig" ]]; then
+    mv -f "$PZ_DIR/pzopt.properties.pzopt-orig" "$PZ_DIR/pzopt.properties"
+    echo "previous run died before cleanup: restored the player's pzopt.properties"
+  elif [[ -f "$PZ_DIR/pzopt.properties" && -f "$RUNS/.last-props" ]] && cmp -s "$PZ_DIR/pzopt.properties" "$RUNS/.last-props"; then
+    rm -f "$PZ_DIR/pzopt.properties"
+    echo "previous run died before cleanup: removed its pzopt.properties"
+  fi
+  return 0
+}
+recover_props
 steam_logged_in() {
   pgrep -x steam >/dev/null || return 1
   local log="$HOME/.local/share/Steam/logs/connection_log.txt"
@@ -348,7 +364,8 @@ write_flags() {
 }
 write_flags
 
-# runtime settings for this run; the previous pzopt.properties comes back afterwards
+# runtime settings for this run; the previous pzopt.properties comes back afterwards (or at the next
+# run's start via recover_props, when this one dies without reaching the EXIT trap)
 if [[ -f "$PZ_DIR/pzopt.properties" ]]; then cp "$PZ_DIR/pzopt.properties" "$PZ_DIR/pzopt.properties.pzopt-orig"; fi
 printf '%s\n' "${props[@]}" > "$PZ_DIR/pzopt.properties"
 cp "$PZ_DIR/pzopt.properties" "$RUNS/.last-props" 2>/dev/null || true

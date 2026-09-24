@@ -403,6 +403,12 @@ window on the logged-in desktop; `open steam://rungameid/108600` from ssh does n
 
 - EXIT trap under `set -e`: a failing last command of an `&&` list aborts the restore.
   `restore()` does `set +e`. The maintainer's original MangoHud.conf was lost that way once.
+- A run killed outright (SIGKILL, power cut, whole-system freeze) never reaches the EXIT trap, and the
+  per-run `pzopt.properties` stays in the install dir: the Optimizations tab shows its keys pinned and a stock
+  `--prop enabled=false` run leaves the mod OFF for the player (2026-09-24, the 01:47 freeze). run.sh's
+  `recover_props` at start puts back `pzopt.properties.pzopt-orig` or removes a file identical to
+  `runs/.last-props`. The other `.pzopt-orig` backups (launcher JSON, options.ini, MangoHud.conf) are still
+  restored by hand after such a death.
 - Another session's run.sh EXIT trap can fire after you launched behind their game and strip
   your flags (game sits at the main menu). Check for run.sh processes, not just the game.
 - Do not add `no_display` or long lingers: The maintainer wants the overlay visible and the game to

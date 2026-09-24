@@ -3230,3 +3230,20 @@ Edits:
 - Seen once in eight runs, not addressed: `VehicleSoundOwner.hasAlarm` NPE (a vehicle without a script) in
   `VehiclesDB2.unloadChunk` on the streamer thread right after the harness teleport (run `pzmc-f3-ours-zb`); not on
   an agent worker and not in our code.
+
+## zombie.iso.IsoWorld.sceneCullZombies: zombie detail follows the frame cap (`zombieLodDynamic`, 2026-09-24)
+
+Stock gives the 510 nearest on-screen zombies a 3D model (the rest are scene-culled to the flat atlas sprite) and the
+first `PerformanceSettings.numberZombiesBlended` (20) of them animation blending, whatever the frame rate. With
+`zombieLodDynamic` (default off, maintainer's request) both counts follow the frame cap through `pzopt.ZombieLod`:
+one level 0..1 maps onto `zombieLodMin3d .. 510` models and `zombieLodMinBlend .. numberZombiesBlended` blended;
+every frame's game-thread step (`FrameCap.lastStepNs`, the limiter's wait excluded) is kept, and every 250 ms the
+level drops (8-24 %, more the further over; then no climbing for 2 s) when the window's median is above 97 % of the
+cap's budget (`FrameCap.lockNow()`), climbs 3 % when its 90th percentile is below 85 %, and holds otherwise (a first
+version on an 8-frame average swung between full detail and the floor every few seconds on Louisville). Uncapped the target is
+`zombieLodUncappedFps` (0 = stock detail). A console line every 5 s: `zombie lod: level .., 3d .., blended ..`.
+
+Edit: stock's unused local `tcountMax` becomes the dynamic model cap (`tcount < 510 && tcount < tcountMax`) and the
+blend test reads a local that is `numberZombiesBlended` unless the key lowers it. Both `510` literals stay, so
+ZBBetterFPS' cull-cap transformer (it rewrites exactly two `SIPUSH 510` sites and disables itself otherwise) still
+applies, and its lower counts win. `tests/pzopt/ZombieLodTest`.

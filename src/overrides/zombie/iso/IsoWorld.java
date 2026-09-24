@@ -2649,11 +2649,19 @@ public final class IsoWorld {
       int count = 0;
       int tcount = 0;
       int tcountMax = 510;
+      // pzopt: zombieLodDynamic, the model / blend counts follow the frame cap (pzopt.ZombieLod). Stock never read
+      // tcountMax; both 510 literals stay so a mod that rewrites them (ZBBetterFPS' cull cap) still caps below ours.
+      int pzoptBlended = PerformanceSettings.numberZombiesBlended; // pzopt
+      if (pzopt.ZombieLod.active()) { // pzopt
+         pzopt.ZombieLod.update(); // pzopt
+         tcountMax = Math.min(tcountMax, pzopt.ZombieLod.max3d()); // pzopt
+         pzoptBlended = pzopt.ZombieLod.blended(pzoptBlended); // pzopt
+      } // pzopt
       PerformanceSettings.animationSkip = 0;
 
       for (int n = 0; n < this.zombieWithModel.size(); n++) {
          IsoZombie z = (IsoZombie)this.zombieWithModel.get(n);
-         if (tcount < 510) {
+         if (tcount < 510 && tcount < tcountMax) { // pzopt: zombieLodDynamic's cap (510 without it)
             if (!z.ghost) {
                count++;
                tcount++;
@@ -2672,7 +2680,7 @@ public final class IsoWorld {
                   }
 
                   if (z.legsSprite.modelSlot.model.animPlayer != null) {
-                     if (tcount < PerformanceSettings.numberZombiesBlended) {
+                     if (tcount < pzoptBlended) { // pzopt: numberZombiesBlended, or zombieLodDynamic's lower count
                         z.legsSprite.modelSlot.model.animPlayer.doBlending = !z.isAlphaAndTargetZero(0)
                            || !z.isAlphaAndTargetZero(1)
                            || !z.isAlphaAndTargetZero(2)

@@ -195,6 +195,7 @@ PzoptOptionClasses = {
     reflexSleep = { "pzopt.LowLatency" },
     renderChunkPrewarm = { "FBORenderCell" },
     resumeShot = { "pzopt.ResumeShot" },
+    resumeShotDetail = { "SavefileThumbnail", "pzopt.ResumeShot" },
     roofHideDebounceFrames = { "FBORenderCutaways" },
     saveCellAsync = { "ZombiePopulationManager" },
     scriptParserFast = { "ScriptParser" },

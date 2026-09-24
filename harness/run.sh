@@ -87,7 +87,7 @@ FLAG_FILE="$ZOMBOID/Lua/pzopt-harness.txt"
 NATIVE_FLAG_FILE="${NATIVE_ZOMBOID:-$HOME/Zomboid}/Lua/pzopt-harness.txt"
 
 shot_at=""; label=""; quit_after=""; mode="verify"; source_save=""; extra_flags=(); props=(); mangohud_secs=""; mangohud_config=""
-record=0; jfr=0; jfr_period=""; jfr_settings=(); game_profiler=0; gc=""; no_dashboard=0; refresh_template=0; retries=2; renderer="nvidia"; game_env=(); lead=""; route_seconds=""; launcher="auto"; game_options=(); extra_mods=(); vmargs=()
+resume_shot=""; keep_save=0; resume_from=""; record=0; jfr=0; jfr_period=""; jfr_settings=(); game_profiler=0; gc=""; no_dashboard=0; refresh_template=0; retries=2; renderer="nvidia"; game_env=(); lead=""; route_seconds=""; launcher="auto"; game_options=(); extra_mods=(); vmargs=()
 schedmon=""; asprof=""
 preset=""; mode_set=0; pad_script=""; inputlag=0
 while [[ $# -gt 0 ]]; do
@@ -123,6 +123,10 @@ while [[ $# -gt 0 ]]; do
     --pad) pad_script="$2"; shift 2 ;;               # drive the menus with a virtual pad (see below)
     --inputlag) inputlag=1; pad_script="$2"; shift 2 ;; # in-game input-lag profile: uinput keyboard + mouse + pad (see below)
     --record) record=1; shift ;;
+    --resume-shot) resume_shot="$2"; shift 2 ;;
+    --keep-save) keep_save=1; shift ;;       # hard-link the bench save as the run's exit save left it into <run>/save (for --resume-from)
+    --resume-from) resume_from="$2"; shift 2 ;;  # a --keep-save run dir: its exit save (player position + resume shot) is this run's bench save  # dir with pzopt-resume.jpg/.properties[/-load.txt] (a run dir): copied into the bench save, so Continue shows that shot
+
     --launcher) launcher="$2"; shift 2 ;;                # auto|steam|direct (see the header)
     --wrap) wrap_cmd="$2"; shift 2 ;;                    # direct launcher only: command prefix for the game, e.g. "gamescope --hdr-enabled -f --" (HDR pass)
     --option) game_options+=("$2"); shift 2 ;;           # key=value written into ~/Zomboid/options.ini for the run (restored on exit)                     # screen recording of the run (gpu-screen-recorder, first monitor, native res, AV1 HDR) -> <run>/recording.mp4
@@ -300,9 +304,19 @@ else
     enable_mod "$TEMPLATE/mods.txt"
   fi
 fi
-echo "bench save: $BENCH_SAVE (template $(basename "$TEMPLATE"))"
+if [[ -n "$resume_from" ]]; then
+  [[ -d "$resume_from/save" ]] || { echo "--resume-from: no save/ in $resume_from (run it with --keep-save)" >&2; exit 2; }
+  TEMPLATE="$(cd "$resume_from/save" && pwd)"
+fi
+echo "bench save: $BENCH_SAVE (template ${resume_from:+the exit save of }$(basename "${resume_from:-$TEMPLATE}"))"
 rm -rf "$ZOMBOID/Saves/$BENCH_SAVE"
 cp -r "$TEMPLATE" "$ZOMBOID/Saves/$BENCH_SAVE"
+if [[ -n "$resume_shot" ]]; then
+  [[ -f "$resume_shot/pzopt-resume.jpg" && -f "$resume_shot/pzopt-resume.properties" ]] || { echo "--resume-shot: no pzopt-resume.jpg/.properties in $resume_shot" >&2; exit 2; }
+  cp "$resume_shot"/pzopt-resume.jpg "$resume_shot"/pzopt-resume.properties "$ZOMBOID/Saves/$BENCH_SAVE/"
+  if [[ -f "$resume_shot/pzopt-resume-load.txt" ]]; then cp "$resume_shot/pzopt-resume-load.txt" "$ZOMBOID/Saves/$BENCH_SAVE/"; fi
+  echo "bench save: resume shot from $resume_shot"
+fi
 (( no_dashboard )) && disable_dashboard "$ZOMBOID/Saves/$BENCH_SAVE/mods.txt"  # the save is rebuilt from the template every run; nothing to restore
 (( ${#extra_mods[@]} )) && enable_extra_mods "$ZOMBOID/Saves/$BENCH_SAVE/mods.txt"
 
@@ -776,6 +790,15 @@ cp "$LAUNCHER" "$out/ProjectZomboid64.json"
 for g in "$PZ_DIR"/gc.log "$PZ_DIR"/gc.log.[0-9]*; do
   [[ -f "$g" ]] || continue
   if [[ "$(stat -c %Y "$g")" -ge "$launch_epoch" ]]; then cp "$g" "$out/$(basename "$g")"; fi
+done
+if (( keep_save )); then
+  # hard links when the run dir is on the save's filesystem, else a plain copy (~330 MB for the bench save)
+  if cp -al "$ZOMBOID/Saves/$BENCH_SAVE" "$out/save" 2>/dev/null; then echo "exit save kept: $out/save (hard links)"
+  else rm -rf "$out/save"; cp -a "$ZOMBOID/Saves/$BENCH_SAVE" "$out/save" && echo "exit save kept: $out/save (copy)"; fi
+fi
+# the resume shot this run's exit save wrote (pzopt.ResumeShot), for a later --resume-shot
+for g in "$ZOMBOID/Saves/$BENCH_SAVE"/pzopt-resume.jpg "$ZOMBOID/Saves/$BENCH_SAVE"/pzopt-resume.properties "$ZOMBOID/Saves/$BENCH_SAVE"/pzopt-resume-load.txt; do
+  if [[ -f "$g" && "$(stat -c %Y "$g")" -ge "$launch_epoch" ]]; then cp "$g" "$out/"; fi
 done
 if [[ -f "$ASPROF_OUT" ]]; then mv "$ASPROF_OUT" "$out/asprof.jfr"; fi
 if (( jfr )); then

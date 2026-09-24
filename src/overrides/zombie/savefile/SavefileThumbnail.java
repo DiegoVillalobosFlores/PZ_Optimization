@@ -100,20 +100,25 @@ public final class SavefileThumbnail {
    }
 
    /**
-    * pzopt: resumeShot. One extra world render at the player's zoom with FBORenderCell drawing ground-level floors only
-    * (every chunk level invalidated before, so they re-bake that way, and after, so they re-bake whole), composited to the
-    * back buffer and read back by pzopt.ResumeShot's drawer. Exit saves only: the re-bakes are a long frame.
+    * pzopt: resumeShot. One extra world render at the player's zoom with FBORenderCell drawing what resumeShotDetail keeps
+    * (ResumeShot.beginCapture; floors = ground-level floors only; every chunk level invalidated before, so they re-bake
+    * that way, and after, so they re-bake whole), composited to the back buffer and read back by pzopt.ResumeShot's
+    * drawer. Exit saves only: the re-bakes are a long frame.
     */
    private static void pzoptCaptureFloor(int playerIndex) {
       pzoptInvalidateChunks(playerIndex);
-      pzopt.ResumeShot.floorOnly = true;
+      pzopt.ResumeShot.beginCapture();
       creatingThumbnail = true;
-      // the ground under a building's upper floors is occlusion-culled (drawn black) and the building is not drawn here
+      // floors: the ground under a building's upper floors is occlusion-culled (drawn black) and the building is not drawn
+      // here, so occlusion is off; the other levels draw the buildings and keep the frame's own occlusion
       boolean pzoptOcclusionWas = zombie.iso.fboRenderChunk.FBORenderCell.pzoptSetOcclusion(false);
+      if (!pzopt.ResumeShot.floorOnly) {
+         zombie.iso.fboRenderChunk.FBORenderCell.pzoptSetOcclusion(pzoptOcclusionWas);
+      }
       try {
          SpriteRenderer.instance.drawGeneric(pzopt.RenderScale.SUSPEND);
          renderWorld(playerIndex, true, false);
-         pzopt.Log.info("resume shot: floor capture frame " + zombie.iso.fboRenderChunk.FBORenderCell.instance.pzoptFrameBakeCounters());
+         pzopt.Log.info("resume shot: " + pzopt.Config.RESUME_SHOT_DETAIL + " capture frame " + zombie.iso.fboRenderChunk.FBORenderCell.instance.pzoptFrameBakeCounters());
          SpriteRenderer.instance.drawGeneric(pzopt.RenderScale.RESUME);
          Core.getInstance().RenderOffScreenBuffer();
          pzopt.ResumeShot.queueCapture(playerIndex);
@@ -121,7 +126,7 @@ public final class SavefileThumbnail {
          pzopt.Log.warn("resume shot: floor capture failed: " + t);
       } finally {
          creatingThumbnail = false;
-         pzopt.ResumeShot.floorOnly = false;
+         pzopt.ResumeShot.endCapture();
          zombie.iso.fboRenderChunk.FBORenderCell.pzoptSetOcclusion(pzoptOcclusionWas);
          pzoptInvalidateChunks(playerIndex);
       }

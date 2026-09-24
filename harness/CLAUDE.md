@@ -140,6 +140,17 @@ are entirely black; the control is a same-route run with the suspect key off (20
 the black chunk squares, runs `bs-*`). Two captures 2 s apart tell a baked artifact (identical)
 from a per-frame one.
 
+`--resume-shot <dir>` (2026-09-24): the bench save is rebuilt from its template every run, so no run starts with a
+resume shot (`pzopt.ResumeShot`) and Continue shows the plain black frame. The option copies `pzopt-resume.jpg`,
+`.properties` and `-load.txt` from `<dir>` into the fresh bench save; every run collects the shot its own exit save wrote
+into its run dir. Recipe: run A `--flag route=S:1 --flag speed=1 --route-seconds 1` (exit shot at the start square), then
+run B the same `--record --resume-shot <A's run dir>`; runs `resume-capture-20260924-124201`, `resume-fake-20260924-124801`.
+The live world's build-up for comparison: `--prop resumeShot=false --prop overlay=false --record` (run `worldload-rec2`).
+Somewhere else than the save's own spot: run A `--flag start=X,Y --flag settle=10 --keep-save` (the exit save, player
+position and shot included, hard-linked into `<run>/save`), run B `--resume-from <A's run dir>` (that save is the bench
+save, so Continue loads at X,Y). Submit both as queue `run` jobs, B after A. Real-save copies are a poor source: a
+player indoors, underground or at night leaves a mostly black shot (the capture is ground-level floors as last seen).
+
 `--flag hold=N` (bench): after the last route leg the player stays on the end square N s before
 the run ends; `turn` keeps spinning the facing, so the camera is still while cutaways, fades and
 the obscuring set keep changing. The flicker rig (2026-09-20 evening, runs `flick-*`):
@@ -346,6 +357,7 @@ same window with `harness/mp/window.py <run>:27 ...`; results in `docs/archive/2
 | `gametree.py <run>` | JFR samples (`--jfr --jfr-period 1`) | inclusive call tree of the game thread over the route (`--root`, `--thread main` for the GL thread, `--callers method`, `--min-pct`) |
 | `loadtime.py <runs>` | pzopt-loadtrace.out | load-after-Continue phases side by side |
 | `loadsheet.sh <run>` | recording.mp4 + loadtrace | contact sheet around the load |
+| `revealmap.py <run> [--seconds S] [--geom <pzopt-resume.properties> --fit]` | recording.mp4 of a Continue (`--prop resumeShot=false --prop overlay=false` for the live world, the shot on for the fake one) | when each pixel appears after the black loading frame and stays: reveal curve, biggest per-frame steps, per-chunk first / median / last times and chunk arrivals per frame (grid fitted to the map with `--fit`), reveal time by distance, `<run>/revealmap.png` time map. Run `worldload-rec2` (2026-09-24): ~50 chunks whole, 267-533 ms after entry, 9 bursts, no spatial order — the model of `pzopt.ResumeShot`. A queue `media` job |
 | `parity.py a b` | pzopt-parity.out | square-by-square recalc diff |
 | `pacing.py <run>` | `pzopt-pacing.out` (`--prop instrument=true` or `pacingLog=true`) + `present.txt` / `vrr.txt` (Linux, written by every run.sh run: `presentprobe.c` = X Present CompleteNotify flip times of the game window, built on demand with `-lxcb -lxcb-present`; `vrrprobe.py` = DRM `VRR_ENABLED` per CRTC via libdrm, no DRM master) or Metal `presentedTime` (Mac bridge) | on-screen judder \|flip interval - sim step\|, frames off by > 2 ms, step -> screen latency, VRR on-share; ~1 ms mean is the floor at a fixed refresh (2026-09-24, `docs/archive/2026-09-24/findings-vrr-2026-09-24.md`) |
 | `blacktiles.py ctrl.png run.png...` | `--shot-at` captures | newly-black pixels and fully black 32 px tiles of a run against a control capture |

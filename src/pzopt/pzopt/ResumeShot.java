@@ -29,17 +29,17 @@ import zombie.iso.IsoCamera;
 import zombie.iso.IsoUtils;
 
 /**
- * resumeShot (2026-09-22, the maintainer's design: "the illusion of an instant load"): when the game exits, the ground
- * around the player (floors only, ground level, at the player's zoom: no walls, objects, trees, characters, vehicles, UI)
- * is kept next to the save with the chunk grid's screen geometry; Continue shows it at full brightness in the square of
- * chunks around the player that pzopt.CenterFirstLoad loads first (tiles popping in from the top-left to the bottom-right
- * of the screen as if those squares were loading, the rest black), and the live world (objects and all) then builds over it from the
+ * resumeShot (2026-09-22, the maintainer's design: "the illusion of an instant load"): when the game exits, the view
+ * around the player (at the player's zoom, no UI; what it keeps is resumeShotDetail: the whole frame by default, since
+ * 2026-09-24, or ground-level floors only, the first design) is kept next to the save with the chunk grid's screen geometry; Continue shows it at full brightness in the square of
+ * chunks around the player that pzopt.CenterFirstLoad loads first (whole chunks popping in, in random bursts, the way the
+ * live world builds itself on world entry, the rest black), and the live world (objects and all) then builds over it from the
  * centre outwards.
  *
- * Capture (SavefileThumbnail.create, exit saves only: Core.exiting or GameWindow.exit): floorOnly makes FBORenderCell
- * draw level 0 floors only; every chunk level is invalidated so they re-bake that way, the world is rendered once at the
- * player's zoom and composited, a render-thread drawer reads the back buffer, then floorOnly is cleared and the chunks are
- * invalidated again. A daemon thread scales the image to at most MAX_WIDTH wide and writes FILE plus GEOMETRY (the screen
+ * Capture (SavefileThumbnail.create, exit saves only: Core.exiting or GameWindow.exit): beginCapture's flags make
+ * FBORenderCell draw what resumeShotDetail keeps (floors: level 0 floors only); every chunk level is invalidated so they
+ * re-bake that way, the world is rendered once at the player's zoom and composited, a render-thread drawer reads the back
+ * buffer, then endCapture clears the flags and the chunks are invalidated again. A daemon thread scales the image to at most MAX_WIDTH wide and writes FILE plus GEOMETRY (the screen
  * position of the player's chunk corner and the screen vectors of one chunk step in world x and y, normalised to the
  * screen size).
  * Show: GameLoadingState.enter starts the decode on a daemon thread; the (noLoadingScreen) black loading frame draws the
@@ -54,8 +54,55 @@ public final class ResumeShot {
    static final int MAX_WIDTH = 1920;
    /** chunks around the player's chunk shown (the square pzopt.CenterFirstLoad loads first) */
    static final int SQUARE_RADIUS = CenterFirstLoad.RADIUS;
-   /** read by FBORenderCell on the game thread while the capture frame is recorded */
+   /*
+    * Read by FBORenderCell on the game thread while the capture frame is recorded (all false otherwise), set from
+    * resumeShotDetail: floors = ground-level floors only; buildings = every level's floors, walls, doors, furniture and
+    * items, no trees or translucent tiles; world = everything static, trees and translucent tiles included; full = the
+    * frame as seen, characters, vehicles and corpses too. Everything but "full" leaves out what moves.
+    */
+   /** the capture frame is being recorded (every level bakes in that one frame) */
+   public static volatile boolean capturing;
+   /** floors: ground-level floors only (no upper floors, walls, objects) */
    public static volatile boolean floorOnly;
+   /** floors, buildings: no trees */
+   public static volatile boolean noTrees;
+   /** floors, buildings: no translucent tiles */
+   public static volatile boolean noTranslucent;
+   /** every level but full: no players, characters, vehicles, corpses or their shadows */
+   public static volatile boolean noMoving;
+
+   /** resumeShotDetail as 0 (floors) .. 3 (full) */
+   static int detail() {
+      switch (Config.RESUME_SHOT_DETAIL) {
+         case "buildings":
+            return 1;
+         case "world":
+            return 2;
+         case "full":
+            return 3;
+         default:
+            return 0;
+      }
+   }
+
+   /** From SavefileThumbnail right before the capture frame. */
+   public static void beginCapture() {
+      int d = detail();
+      floorOnly = d == 0;
+      noTrees = d <= 1;
+      noTranslucent = d <= 1;
+      noMoving = d <= 2;
+      capturing = true;
+   }
+
+   /** From SavefileThumbnail after the capture frame. */
+   public static void endCapture() {
+      capturing = false;
+      floorOnly = false;
+      noTrees = false;
+      noTranslucent = false;
+      noMoving = false;
+   }
    /** set by GameWindow.exit before its save (the window-close path; Core.exiting covers the in-game quit) */
    public static volatile boolean exitSave;
 
@@ -296,8 +343,8 @@ public final class ResumeShot {
    }
 
    /**
-    * The square of chunks around the player's chunk, tile by tile, each cut out of the shot along its diamond (UVs = the
-    * corners' screen positions) and drawn as captured once shown (the rest of the screen stays black).
+    * The square of chunks around the player's chunk, chunk by chunk, each cut out of the shot along its diamond (UVs =
+    * the corners' screen positions) and drawn as captured once shown (the rest of the screen stays black).
     */
    private static void drawTiles(long t, float alpha) {
       float[] g = geom;
@@ -310,36 +357,24 @@ public final class ResumeShot {
       float v0 = texture.getYStart();
       float du = texture.getXEnd() - u0;
       float dv = texture.getYEnd() - v0;
-      float txx = g[2] / 8.0F; // one tile in world x, screen-normalised
-      float txy = g[3] / 8.0F;
-      float tyx = g[4] / 8.0F; // one tile in world y
-      float tyy = g[5] / 8.0F;
-      int lo = -SQUARE_RADIUS * 8;
-      int hi = (SQUARE_RADIUS + 1) * 8;
-      // the sweep runs along screen x + y (pixels): its range over the square's four corners
-      float sMin = Float.MAX_VALUE;
-      float sMax = -Float.MAX_VALUE;
-      for (int k = 0; k < 4; k++) {
-         int ci = (k & 1) == 0 ? lo : hi;
-         int cj = (k & 2) == 0 ? lo : hi;
-         float sc = (g[0] + ci * txx + cj * tyx) * sw + (g[1] + ci * txy + cj * tyy) * sh;
-         sMin = Math.min(sMin, sc);
-         sMax = Math.max(sMax, sc);
-      }
-      for (int i = lo; i < hi; i++) {
-         for (int j = lo; j < hi; j++) {
-            float x0 = g[0] + i * txx + j * tyx;
-            float y0 = g[1] + i * txy + j * tyy;
-            float sweep = ((x0 + (txx + tyx) * 0.5F) * sw + (y0 + (txy + tyy) * 0.5F) * sh - sMin) / (sMax - sMin);
-            if (!shown(i, j, t, sweep)) {
+      float cxx = g[2]; // one chunk in world x, screen-normalised
+      float cxy = g[3];
+      float cyx = g[4]; // one chunk in world y
+      float cyy = g[5];
+      float[] bursts = burstTimes(t);
+      for (int i = -SQUARE_RADIUS; i <= SQUARE_RADIUS; i++) {
+         for (int j = -SQUARE_RADIUS; j <= SQUARE_RADIUS; j++) {
+            if (!shown(i, j, t, bursts)) {
                continue;
             }
-            float x1 = x0 + txx;
-            float y1 = y0 + txy;
-            float x2 = x1 + tyx;
-            float y2 = y1 + tyy;
-            float x3 = x0 + tyx;
-            float y3 = y0 + tyy;
+            float x0 = g[0] + i * cxx + j * cyx;
+            float y0 = g[1] + i * cxy + j * cyy;
+            float x1 = x0 + cxx;
+            float y1 = y0 + cxy;
+            float x2 = x1 + cyx;
+            float y2 = y1 + cyy;
+            float x3 = x0 + cyx;
+            float y3 = y0 + cyy;
             SpriteRenderer.instance.renderPoly(texture, x0 * sw, y0 * sh, x1 * sw, y1 * sh, x2 * sw, y2 * sh, x3 * sw, y3 * sh,
                   1.0F, 1.0F, 1.0F, alpha,
                   u0 + x0 * du, v0 + y0 * dv, u0 + x1 * du, v0 + y1 * dv, u0 + x2 * du, v0 + y2 * dv, u0 + x3 * du, v0 + y3 * dv);
@@ -348,10 +383,12 @@ public final class ResumeShot {
    }
 
    /**
-    * the loading effect, looping: every tile pops in (no fade) at a delay within expandMs set by its place along a sweep
-    * from the square's top-left corner on screen to its bottom-right one, plus a random draw per tile and loop (JITTER),
-    * so neighbours appear out of order like streamed squares while the fill moves across the screen; after HOLD_MS they
-    * pop out the same way with a fresh draw, and after GAP_MS the next loop starts.
+    * the loading effect, looping, modelled on how the live world builds itself on world entry (the resumeShot=false
+    * recording of run worldload-rec2, 2026-09-24, harness/revealmap.py): whole chunks pop in (no fade, no tile-level
+    * order), in bursts of several chunks at once at uneven intervals, in no spatial order, so neighbours leave black
+    * holes that close later. Here every chunk draws one of BURSTS bursts at random per loop, the bursts are spread over
+    * expandMs by random gaps and the last one lands at expandMs; after HOLD_MS the chunks pop out the same way with a
+    * fresh draw, and after GAP_MS the next loop starts. (The live world does the same in ~270 ms: 50 chunks in 9 bursts.)
     * expandMs is FILL_SHARE of this save's last loading-frame-to-world-entry time (LOAD_TIME, written by onWorldEntered),
     * so the square is complete just before the world appears; DEFAULT_EXPAND_MS before the first measured Continue.
     * The stored time is the average of the last value and this load's, and a load that beats the pace finishes the fill
@@ -366,22 +403,46 @@ public final class ResumeShot {
    private static volatile float expandMs = DEFAULT_EXPAND_MS;
    /** this save's stored load time as read (0 = none); the new one is averaged with it so one slow load does not set the pace */
    private static volatile long lastLoadMs;
-   /** tiles still black at world entry pop in within this */
+   /** chunks still black at world entry pop in within this */
    static final float FINISH_MS = 300.0F;
-   /** share of a tile's delay drawn at random (the rest follows its place along the sweep) */
-   static final float JITTER = 0.35F;
+   /** bursts per fill (the live world: 9 for the ~50 chunks on screen) */
+   static final int BURSTS = 9;
+   /** the gaps between bursts vary from GAP_MIN to GAP_MIN + 1 (relative; the live world's ran 17-67 ms) */
+   static final float GAP_MIN = 0.35F;
 
    /**
-    * whether tile i, j (relative to the player's chunk corner) is shown at time t; d is its place along the sweep, 0 at
-    * the square's top-left corner on screen, 1 at its bottom-right one
+    * the cycle-relative times (ms) of this loop's bursts at time t: BURSTS pop-in times, then BURSTS pop-out times, each
+    * run ending exactly at the end of its fill
     */
-   static boolean shown(int i, int j, long t, float d) {
+   static float[] burstTimes(long t) {
+      float e = expandMs;
+      float cycle = e + HOLD_MS + e + GAP_MS;
+      long loop = t / (long)cycle;
+      float[] b = new float[2 * BURSTS];
+      for (int pass = 0; pass < 2; pass++) {
+         long draw = loop * 2L + pass;
+         float sum = 0.0F;
+         for (int k = 0; k < BURSTS; k++) {
+            sum += GAP_MIN + rand(k, 1000, draw);
+            b[pass * BURSTS + k] = sum;
+         }
+         float start = pass == 0 ? 0.0F : e + HOLD_MS;
+         for (int k = 0; k < BURSTS - 1; k++) {
+            b[pass * BURSTS + k] = start + e * b[pass * BURSTS + k] / sum;
+         }
+         b[pass * BURSTS + BURSTS - 1] = start + e; // exactly the end of the fill (drawOverWorld draws at ceil(e))
+      }
+      return b;
+   }
+
+   /** whether chunk i, j (relative to the player's chunk) is shown at time t, given burstTimes(t) */
+   static boolean shown(int i, int j, long t, float[] bursts) {
       float e = expandMs;
       float cycle = e + HOLD_MS + e + GAP_MS;
       long loop = t / (long)cycle;
       float p = t % cycle;
-      float in = ((1.0F - JITTER) * d + JITTER * rand(i, j, loop * 2L)) * e;
-      float out = e + HOLD_MS + ((1.0F - JITTER) * d + JITTER * rand(i, j, loop * 2L + 1L)) * e;
+      float in = bursts[Math.min(BURSTS - 1, (int)(rand(i, j, loop * 2L) * BURSTS))];
+      float out = bursts[BURSTS + Math.min(BURSTS - 1, (int)(rand(i, j, loop * 2L + 1L) * BURSTS))];
       return p >= in && p < out;
    }
 
@@ -454,14 +515,14 @@ public final class ResumeShot {
          releaseIn = 8; // queued frames still draw it
          return;
       }
-      // tiles the load outran pop in within FINISH_MS of world entry, then the square stays whole until it fades
+      // chunks the load outran pop in within FINISH_MS of world entry, then the square stays whole until it fades
       float te = enteredMs - revealStartMs;
       float t = System.currentTimeMillis() - revealStartMs;
       float e = expandMs;
       if (t > te && te < e) {
          t = te + (t - te) * (e - te) / FINISH_MS;
       }
-      drawTiles((long)Math.min(t, e), a);
+      drawTiles((long)Math.ceil(Math.min(t, e)), a); // expandMs has a fraction: truncating hid the last burst
    }
 
    /** Per game frame from NoLoadingScreen. */

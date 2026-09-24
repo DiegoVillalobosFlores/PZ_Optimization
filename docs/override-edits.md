@@ -2795,14 +2795,30 @@ inside `IngameState.enter`, ~0.65 s before the first world frame (stock runs inc
   `pzoptSetOcclusion` flips the package-private occlusion switch; `pzoptFrameBakeCounters` logs the capture frame.
 - `zombie.gameStates.GameLoadingState`: `enter` starts decoding the save's shot; `render` draws a black frame plus
   `ResumeShot.draw` when the save has a shot (no error screens pending), else the stock loading screen. The shot shows
-  the 7 x 7 chunks around the player tile by tile at full brightness, the rest black: every tile popping in (no
-  fade) at a delay that is 65 % its place along a sweep from the square's top-left corner on screen to its bottom-right
-  one and 35 % a random draw per tile, over 85 % of this save's last loading time (`pzopt-resume-load.txt`, written at world
+  the 7 x 7 chunks around the player at full brightness, the rest black: whole chunks popping in (no fade), each in one
+  of 9 bursts drawn at random, the bursts spread by random gaps, over 85 % of this save's last loading time (`pzopt-resume-load.txt`, written at world
   entry, averaged with the previous value; 3 s before the first measured Continue), so the square is whole just
   before the world appears. `org.lwjglx.opengl.Display.imguiEndFrame` keeps drawing it over the world (tiles the load
   outran pop in within 0.3 s), its opacity falling as the chunk map lights up (full up to 20 % lit, gone at 80 % or
   after 3 s); the texture is freed a few frames later.
 - `zombie.GameWindow.exit` sets `ResumeShot.exitSave` before its save.
+- `resumeShotDetail` (2026-09-24, the maintainer: "different level of details in the screenshots"): what the exit capture
+  keeps. `ResumeShot.beginCapture` sets flags FBORenderCell reads during the capture frame instead of the one `floorOnly`:
+  `floors` (as before: ground-level floors, occlusion off), `buildings` (every level's floors, walls, doors,
+  furniture, items; `renderMinusFloor` skips `IsoTree`, `pzoptBakeTrees` and both translucent passes are skipped),
+  `world` (everything static, trees and translucent tiles included), `full` (players, characters, vehicles, corpses and
+  their shadows too; the default since the maintainer picked it from the four-level video, 2026-09-24). The bake's "Minus Floor Chars" block draws the static objects (walls, doors, furniture, lamp
+  posts, items; the characters are the moving-objects pass), so only `floors` skips it; mapping it to "no characters"
+  first cut every wall from the buildings / world shots. Only `floors` turns occlusion off (the other levels draw the
+  buildings, so the frame keeps its own cutaways); the bake budget is 0 in every capture frame (`ResumeShot.capturing`).
+- The fill-in copies the live world's own build-up (2026-09-24, the maintainer's request: "record a video of how the
+  game loads the world and use that as a base for the fake loading screen"). Run `worldload-rec2` (`--prop
+  resumeShot=false --prop overlay=false --record`, 240 cap) through `harness/revealmap.py <run> --geom <zoom-1 geometry>
+  --fit` (the time each pixel turns on and stays on after world entry, the chunk grid fitted to the time map): the ~50
+  chunks on screen arrived whole (each chunk one reveal time), 267-533 ms after world entry, in 9 bursts of 1-14 chunks
+  17-67 ms apart, in no spatial order (neighbours left L / T shaped black holes; the outer chunks even came slightly
+  first). The shot's first version (a per-tile top-left to bottom-right sweep with 35 % jitter) looked like nothing the
+  game does.
 - `pzopt.NoLoadingScreen` also runs the lighting thread at 240 fps (the player's `lightFPS`, 15 by default, otherwise)
   from world entry until the world is complete or 3 s, by writing the field, so options never save the boosted value.
 

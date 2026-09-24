@@ -54,19 +54,19 @@ public final class Mouse {
    }
 
    public static synchronized int getXA() {
-      return x;
+      return pzopt.Showcase.aimOverride ? pzopt.Showcase.aimXA : x; // pzopt: harness showcase=horde aims the game's mouse at a zombie
    }
 
    public static synchronized int getYA() {
-      return y;
+      return pzopt.Showcase.aimOverride ? pzopt.Showcase.aimYA : y; // pzopt: harness showcase=horde aims the game's mouse at a zombie
    }
 
    public static synchronized int getX() {
-      return (int)(x * Core.getInstance().getZoom(0));
+      return (int)((pzopt.Showcase.aimOverride ? pzopt.Showcase.aimXA : x) * Core.getInstance().getZoom(0)); // pzopt: harness showcase aim
    }
 
    public static synchronized int getY() {
-      return (int)(y * Core.getInstance().getZoom(0));
+      return (int)((pzopt.Showcase.aimOverride ? pzopt.Showcase.aimYA : y) * Core.getInstance().getZoom(0)); // pzopt: harness showcase aim
    }
 
    public static boolean isButtonKey(int key) {
@@ -196,6 +196,11 @@ public final class Mouse {
             }
 
             buttonDownStates[i] = state.isButtonDown(i);
+         }
+
+         if (pzopt.Showcase.holdButtons && buttonDownStates.length > 1) { // pzopt: harness showcase=horde, a player holding aim and pulling the trigger
+            buttonDownStates[0] = pzopt.Showcase.fireDown; // pzopt: harness showcase fire (left)
+            buttonDownStates[1] = true; // pzopt: harness showcase aim (right)
          }
 
          if (buttonDownStates[1]) {

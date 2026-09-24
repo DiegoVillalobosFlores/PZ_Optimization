@@ -567,6 +567,7 @@ public final class Harness {
                   goUpstairs(p, upstairs); // dev: upper-floor rig (issue #12, FSR black squares upstairs)
                }
                Scene.routeStart(nowNs);
+               Showcase.routeStart(p); // showcase=horde: the HDR horde video scene
                chunksAtStart = Stats.chunkCount();
                runStartNs = nowNs;
                runStartEpochMs = System.currentTimeMillis();
@@ -665,7 +666,7 @@ public final class Harness {
             // teleport tools use); it also takes the player out of a vehicle,
             // which plain setX/setY does not survive
             boolean holding = leg >= legs.size() && holdSecs > 0f;
-            if (!holding && ((int)x != p.getXi() || (int)y != p.getYi())) {
+            if (!holding && !Showcase.active() && ((int)x != p.getXi() || (int)y != p.getYi())) { // showcase=horde moves the player itself
                // no teleports during the hold: the player may walk away from the end square (manual tests)
                p.teleportTo((int)x, (int)y, routeZ);
             }

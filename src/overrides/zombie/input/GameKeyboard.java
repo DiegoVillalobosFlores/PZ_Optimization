@@ -135,6 +135,8 @@ public final class GameKeyboard {
          return Mouse.isButtonDownUICheck(key - 10000);
       } else if (Core.currentTextEntryBox != null && Core.currentTextEntryBox.isDoingTextEntry()) {
          return false;
+      } else if (pzopt.Showcase.keyHeld(key)) { // pzopt: harness showcase=horde, the director's movement keys
+         return true;
       } else {
          return down == null ? false : down[key];
       }

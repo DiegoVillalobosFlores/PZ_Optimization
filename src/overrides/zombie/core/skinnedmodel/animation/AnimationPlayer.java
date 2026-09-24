@@ -758,7 +758,8 @@ public final class AnimationPlayer extends PooledObject {
 
    /** pzopt: pzopt.AnimBatch eligibility: no parent player to copy from, no ragdoll, no recorder. */
    public boolean pzoptBatchable() {
-      return this.parentPlayer == null && !this.isRagdolling() && !this.isRecording() && this.ragdollController == null;
+      // pzopt: nor a ragdoll track: its controller calls the Bullet library, game thread only (showcase crash, 2026-09-24)
+      return this.parentPlayer == null && !this.isRagdolling() && !this.isRecording() && this.ragdollController == null && !this.multiTrack.containsAnyRagdollTracks();
    }
 
    private SharedSkeleAnimationTrack determineCurrentSharedSkeleTrack() {
@@ -874,6 +875,9 @@ public final class AnimationPlayer extends PooledObject {
          AnimationTrack ragdollTrack = this.multiTrack.getActiveRagdollTrack();
          if (ragdollTrack == null) {
             this.releaseRagdollController();
+         } else if (this.ragdollController == null && pzopt.AnimParallel.offGameThread()) { // pzopt: a ragdoll that starts on a frame worker
+            // pzopt: waits one frame for the game thread (pzoptBatchable refuses ragdoll tracks): the controller calls the Bullet
+            // library, which is not thread-safe (btDiscreteDynamicsWorld::calculateSimulationIslands crash, showcase-t3 / -t4-nobones)
          } else {
             ProfileArea var3 = GameProfiler.getInstance().profile("AnimationPlayer.updateRagdoll");
 
@@ -936,6 +940,7 @@ public final class AnimationPlayer extends PooledObject {
                this.character.doDeferredMovementFromRagdoll(this.deferredMovementFromRagdoll);
             }
 
+            pzopt.AnimParallel.noteRagdoll("stepped"); // pzopt: evidence rig, ragdoll physics off the game thread
             ragdollController.update(deltaT, this.ragdollWorldPosition, this.ragdollWorldRotation);
          }
       }
@@ -1690,6 +1695,7 @@ public final class AnimationPlayer extends PooledObject {
    private void initRagdollController() {
       if (this.ragdollController == null) {
          if (this.canRagdoll()) {
+            pzopt.AnimParallel.noteRagdoll("controller created"); // pzopt: evidence rig, ragdoll physics off the game thread
             RagdollController ragdollController = RagdollController.alloc();
             ragdollController.setGameCharacterObject(this.getIsoGameCharacter());
             if (this.getIsoGameCharacter() != null) {
@@ -1727,6 +1733,7 @@ public final class AnimationPlayer extends PooledObject {
 
    public void releaseRagdollController() {
       if (this.pzoptInFlight) { pzopt.AnimBatch.guard(); } // pzopt: animBatchAsync, join the bone batch before a game-thread touch
+      if (this.ragdollController != null) { pzopt.AnimParallel.noteRagdoll("controller released"); } // pzopt: evidence rig, ragdoll physics off the game thread
       this.ragdollController = (RagdollController)Pool.tryRelease(this.ragdollController);
       if (this.ragdollAnimationClip != null) {
          this.ragdollAnimationClip.setRagdollSimulationActive(false);

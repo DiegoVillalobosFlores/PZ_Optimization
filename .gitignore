@@ -27,6 +27,8 @@ __pycache__/
 docs/media/drive-60-120kmh-stock-vs-optimized-quad.mp4
 docs/media/hdr-stock-vs-hdr-vs-enhanced.mp4
 docs/media/hdr-showcase-sdr-vs-hdr.mp4
+docs/media/hdr-horde-cinematic-jev.mp4
+docs/media/hdr-horde-cinematic-jev-1080.mp4
 # async-profiler library for run.sh --asprof (third-party binary, fetched locally)
 harness/asprof/
 harness/presentprobe

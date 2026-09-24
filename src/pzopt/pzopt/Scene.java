@@ -107,6 +107,7 @@ public final class Scene {
       timeOfDay = Float.parseFloat(HarnessFlags.get("time_of_day", "-1"));
       weather = HarnessFlags.get("weather", "").trim().toLowerCase(java.util.Locale.ROOT);
       fog = parseFog(HarnessFlags.get("fog", ""));
+      fogTintDark = "dark".equalsIgnoreCase(HarnessFlags.get("fog_tint", "").trim());
       torch = HarnessFlags.get("torch", "").trim().toLowerCase(java.util.Locale.ROOT);
       thunderSecs = Float.parseFloat(HarnessFlags.get("thunder_secs", "6"));
       visible = Boolean.parseBoolean(HarnessFlags.get("visible", "false"));
@@ -126,6 +127,8 @@ public final class Scene {
       lights = HarnessFlags.get("lights", "").trim().toLowerCase(java.util.Locale.ROOT);
       headlights = "on".equalsIgnoreCase(HarnessFlags.get("headlights", "").trim());
       puddles = Float.parseFloat(HarnessFlags.get("puddles", "-1").trim());
+      Showcase.apply(); // showcase=horde
+      Showcase.worldReady(p); // showcase=horde: god mode, unseen, power off, the area cleared until the scene starts
       if (soundRadius > 0) {
          Log.info("harness: sound=" + soundRadius + " every " + soundEvery + " frame(s) from the player's square, hearing="
                + zombie.SandboxOptions.instance.lore.hearing.getValue() + " (1=pinpoint x3, 2=normal x1, 3=poor x0.45)" + (soundParts ? ", parts timed" : "") + (soundFixed ? ", fixed square" : ""));
@@ -249,6 +252,7 @@ public final class Scene {
                + ", can emit light " + p.getVehicle().getHeadlightCanEmmitLight());
       }
       keepWornItems(p); // the bench player keeps their glasses (screen blur otherwise; see pinWornItems)
+      Showcase.tick(p, nowNs); // showcase=horde: aim, fire, keep the lights on
       ThumpRig.tick(p, nowNs); // thump=N: zombies thumping a door off-screen (the thump-burst repro)
       if (zombiesOff) {
          removeZombies();
@@ -488,11 +492,17 @@ public final class Scene {
       cm.getClimateBool(ClimateManager.BOOL_IS_SNOW).setOverride(false);
    }
 
+   // fog_tint=dark: a near-black fog (the storm tint 0.5/0.45/0.4 glowed beige over a pitch-black night, cine-jev1)
+   private static boolean fogTintDark;
+   private static final zombie.iso.weather.ClimateColorInfo DARK_FOG = new zombie.iso.weather.ClimateColorInfo(0.06f, 0.06f, 0.07f, 1.0f, 0.06f, 0.06f, 0.07f, 1.0f);
+
    private static void assertFog(ClimateManager cm) {
       set(cm, ClimateManager.FLOAT_FOG_INTENSITY, fog);
       if (fog > 0f && "storm".equals(weather)) {
          // what WeatherPeriod.update pins for a STAGE_STORM whose stage rolled fog (case 3, fogStrength > 0)
-         cm.getClimateColor(ClimateManager.COLOR_NEW_FOG).setOverride(cm.getFogTintStorm(), 1.0f);
+         cm.getClimateColor(ClimateManager.COLOR_NEW_FOG).setOverride(fogTintDark ? DARK_FOG : cm.getFogTintStorm(), 1.0f);
+      } else if (fog > 0f && fogTintDark) {
+         cm.getClimateColor(ClimateManager.COLOR_NEW_FOG).setOverride(DARK_FOG, 1.0f);
       }
    }
 

@@ -3288,3 +3288,22 @@ All hooks are no-ops unless `hdr=true`; findings and numbers in `docs/findings-h
   buffers (macOS), the alpha-only pass that carries the world gain in the back buffer's alpha.
 - **zombie.iso.weather.WeatherShader.startRenderThread**: after the stock uniforms, `Hdr.worldUniforms` sets the
   expansion's uniforms on the bound composite program (glProgramUniform from another pass never reached it).
+
+### Ragdolls stay on the game thread; harness showcase input hooks (2026-09-24)
+
+- **zombie.core.skinnedmodel.animation.AnimationPlayer** (fix): with `animatorParallel` a zombie's animator and track tick
+  run on a frame worker. A zombie shot (or otherwise knocked into a ragdoll) during the batch started its ragdoll track on
+  the worker, and `updateRagdoll` then created and stepped its `RagdollController` there. Both call the game's Bullet
+  library, which is not thread-safe: `btDiscreteDynamicsWorld::calculateSimulationIslands` SIGSEGV on the game thread in
+  2 of 6 runs of a burning horde being shot (stock 0 of 2). `pzoptBatchable()` now also refuses any animation player with
+  a ragdoll track (from the next frame the game thread runs it), and a worker that meets a ragdoll track without a
+  controller skips the ragdoll step for that one frame. `releaseRagdollController` / `initRagdollController` /
+  `updateRagdollInternal` call `pzopt.AnimParallel.noteRagdoll`, which logs (first 5, with the stack) any of them off the
+  game thread; 0 in 4 runs after the fix.
+- **zombie.input.Mouse** (harness only): `getXA/getYA/getX/getY` return `pzopt.Showcase.aimXA/aimYA` while the showcase
+  aims, and `update()` reports the right button held and the left one from `Showcase.fireDown` while `holdButtons`, so the
+  game's own aim / attack / recoil / fire-mode path runs as for a player holding the mouse. Off (one volatile read) outside
+  `showcase=horde`.
+- **zombie.input.GameKeyboard.isKeyDown(int)** (harness only): reports the key codes `pzopt.Showcase` holds (the movement
+  keys and Run of the director's `run_to_pier`).
+

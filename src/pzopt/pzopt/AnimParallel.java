@@ -330,6 +330,37 @@ public final class AnimParallel {
       }
    }
 
+   private static int ragdollOffThread;
+
+   /** Any thread: true on a frame worker (the game thread is known once the pipeline ran), where Bullet must not be called. */
+   public static boolean offGameThread() {
+      Thread g = gameThread;
+      return g != null && Thread.currentThread() != g;
+   }
+
+   /**
+    * Any thread, from the AnimationPlayer override where a ragdoll controller is made or stepped (both call into the
+    * game's Bullet library): counts and logs (first 5, with the stack) a call that is not on the game thread. Evidence
+    * rig for the Bullet calculateSimulationIslands crash while shooting a burning horde (showcase runs, 2026-09-24).
+    */
+   public static void noteRagdoll(String where) {
+      Thread t = Thread.currentThread();
+      if (gameThread == null || t == gameThread) {
+         return;
+      }
+      int n;
+      synchronized (AnimParallel.class) {
+         n = ++ragdollOffThread;
+      }
+      if (n <= 5) {
+         Log.warn("animatorParallel: ragdoll " + where + " on " + t.getName() + " (not the game thread), #" + n);
+         StackTraceElement[] st = new Throwable().getStackTrace();
+         StringBuilder sb = new StringBuilder();
+         for (int i = 1; i < Math.min(st.length, 14); i++) sb.append("\n    at ").append(st[i]);
+         Log.warn("animatorParallel: ragdoll stack" + sb);
+      }
+   }
+
    private static boolean eligible(IsoZombie z) {
       zombie.core.skinnedmodel.animation.AnimationPlayer p = z.getAnimationPlayer();
       if (p == null || !p.pzoptBatchable() || z.isAnimationRecorderActive() || z.getCurrentSquare() == null || !z.pzoptDeltasSeeded()) {

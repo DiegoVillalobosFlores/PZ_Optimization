@@ -262,6 +262,15 @@ SDR decode), so the HDR container at expansion 0 reproduces the SDR window exact
   asked in windowCreated. The decision is logged from windowCreated (`hdr: auto: ...`): Hdr is initialised before the game
   log exists. Runs `mac-hdrmac5-auto` (EDR 16 -> HDR on, upright, 3.3x) and `hdrauto-desk` / `-desk2` (Wayland picked,
   HDR on, clean exit). The harness writes `hdrAuto=false` unless a run asks, so baselines on this HDR desktop stay SDR.
+- **Horde cinematic, directed by Jev (13:30-15:15, runs `showcase-*`, `cine-*`):** `pzopt.Showcase` (`showcase=horde`) +
+  `harness/showcase-director.py`. The character's run, aim, fire and reload are the game's own input paths (the Mouse /
+  GameKeyboard override hooks: `pressedAttack()` and `pathToLocation` alone fired or moved nothing reliable); Jev picks
+  one of six actions from the scene's facts about 3 times a second (230-620 ms, 0.77-0.99 confidence). Darkest night:
+  2 am, storm, heavy fog with a near-black tint (`fog_tint=dark`; the storm tint glowed beige at 16 nits median), power
+  off, pitch-black sandbox darkness: median 0 nits, p90 < 2.5, highlights 750-970. Video `docs/media/hdr-horde-cinematic-jev.mp4`
+  (local). Found on the way: `animatorParallel` stepped ragdolls on frame workers (Bullet crash, fixed, see
+  `docs/override-edits.md`); open: a quit-time crash `Ragdoll::deleteRigidBodies` after heavy kills (ours 5/5, stock 0/2;
+  a key bisect was stopped halfway: 79 boolean keys off = clean).
 
 ## State (2026-09-24 10:10)
 

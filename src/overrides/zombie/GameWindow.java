@@ -340,6 +340,7 @@ public final class GameWindow {
          uiVoice.close();
       }
 
+      pzopt.InputLatch.beforeInputSwap(); // pzopt: frameStartGate / inputLatch, a fresh input poll right before the swaps
       uiVoice = profiler.profile("Mouse");
 
       try {
@@ -381,6 +382,7 @@ public final class GameWindow {
       }
 
       GameInput.updateGameThread();
+      pzopt.InputLag.afterGameInput(); // pzopt: harness input-lag probe, the input this game frame sees
       if (CoopMaster.instance != null) {
          CoopMaster.instance.update();
       }
@@ -954,6 +956,7 @@ public final class GameWindow {
                }
             }
 
+            pzopt.InputLag.beforeRender(); // pzopt: harness input-lag probe, player 0 after this frame's update
             renderInternal();
             if (doRenderEvent) {
                ProfileArea var35 = profilerx.profile("On Render");

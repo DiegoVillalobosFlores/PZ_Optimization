@@ -3067,3 +3067,47 @@ functions are kept and put back when it scrolls in), recomputed only when the sc
 sort) changed. The controls stay visible: `ISPanelJoypad` walks visible children only, so hiding them would take the
 rows out of the controller navigation and `ensureVisible` could no longer scroll to them. Page frame 11.4 -> 4.1 ms,
 D-pad response 18.5 -> 6.5 ms (p50); the D-pad visits the same rows in the same order before and after.
+
+### Input latency (2026-09-24): zombie.input.* (new overrides), GameWindow, RenderThread, Display
+
+Profiled with `run.sh --inputlag` (uinput keyboard + mouse + Xbox 360 pad driven by harness/inputlag-drive.py, every
+stage stamped by the harness-only `pzopt.InputLag`, lined up by harness/inputlag.py). In stock, a press waits for the
+render thread's next event pump (it pumps and polls only right after its buffer swap), the polled state is then frozen
+until the game thread swaps it in at the start of its next frame, and the keyboard is a further frame late.
+
+- **zombie.input.GameKeyboard** (new override, `keyboardFresh`): `update()` filled its key-down table from the using
+  state and swapped in the new poll only at its end, so every key read (movement, hotkeys) saw the previous poll while
+  the mouse, the pad and the keyboard's own text-event queue were already on the new one. With the key the swap moves to
+  the top of the method; the per-key edge / Lua event logic is unchanged. 240 fps cap: key -> game 9.4 -> 4.6 ms.
+  Also `pzoptRepoll()` for the latch below.
+- **zombie.input.KeyboardStateCache, MouseStateCache, ControllerStateCache, KeyboardState, MouseState** (new overrides,
+  `inputLatch`): each cache gets `pzoptRepoll()`, a poll that also runs when the polling state was already polled this
+  frame. The key / button re-poll keeps a key or button that went down since the using state down (a tap between two
+  polls is never lost), the mouse wheel adds up. `poll()` / `swap()` of the three caches carry a decompiler fix:
+  Vineflower turned the jar's early returns inside the lock into if-blocks (one `monitorexit` fewer); restored.
+- **zombie.input.Mouse** (new override, `aimHoldMs`): `isRightDelay()` compares the right-button hold with the key's
+  seconds instead of the fixed 0.15 s (the hold that tells a context-menu right-click from aiming; stock value default).
+- **GameWindow.logic**: `pzopt.InputLatch.beforeInputSwap()` before the Mouse / GameKeyboard / GameInput swaps (Reflex
+  sleep, `frameStartGate`, then the latch request: the game thread wakes the render thread, which is idle waiting for
+  the next frame, on the sprite-state monitor and waits up to `inputLatchWaitUs` for a fresh `glfwPollEvents` + re-poll;
+  240 fps cap: mouse / pad -> game 5.2-5.7 -> 1.9-2.3 ms, 0.02-0.03 ms a frame of wait). Also the harness probe hooks
+  (`InputLag.afterGameInput`, and in `frameStep` before `renderInternal` `InputLag.beforeRender`).
+- **RenderThread**: `waitForRenderStateCallback` and the render loop after its input polls serve the latch
+  (`InputLatch.serve`); `lockStepRenderStep` and `Ready` carry `pzopt.LowLatency` (GPU timestamp queries, the
+  GPU-free prediction of `reflexSleep`, the frame counts) and the probe hooks.
+- **Display.update / processMessages / setVSyncEnabled**: after the swap `LowLatency.afterSwap()` (`gpuMaxFrames`: fence
+  the frame, wait until at most N frames are queued behind the GPU); the probe's event stage after `glfwPollEvents`;
+  vsync on uses swap interval -1 with `vsyncAdaptive` when the driver has swap_control_tear.
+
+NVIDIA Reflex has no OpenGL SDK; `pzopt.LowLatency` implements its parts with GL: frames-in-flight fences
+(`gpuMaxFrames`, the driver's low-latency mode) and the just-in-time sleep before the input sample (`reflexSleep`).
+
+Later the same day: `pzopt.LowLatency` gained `reflexCapFps` (frame starts no faster than refresh - refresh^2/3600
+with vsync, what Reflex does: without it the vsync queue is bistable and refills) and `vblankLock` (RenderThread
+`lockStepRenderStep` waits in `glXDelayBeforeSwapNV` before taking the next frame and lets the game start it; needs a
+GLX server with GLX_NV_delay_before_swap, which XWayland lacks). `Display` gained `isVSyncEnabledPzopt()`;
+**org.lwjglx.input.Mouse** gained `pzoptLatestX/Y()` (the newest pointer position, clipped like `poll`) and
+**zombie.input.Mouse.renderCursorTexture** records its sprite through `pzopt.CursorLatch` (`cursorLatch`): with "Lock
+cursor to window" the game draws its own cursor at the frame's mouse position, and the render thread moves that one
+sprite to the newest pointer position right before it replays the frame (RenderThread `lockStepRenderStep`, before
+`postRender`).

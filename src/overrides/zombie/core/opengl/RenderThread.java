@@ -147,6 +147,8 @@ public class RenderThread {
                pzopt.VirtualPad.poll(); // pzopt: harness virtual pad (--flag pad=<script>); GameWindow.GameInput.poll() otherwise
                Mouse.poll();
                GameKeyboard.poll();
+               pzopt.InputLag.afterPoll(); // pzopt: harness input-lag probe, the polling states the game swaps in next
+               pzopt.InputLatch.serve(false); // pzopt: inputLatch, a request that came in while this thread rendered
                isCloseRequested = isCloseRequested || Display.isCloseRequested();
             }
 
@@ -247,8 +249,11 @@ public class RenderThread {
    }
 
    private static boolean lockStepRenderStep() {
+      pzopt.LowLatency.beforeAcquire(); // pzopt: vblankLock, wait for vblank - W, then let the game start its frame
       SpriteRenderState renderState = SpriteRenderer.instance.acquireStateForRendering(RenderThread::waitForRenderStateCallback);
       if (renderState != null) {
+         pzopt.InputLag.acquired(); // pzopt: harness input-lag probe, the render thread took a game frame
+         pzopt.LowLatency.frameBegin(); // pzopt: reflexSleep queue measurement, frames-in-flight count, input-latch busy
          waitTime = System.nanoTime() - startWaitTime;
          startWaitTime = 0L;
          cursorVisible = renderState.cursorVisible;
@@ -256,8 +261,10 @@ public class RenderThread {
 
          try {
             pzopt.Overlay.gpuBegin(); // pzopt: GL timer query around the sprite replay (GPU busy time of the frame)
+            pzopt.CursorLatch.beforeReplay(renderState); // pzopt: cursorLatch, the drawn cursor at the newest pointer position
             SpriteRenderer.instance.postRender();
             pzopt.Overlay.gpuEnd(); // pzopt: end of the frame's GPU work; the swap is not timed
+            pzopt.InputLag.frameQueued(); // pzopt: harness input-lag probe, GPU-completion timestamp query of the frame
             zombie.core.VBO.GLVertexBufferObject.pzoptFrameEnd(); // pzopt: frame fence for the persistent sprite buffers
          } catch (Throwable var8) {
             if (var10 != null) {
@@ -335,6 +342,7 @@ public class RenderThread {
 
    private static boolean waitForRenderStateCallback() {
       flushInvokeQueue();
+      pzopt.InputLatch.serve(true); // pzopt: inputLatch, the game thread asked for a fresh event pump + input poll
       return shouldContinueWaiting();
    }
 
@@ -419,7 +427,10 @@ public class RenderThread {
    }
 
    public static void Ready() {
+      long pzoptReadyNs = System.nanoTime(); // pzopt: harness input-lag probe, the hand-off with its ready-slot wait
       SpriteRenderer.instance.pushFrameDown();
+      pzopt.InputLag.pushed(pzoptReadyNs); // pzopt: harness input-lag probe
+      pzopt.LowLatency.pushed(pzoptReadyNs); // pzopt: reflexSleep, the frame's hand-off and its wait
       if (!isInitialized) {
          invokeOnRenderContext(RenderThread::renderStep);
       }

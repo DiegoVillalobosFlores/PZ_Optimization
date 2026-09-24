@@ -1,0 +1,47 @@
+# Input-lag profile, short form (~90 s of input): keyboard walk, mouse aim, then the pad's walk and aim.
+activate
+sleep 1
+mark kbm-move
+repeat 12
+key w 0.25
+sleep 0.35-0.65
+key s 0.25
+sleep 0.35-0.65
+end
+mark kbm-aim
+mmove -8000 0
+sleep 0.5
+mdown right
+sleep 1
+repeat 10
+mmove 8000 0
+sleep 0.45-0.7
+mmove -8000 0
+sleep 0.45-0.7
+end
+mup right
+sleep 1
+mark pad-bind
+flag inputlag_pad=1
+sleep 3
+mark pad-move
+repeat 12
+stick l 0 -1 0.25
+sleep 0.35-0.65
+stick l 0 1 0.25
+sleep 0.35-0.65
+end
+mark pad-aim
+sset r -1 0
+sleep 0.3
+pdown lt
+sleep 1
+repeat 10
+sset r 1 0
+sleep 0.45-0.7
+sset r -1 0
+sleep 0.45-0.7
+end
+pup lt
+sset r 0 0
+done

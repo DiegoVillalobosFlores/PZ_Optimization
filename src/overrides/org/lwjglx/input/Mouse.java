@@ -40,6 +40,14 @@ public class Mouse {
       queue.add();
    }
 
+   public static int pzoptLatestX() { // pzopt: cursorLatch, the newest pointer position (clipped like poll())
+      return clipPostionToDisplay ? Math.max(0, Math.min(Display.getWidth() - 1, latestX)) : latestX; // pzopt
+   } // pzopt
+
+   public static int pzoptLatestY() { // pzopt
+      return clipPostionToDisplay ? Math.max(0, Math.min(Display.getHeight() - 1, latestY)) : latestY; // pzopt
+   } // pzopt
+
    public static void addButtonEvent(int button, boolean pressed) {
       lastxEvents[queue.getNextPos()] = xEvents[queue.getNextPos()];
       lastyEvents[queue.getNextPos()] = yEvents[queue.getNextPos()];

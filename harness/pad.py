@@ -94,7 +94,7 @@ def serve(fifo):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 3 and sys.argv[1] == "serve":
+    if len(sys.argv) in (3, 4) and sys.argv[1] == "serve":  # run.sh also passes the flag file (inputlag-drive.py uses it)
         serve(sys.argv[2])
     else:
         print(__doc__)

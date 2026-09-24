@@ -264,10 +264,14 @@ public class Display {
       System.out.println("TODO: Implement Display.setLocation(int, int)");
    }
 
+   public static boolean isVSyncEnabledPzopt() { // pzopt: vblankLock applies to a vsync'd swap only
+      return vsyncEnabled; // pzopt
+   } // pzopt
+
    public static void setVSyncEnabled(boolean sync) {
       vsyncEnabled = sync;
       if (sync) {
-         GLFW.glfwSwapInterval(1);
+         GLFW.glfwSwapInterval(pzopt.LowLatency.vsyncInterval()); // pzopt: vsyncAdaptive, -1 (late frames tear instead of waiting a refresh) when the driver has swap_control_tear
       } else {
          GLFW.glfwSwapInterval(0);
       }
@@ -283,7 +287,10 @@ public class Display {
 
    public static void update(boolean processMessages) {
       try {
+         pzopt.LowLatency.beforeSwap(); // pzopt: reflexSleep, how long the swap blocks (vsync)
          swapBuffers();
+         pzopt.InputLag.swapped(); // pzopt: harness input-lag probe (--flag inputlag=1), the frame's swap returned
+         pzopt.LowLatency.afterSwap(); // pzopt: gpuMaxFrames, fence the frame and wait for the GPU queue to drain
          displayDirty = false;
       } catch (LWJGLException e) {
          throw new RuntimeException(e);
@@ -331,6 +338,7 @@ public class Display {
       Keyboard.poll();
       Mouse.poll();
       updateMouseCursor();
+      pzopt.InputLag.afterEvents(); // pzopt: harness input-lag probe, what glfwPollEvents delivered
       if (latestResized) {
          latestResized = false;
          displayResized = true;

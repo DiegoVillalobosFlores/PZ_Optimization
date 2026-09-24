@@ -336,7 +336,76 @@ local function pauseMenuTick()
     end
 end
 
+-- inputlag=1 (run.sh --inputlag, 2026-09-24): in-game input-lag profile. 6 s after the player exists this writes
+-- Lua/pzopt-inputlag-ready.txt (run.sh then feeds the driver script); inputlag_pad=1 in the flag file gives the
+-- driver's virtual Xbox 360 pad to player 1 the way JoypadState.onGameStart does for a menu pad; inputlag_done=1 quits.
+local INPUTLAG_GUID = "030000005e0400008e02000010010000"
+local inputLag = nil
+local function inputLagBindPad()
+    local id = nil
+    for i = 0, getControllerCount() - 1 do
+        if isControllerConnected(i) and getControllerGUID(i) == INPUTLAG_GUID then id = i end
+    end
+    if not id then print("[pzopt-inputlag] no connected controller with GUID " .. INPUTLAG_GUID); return end
+    local controller = JoypadState.controllers[id]
+    local joypadData = JoypadState.joypads[1]
+    joypadData:setActive(true)
+    controller:setJoypad(joypadData)
+    joypadData.inMainMenu = false
+    joypadData.focus = nil
+    joypadData.player = 0
+    JoypadState.players[1] = joypadData
+    local playerObj = getSpecificPlayer(0)
+    setPlayerJoypad(0, joypadData.id, playerObj, nil, false)
+    getPlayerInventory(0):setController(joypadData.id)
+    getPlayerLoot(0):setController(joypadData.id)
+    print("[pzopt-inputlag] pad (controller " .. id .. ") bound to player 1, joypad bind " .. tostring(playerObj:getJoypadBind()))
+end
+local function inputLagTick()
+    if inputLag == false then return end
+    if not getPlayer() then return end
+    local now = getTimestampMs()
+    if inputLag == nil then
+        local flags = readFlags()
+        if not flags or flags.inputlag ~= "1" then inputLag = false; return end
+        inputLag = { readyMs = now + 6000, check = 0 }
+    end
+    local player = getPlayer()
+    if player:getVehicle() then
+        -- the bench save starts in the drive bench's car: W/S would be throttle / brake. Get out on foot first
+        if not inputLag.exiting then
+            inputLag.exiting = true
+            ISTimedActionQueue.add(ISExitVehicle:new(player))
+            print("[pzopt-inputlag] player is in a vehicle; exiting it before the script")
+        end
+        inputLag.readyMs = now + 3000
+        return
+    end
+    if not inputLag.ready and now >= inputLag.readyMs then
+        inputLag.ready = true
+        local w = getFileWriter("pzopt-inputlag-ready.txt", true, false)
+        if w then w:write("ready_epoch_ms=" .. tostring(now) .. "\n"); w:close() end
+        print("[pzopt-inputlag] world ready t=" .. tostring(now))
+    end
+    if now < inputLag.check then return end
+    inputLag.check = now + 250
+    local flags = readFlags()
+    if not flags then return end
+    if flags.inputlag_pad and not inputLag.bound then
+        inputLag.bound = true
+        local ok, err = pcall(inputLagBindPad)
+        if not ok then print("[pzopt-inputlag] pad bind error " .. tostring(err)) end
+    end
+    if flags.inputlag_done then
+        print("[pzopt-inputlag] script done, quitting")
+        inputLag = false
+        getCore():quit()
+    end
+end
+
 local function onTickEvenPaused()
+    local ok4, err4 = pcall(inputLagTick)
+    if not ok4 then print("[pzopt-inputlag] rig error " .. tostring(err4)); inputLag = false end
     local ok3, err3 = pcall(pauseMenuTick)
     if not ok3 then print("[pzopt-harness] pause menu: rig error " .. tostring(err3)); pauseMenu = false end
     local ok, err = pcall(lureTick)

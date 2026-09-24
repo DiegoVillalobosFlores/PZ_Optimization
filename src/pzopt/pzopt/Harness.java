@@ -303,6 +303,11 @@ public final class Harness {
                    } catch (Exception e) {
                       Log.warn("harness: scene setup failed: " + e);
                    }
+                   if ("1".equals(HarnessFlags.get("inputlag"))) {
+                      // the input-lag rig stands the player on the bench save for ~2 min of scripted input
+                      p.setGodMod(true, true);
+                      p.setInvisible(true, true);
+                   }
                    Log.info("harness: play mode, world ready at " + p.getXi() + "," + p.getYi() + "," + (int)p.getZ() + "; scene applied, no route, quit when you like");
                    state = PLAY;
                    stateSinceNs = nowNs;

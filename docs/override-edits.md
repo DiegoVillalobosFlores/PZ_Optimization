@@ -3185,3 +3185,48 @@ entries (`square.getZ() == level`) from the group's eleven lists (`pzoptDropLeve
 puddle batch, so its rebuild replaces them and the lower level's stay. The count goes into
 `pzoptBakeCounters()` as `dupSquaresDropped`. `pzopt.PuddleVbo.add` also clamps a batch to 64 squares, as its draw
 always did, so a long list can no longer throw out of the world pass.
+
+## Compatibility with the PZMulticore agent (2026-09-24): zombie.iso.WorldStreamer, zombie.pathfind.PolygonalMap2 (new override)
+
+PZMulticore (github.com/RealDoomSlaya/PZMulticore, a `-javaagent` that ASM-patches game classes at load; tested
+branch `fix/42.20.4-strip-lighting`, v2.9.1-dev) did two things that broke next to our overrides on the Louisville
+preset (runs `pzmc-lou-*`):
+
+- Its `WorldStreamerPatcher` rewrites the one direct `DoChunk(chunk, null)` call in `WorldStreamer.threadLoop` into
+  its own loader, which runs vanilla `IsoChunk.LoadChunk` on several threads at once. That path reads through the
+  static `sliceBufferLoad` / `crcLoad` guarded by `SanityCheck.beginLoad`, so all but one concurrent load throw;
+  the loader then drops the chunk and nothing requests it again. With `centerFirstLoad` the player's own chunk was
+  among the dropped: `getCurrentSquare()` stayed null, the harness never reached world-ready and the world stayed
+  empty (thread dumps: the World Streamer idle with an empty job list). It also bypassed our streamer (`parallel`,
+  `RecalcPool`, `Stats`).
+- Its parallel entity update runs zombies' `update()` on worker threads, and zombie code calls
+  `PolygonalMap2.lineClearCollide` / `getCollidepoint` / `canStandAt`, which share one `LineClearCollideMain`
+  (`lccMain`: the `pts` list, the vehicle rects, the `PointPool`). The agent synchronizes only `PointPool`, so the
+  list was corrupted: worker buckets failed with "Cannot read field x because pt is null" / an
+  `IndexOutOfBoundsException`, the agent's main-thread retry then hit `ECSEntity`'s "Double-update call", and its
+  dispatcher failed every frame after that.
+
+Edits:
+- `WorldStreamer.threadLoop` calls `pzoptDoChunk(chunk)`, a private helper that calls `DoChunk(chunk, null)`. The
+  agent's patcher requires exactly one direct `DoChunk` call in `threadLoop`, finds none, logs "Vanilla behavior
+  preserved" and leaves chunk loading to our streamer. Same behaviour without the agent.
+- `PolygonalMap2` (new override, Vineflower output, marker `onClassLoadedQuiet`): the bodies of
+  `lineClearCollide(..., int flags)`, `getCollidepoint` and `canStandAt(..., BaseVehicle, int)` run under
+  `synchronized (this.lccMain)`. Uncontended on the stock single-threaded path (one lock acquire per call); the
+  debug-render use in `render()` is left as is (game thread only, after the agent's workers joined).
+- Decompiler fix in the new `PolygonalMap2` override (bytecode audit): `cleanPath` resets `dxOld` / `dyOld` with the
+  jar's chained store `dxOld = dyOld = -123` (one `bipush -123; dup`); Vineflower rendered two assignments.
+- Two pzopt per-frame caches that zombie `update()` reaches assumed the game thread; with the agent's workers they
+  raced (run `pzmc-fix-all3`: a `ConcurrentModificationException` and "vehicle is null" in `BaseVehicle.getScript()`
+  in two worker buckets). `pzopt.VehicleCull.near` (`zombieSpotFast`) keeps the game thread's list and gives any
+  other thread its own (`ThreadLocal`), same rebuild rules (`VehicleCullTest.nearPerThread`);
+  `pzopt.SeparateMask.blocked` (`separateFast`) answers `isBlockedTo` directly off the game thread (its
+  direct-mapped table has no locking; a torn slot would hand one square another's answer).
+- `WorldSoundManager` (run `pzmc-f3-ours-mc`: "Cannot read field source because sound is null" in a worker bucket):
+  stock `addSound` already adds under `synchronized (soundList)` (the global and the chunk lists; `IsoChunk` removes
+  under it too), but the readers the zombie update calls did not take it. `getSoundZomb`, `getSoundAnimal`,
+  `getBiggestSoundZomb` and `getStressFromSounds` now scan under the same lock, and `getBiggestSoundZomb` returns the
+  stock shared `resultBiggestSound` on the game thread and a per-thread one elsewhere (`pzoptResultBiggestSound`).
+- Seen once in eight runs, not addressed: `VehicleSoundOwner.hasAlarm` NPE (a vehicle without a script) in
+  `VehiclesDB2.unloadChunk` on the streamer thread right after the harness teleport (run `pzmc-f3-ours-zb`); not on
+  an agent worker and not in our code.

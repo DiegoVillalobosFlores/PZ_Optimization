@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import org.joml.Vector3f;
+import zombie.GameWindow;
 import zombie.scripting.objects.VehicleScript;
 import zombie.vehicles.BaseVehicle;
 
@@ -55,14 +56,21 @@ public final class VehicleCull {
       return half + (float)Math.sqrt(com.x * com.x + com.z * com.z) + MARGIN;
    }
 
-   // The per-frame candidate list: the vehicles whose circle reaches the disc of radius nearRadius around
-   // (nearX, nearY), built in frame nearFrame. Game thread only (IsoZombie.spottedNew runs there).
-   private static final ArrayList<BaseVehicle> near = new ArrayList<>();
-   private static int nearFrame = Integer.MIN_VALUE;
-   private static float nearX;
-   private static float nearY;
-   private static float nearRadius = -1.0F;
-   private static int nearBuilds;
+   // The per-frame candidate list: the vehicles whose circle reaches the disc of radius radius around (x, y), built in
+   // frame frame. One for the game thread (IsoZombie.spottedNew runs there); a mod that updates zombies on other
+   // threads (PZMulticore, 2026-09-24: a shared list cleared under a reader threw ConcurrentModificationException and
+   // handed out null vehicles) gets one per thread.
+   private static final class Near {
+      final ArrayList<BaseVehicle> list = new ArrayList<>();
+      int frame = Integer.MIN_VALUE;
+      float x;
+      float y;
+      float radius = -1.0F;
+   }
+
+   private static final Near GAME = new Near();
+   private static final ThreadLocal<Near> OTHER = ThreadLocal.withInitial(Near::new);
+   private static final java.util.concurrent.atomic.AtomicInteger nearBuilds = new java.util.concurrent.atomic.AtomicInteger();
 
    /**
     * The vehicles of {@code all} that can cross a segment from a point within {@code reach} tiles of (tx,ty) to
@@ -70,33 +78,34 @@ public final class VehicleCull {
     * target and the frame stay the same and the reach fits; rebuilt otherwise (once per player per frame in practice).
     */
    public static List<BaseVehicle> near(Collection<BaseVehicle> all, float tx, float ty, float reach, int frame) {
-      if (frame != nearFrame || tx != nearX || ty != nearY || reach > nearRadius) {
-         near.clear();
+      Near near = Thread.currentThread() == GameWindow.gameThread ? GAME : OTHER.get();
+      if (frame != near.frame || tx != near.x || ty != near.y || reach > near.radius) {
+         near.list.clear();
          for (BaseVehicle vehicle : all) {
             float radius = radius(vehicle);
             if (radius < 0.0F) {
-               near.add(vehicle);
+               near.list.add(vehicle);
                continue;
             }
             float dx = vehicle.getX() - tx;
             float dy = vehicle.getY() - ty;
             float limit = radius + reach;
             if (dx * dx + dy * dy <= limit * limit) {
-               near.add(vehicle);
+               near.list.add(vehicle);
             }
          }
-         nearFrame = frame;
-         nearX = tx;
-         nearY = ty;
-         nearRadius = reach;
-         nearBuilds++;
+         near.frame = frame;
+         near.x = tx;
+         near.y = ty;
+         near.radius = reach;
+         nearBuilds.incrementAndGet();
       }
-      return near;
+      return near.list;
    }
 
    /** Candidate lists built so far (for the log line). */
    public static int nearBuilds() {
-      return nearBuilds;
+      return nearBuilds.get();
    }
 
    /** Squared distance from (px,py) to the segment (x1,y1)-(x2,y2). */

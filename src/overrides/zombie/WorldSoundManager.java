@@ -307,12 +307,14 @@ public final class WorldSoundManager {
          soundList = this.soundList;
       }
 
+      synchronized (this.soundList) { // pzopt: addSound holds this lock; zombies updated on other threads (PZMulticore) add while others read
       for (int n = 0; n < soundList.size(); n++) {
          WorldSoundManager.WorldSound sound = soundList.get(n);
          if (zom.soundSourceTarget == sound.source && sound.stressZombies) {
             return sound;
          }
       }
+      } // pzopt
 
       return null;
    }
@@ -333,6 +335,7 @@ public final class WorldSoundManager {
       WorldSoundManager.WorldSound loudest = null;
       float loudestVolume = 0.0F;
 
+      synchronized (this.soundList) { // pzopt: as getSoundZomb
       for (int n = 0; n < soundList.size(); n++) {
          WorldSoundManager.WorldSound sound = soundList.get(n);
          if (sound.stresshumans || sound.stressAnimals) {
@@ -349,6 +352,7 @@ public final class WorldSoundManager {
             }
          }
       }
+      } // pzopt
 
       return loudest;
    }
@@ -359,7 +363,7 @@ public final class WorldSoundManager {
       IsoChunk chunk = null;
       if (zom != null) {
          if (zom.getCurrentSquare() == null) {
-            return resultBiggestSound.init(null, 0.0F);
+            return pzoptResultBiggestSound().init(null, 0.0F); // pzopt: per thread off the game thread
          }
 
          chunk = zom.getCurrentSquare().chunk;
@@ -372,6 +376,7 @@ public final class WorldSoundManager {
          soundList = this.soundList;
       }
 
+      synchronized (this.soundList) { // pzopt: as getSoundZomb
       for (int n = 0; n < soundList.size(); n++) {
          WorldSoundManager.WorldSound sound = soundList.get(n);
          if (sound != null && sound.stressZombies && sound.radius != 0) {
@@ -405,8 +410,17 @@ public final class WorldSoundManager {
             }
          }
       }
+      } // pzopt
 
-      return resultBiggestSound.init(largest, largestSound);
+      return pzoptResultBiggestSound().init(largest, largestSound); // pzopt: per thread off the game thread
+   }
+
+   // pzopt: the shared result object for the game thread (stock), one per thread for any other caller: a mod that
+   // updates zombies on several threads (PZMulticore) would otherwise overwrite a result another thread still reads
+   private static final ThreadLocal<WorldSoundManager.ResultBiggestSound> pzoptResultOther = ThreadLocal.withInitial(WorldSoundManager.ResultBiggestSound::new);
+
+   private static WorldSoundManager.ResultBiggestSound pzoptResultBiggestSound() { // pzopt
+      return Thread.currentThread() == zombie.GameWindow.gameThread ? resultBiggestSound : pzoptResultOther.get();
    }
 
    public float getSoundAttract(WorldSoundManager.WorldSound sound, IsoZombie zom) {
@@ -483,6 +497,7 @@ public final class WorldSoundManager {
    public float getStressFromSounds(int x, int y, int z) {
       float ret = 0.0F;
 
+      synchronized (this.soundList) { // pzopt: as getSoundZomb
       for (int i = 0; i < this.soundList.size(); i++) {
          WorldSoundManager.WorldSound sound = this.soundList.get(i);
          if (sound.stresshumans && sound.radius != 0) {
@@ -499,6 +514,7 @@ public final class WorldSoundManager {
             }
          }
       }
+      } // pzopt
 
       return ret;
    }

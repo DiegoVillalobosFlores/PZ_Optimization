@@ -1,5 +1,6 @@
 package pzopt;
 
+import zombie.GameWindow;
 import zombie.iso.IsoGridSquare;
 
 /**
@@ -33,6 +34,10 @@ public final class SeparateMask {
 
    /** Whether {@code square} is blocked to its {@code i}-th surrounding square, from this frame's cache. */
    public static boolean blocked(IsoGridSquare square, IsoGridSquare other, int i) {
+      if (Thread.currentThread() != GameWindow.gameThread) {
+         // the table is the game thread's; a mod that updates characters on other threads (PZMulticore) asks directly
+         return square.isBlockedTo(other);
+      }
       int slot = (System.identityHashCode(square) >>> 4) & MASK;
       int value = VALUES[slot];
       if (KEYS[slot] != square || STAMPS[slot] != FrameTick.frame()) {

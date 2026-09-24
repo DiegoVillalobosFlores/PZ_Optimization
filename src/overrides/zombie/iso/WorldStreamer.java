@@ -400,7 +400,7 @@ public final class WorldStreamer {
                assert !IsoChunkMap.chunkStore.contains(chunk);
                IsoChunkMap.chunkStore.add(chunk);
             } else {
-               this.DoChunk(chunk, null);
+               this.pzoptDoChunk(chunk); // pzopt: through a helper, see pzoptDoChunk
             }
          }
 
@@ -461,6 +461,14 @@ public final class WorldStreamer {
             pzopt.StreamerWake.signal();
          }
       }
+   }
+
+   // pzopt: threadLoop's chunk load. The PZMulticore agent rewrites the one direct DoChunk(chunk, null) call in
+   // threadLoop into its own loader, which runs vanilla LoadChunk on several threads: they race for IsoChunk's static
+   // load buffer, the losers are dropped and never requested again (the player's chunk once, a world that never loaded,
+   // 2026-09-24). With the call in here its patcher finds no anchor and leaves the streamer to ours (parallel=true).
+   private void pzoptDoChunk(IsoChunk chunk) {
+      this.DoChunk(chunk, null);
    }
 
    public void DoChunk(IsoChunk chunk, ByteBuffer fromServer) {

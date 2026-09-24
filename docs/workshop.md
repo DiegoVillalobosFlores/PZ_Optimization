@@ -145,6 +145,12 @@ in that layout (release-windows skill); the JPG `26` stays for the item's carous
 same frame of the Rosewood house with AO off and on, the `--shot-at` captures `ao-shot-off2` / `ao-final-on`, which line
 up to the pixel; the table is the AO GPU cost standing / walking / 120 km/h drive and the capped drive's fps and p99 with
 AO off vs on, from `docs/findings-ambient-occlusion-2026-09-24.md`; 2026-09-24): the clear-audio card lost its `[h1]`.
+`28` the HDR card again, animated (`harness/hdr-card-gif.py`; 2026-09-25, replaces `24` in its place on the page at the
+maintainer's request): the left half plays the HDR showcase reel (`docs/media/hdr-showcase-sdr-vs-hdr.mp4`: fires and
+torch, headlights, a lightning strike) with a divider sweeping between the stock SDR pane and the HDR pane, both decoded to
+nits and shown with one exposure (the HDR peak at the GIF's white, the SDR white at ~63 % grey); the table keeps the still
+card's numbers and adds the 2026-09-25 fix (indoors by day the light map no longer follows the facing). `24` stays in
+the folder for older links.
 `description.txt` embeds them with `[img]` from the raw GitHub URL of `master`,
 so they render only after the folder is pushed. The staged page carries da.gd short links instead (2026-09-24,
 `scripts/workshop-shorten.py`, cache `docs/workshop/short-urls.txt`, ~80 characters saved per image; da.gd is the one

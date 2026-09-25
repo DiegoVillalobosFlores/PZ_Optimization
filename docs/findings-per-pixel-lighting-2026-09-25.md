@@ -278,3 +278,50 @@ flagged brightness step is the building cutaway (the roof hiding / showing) as t
 at the front door, 178.3-178.7 s leaving by the back for the bathroom, and one 0.1 s roof flash at 189.8 s while the
 path grazed the front door outside. Not lighting; whether stock flashes the roof the same way at that spot was not run.
 The lit frames inside (torch beam through the front windows, lamps in the kitchen and break room) are steady.
+
+## One-frame whole-screen flashes at chunk crossings, fixed (2026-09-25 evening, flip)
+
+Maintainer's report on the flip (release dc24455, `pixelLight` on): textures flicker at the top left while walking in
+circles. Rig: `explore=circle` on a copy of the save (`harness/CLAUDE.md`, circle-walk flicker rig), `devCapture` of every
+presented frame, `region-flicker.py` + `region-flicker-judge.py`. The flashes are single frames of the whole screen: the
+static world lit from the wrong squares (hidden rooms lit, lit rooms black; frame 596 of `flip-circle-cap-opt-*`: every
+chunk texture black, only the per-frame sprites left). 7 burst frames in 16 s with `pixelLight`, 0 with it off; `pplMode=pass`
+10 and `pplVariants=false` 5, so neither the composite program nor its variants. They came in pairs once per lap, where the
+circle crossed y = 10312, a chunk boundary.
+
+`devPplTrace` (new dev key: one game-thread line per frame with the lattice packs and the mapping inputs, one render-thread
+line per frame with the uniforms applied and the first chunk draw's `chunkDepth`) showed it: at the crossing the render
+thread renders its last state again while the game thread is late (the chunk-map shift), 72 replays in 16 s. `Frame.render()`
+set `free = true` after its first render, so the game thread had already refilled that Frame with the next frame's camera;
+the replay applied the new origin (`d0` one centre chunk later) to the old list's chunk depths: the reconstructed position 8
+squares (nearly a level in z) off for one frame. Fix: a Frame is freed only in `postRender()` (the state is recycled,
+`GenericSpriteRenderState.clear`, after which it cannot be replayed), and its chunk keys stay until then (a replay found them
+nulled: `chunk=?`). Runs `flip-fl-fix1-*` (trace: 72 replays, 0 depth mismatches) and `flip-fl-final-fix-*`: 0 bursts in 16 s,
+stock control `flip-fl-final-stock-*` 0. Jev: before the fix vs stock `pzopt_flicker` 0.97; after `no_flicker` 0.83.
+The 0.1 s roof flash at 189.8 s of the restaurant walk above may have been the same replay.
+
+## Grid lines along the chunk edges, fixed (2026-09-25 night, desktop)
+
+Maintainer's report: grid square lines on the ground with AO, per-pixel lighting, sun shadows and HDR on. Shot rig (Rosewood,
+`--flag start=8147,11507 --flag zoom=1 --flag route=S:30 --flag speed=1 --flag time_of_day=12 --flag weather=clear
+--route-seconds 8 --shot-at 3 --prop overlay=false`), one feature off per run (`gl-*`): the lines are `pixelLight` alone (AO,
+sun shadows and HDR off: same lines; `pixelLight=false`: none), thin dark lines every 8 squares, i.e. along the chunk
+texture edges. `devPplCostAt=0:8` (constant light) and `0:16` (no light) clear them, `0:2` (no edge path) does not: the
+light lookup. At render resolution each line is dotted single pixels (DLSS widens them to 2-3 px). The chunk depth
+textures are `GL_NEAREST` DEPTH16 (a gather over the covered texels changed nothing: no filtering). Cause: along the chunk
+edges the tile edge rows sit deeper than the 0.006-level tolerance of `lz = floor(P.z + 0.006)`, so they read level -1, a
+black lattice (the final depth of a seam pixel reconstructs at z -0.001..-0.004, the other chunk's edge fragment on top).
+
+Fix: a per-draw uniform `pplLv` (the chunk texture's `getMinLevel()` / `getTopLevel()`, `Gl.selectLevels`) clamps the light
+level to the levels the texture holds. The top bound also stops crowns of trees (z >= 1) in single-storey chunks reading the
+empty level-1 lattice (the black trees). Rows the tolerance lifts a level (`P.z < lz`: a floor's edge row a hair low, or the
+top row of a wall of the level below) keep the brighter of the two squares' light (an unseen upper floor put dark dots along
+wall tops and a jagged dark edge where floors meet cut-away walls).
+
+`harness/seam-lines.py`: seam pixels = dark ridges on straight iso-diagonal runs, "new" against a pixel-aligned control
+without the feature, "long" = runs of two squares and more. New long seams per MP, control floor 0-6: all four on 1,700 ->
+28 (`gl-all` -> `gl-fix4-all`), `pixelLight` alone 2,030 -> 21 (`gl-fix-pplonly` -> `gl-fix4-pplonly`); ~80 % of what is
+left is one faint line under a single exterior wall's top trim. Jev before the fix: `before_has_lines` 0.92-0.95; after:
+`kind` fixed 0.49 / still_lines 0.50 (all on), fixed 0.58 (`pixelLight` alone). Remaining: a thin dark rim on some sprite
+tops (lamp shades); odd-level floors of a two-level texture could in principle still drop to the level below at a chunk
+edge (the brighter-level rule covers it when the lower square is darker).

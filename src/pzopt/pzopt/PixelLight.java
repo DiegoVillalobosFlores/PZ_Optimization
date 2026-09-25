@@ -148,6 +148,8 @@ public final class PixelLight {
    private static int[] slotLevel; // per slot and level & 15: the level uploaded there
    private static final ArrayList<Frame> RING = new ArrayList<>();
    private static long frames, blocksUploaded, framesFull, packNs, packSimple, packHidden, packSlow;
+   private static int traceSq, traceSeen; // dev (devPplTrace): this frame's packed squares, the seen ones
+   private static long traceLum; // and the sum of their packed light
    private static int logCountdown;
 
    /** composite: the chunk composite shader lights each fragment (no extra pass); pass: a full-screen pass after it */
@@ -308,6 +310,13 @@ public final class PixelLight {
       if (--logCountdown <= 0) {
          logCountdown = 3600;
          Log.info("pixel light: " + stats());
+      }
+      if (Config.DEV_PPL_TRACE) {
+         Log.info(String.format(java.util.Locale.ROOT, "ppl trace: ms=%d cam=%.3f,%.3f o=%d,%d blocks=%d sq=%d lum=%.1f seen=%d full=%d onScreen=%d chunks=%d off=%.1f,%.1f zoom=%.3f d0=%.6f j=%.3f,%.3f comp=%b",
+               System.currentTimeMillis(), IsoCamera.frameState.camCharacterX, IsoCamera.frameState.camCharacterY, f.ox, f.oy, f.blocks, traceSq,
+               traceSq > 0 ? traceLum / (3.0 * traceSq) : -1.0, traceSeen, framesFull, onScreen.size(), f.chunks, f.offX, f.offY, f.zoom, f.d0, f.jx, f.jy, f.composite));
+         traceSq = traceSeen = 0;
+         traceLum = 0L;
       }
       if (f.composite) {
          SpriteRenderer.instance.drawGeneric(f);
@@ -510,10 +519,16 @@ public final class PixelLight {
          if (applied == null || applied != Gl.serial) {
             GL.appliedSerials.put(program, Gl.serial);
             GL.setChunkUniforms(program);
+            if (Config.DEV_PPL_TRACE) {
+               Integer k = GL.chunkIndex.get(texd.tex1);
+               Log.info(String.format(java.util.Locale.ROOT, "ppl rtrace: ms=%d serial=%d o=%d,%d d0=%.6f chunk=%s chunkDepth=%.6f", System.currentTimeMillis(), Gl.serial,
+                     GL.ox, GL.oy, GL.d0, k == null ? "?" : GL.chunkRect[k * 4] + "," + GL.chunkRect[k * 4 + 1] + "," + GL.chunkRect[k * 4 + 2], texd.chunkDepth));
+            }
          }
          if (shader != baseShader && bits != -1) {
             GL.selectLights(program, bits);
          }
+         GL.selectLevels(program, texd.tex1);
       } catch (Throwable t) {
          fail("chunk uniforms: " + t);
       }
@@ -835,6 +850,11 @@ public final class PixelLight {
                allHidden &= tvis == 0 || !torchNear(sq.x + 0.5F, sq.y + 0.5F, z); // no torch there: none to hide
             }
             if (conn != 255) packSlow++; else if (simple == 0) packHidden++; else packSimple++;
+            if (Config.DEV_PPL_TRACE && sq != null && !above) {
+               traceSq++;
+               traceLum += (info & 0xFF) + (info >> 8 & 0xFF) + (info >> 16 & 0xFF);
+               if (sq.lighting[playerIndex] instanceof LightingJNI.JNILighting tj && (tj.pzoptVis() & 1) != 0) traceSeen++;
+            }
             int cell8 = (y * 8 + x) * 4;
             b.putInt(base + cell8, info & 0xFFFFFF | simple << 24); // base light; a: a simple square (the shader's one-fetch path)
             int outdoor = sq != null && sq.isOutside() ? 255 : 0;
@@ -1044,13 +1064,19 @@ public final class PixelLight {
             GL.render(this);
          } catch (Throwable t) {
             fail("render: " + t);
-         } finally {
-            this.free = true;
          }
       }
 
+      /**
+       * The state that holds this frame is recycled (game thread, GenericSpriteRenderState.clear): only now can the frame be
+       * reused. Not after render(): the render thread renders its last state again while the game thread is late (a chunk
+       * crossing, the chunk map shift), and a frame already refilled with the next frame's camera put the lattice mapping one
+       * chunk away from the replayed composite's depth for that frame (a whole screen lit from the level above: black, or
+       * hidden rooms lit; the flip report, 2026-09-25).
+       */
       @Override
       public void postRender() {
+         java.util.Arrays.fill(this.chunkKeys, 0, Math.min(this.chunks, this.chunkKeys.length), null); // the depth textures, no longer referenced
          this.free = true;
       }
    }
@@ -1240,6 +1266,24 @@ public final class PixelLight {
             st[1] = bits;
          }
       }
+
+      private final java.util.HashMap<Integer, int[]> levelState = new java.util.HashMap<>(); // program -> {pplLv location, min, top sent}
+
+      /** Per chunk draw on every program: the levels the chunk texture holds (a uniform, sent only when it changes). */
+      void selectLevels(int program, zombie.core.textures.Texture depth) {
+         int[] st = this.levelState.get(program);
+         if (st == null) {
+            st = new int[] {GL20.glGetUniformLocation(program, "pplLv"), Integer.MIN_VALUE, Integer.MIN_VALUE};
+            this.levelState.put(program, st);
+         }
+         Integer k = depth == null ? null : this.chunkIndex.get(depth);
+         int lo = k == null ? -64 : (int)this.chunkRect[k * 4 + 2], hi = k == null ? 64 : (int)this.chunkRect[k * 4 + 3];
+         if (st[0] >= 0 && (st[1] != lo || st[2] != hi)) {
+            GL20.glUniform2i(st[0], lo, hi);
+            st[1] = lo;
+            st[2] = hi;
+         }
+      }
       private final java.util.HashMap<Integer, int[]> chunkUniforms = new java.util.HashMap<>();
       private int diag;
 
@@ -1287,8 +1331,7 @@ public final class PixelLight {
          this.wet = f.wet;
          this.chunkIndex.clear();
          for (int i = 0; i < f.chunks; i++) {
-            this.chunkIndex.put(f.chunkKeys[i], i);
-            f.chunkKeys[i] = null;
+            this.chunkIndex.put(f.chunkKeys[i], i); // (the keys stay until postRender: a replayed state renders this frame again)
          }
          System.arraycopy(f.chunkRect, 0, this.chunkRect, 0, f.chunks * 4);
          System.arraycopy(f.chunkFlags, 0, this.chunkFlags, 0, f.chunks);
@@ -1840,6 +1883,7 @@ public final class PixelLight {
       "uniform vec4 pplLb[16];", // direction x, y, cone cos (-2: a point light), strength
       "uniform int pplLn;",
       "uniform int pplSel = -1;", // the lights that reach the chunk texture being drawn (bits; set per draw in the composite: tiled light lists)
+      "uniform ivec2 pplLv = ivec2(-64, 64);", // the levels the chunk texture being drawn holds (min, top; set per draw in the composite)
       "uniform vec4 pplOpt;", // x: normals on, y: wrap, z: shadows on, w: shadow march length
       "uniform vec4 pplOpt2;", // x: smoothstep between centres, y: the light the shadow mask belongs to (-1: none)
       "layout(binding = 9) uniform sampler2D pplShadowMask;", // MASK_UNIT: the previous frame's torch shadow mask
@@ -1913,11 +1957,22 @@ public final class PixelLight {
       "   if ((cost & 8) != 0) return vec3(fract(P.x * 0.001) + 0.999);",
       // the square that owns the surface: a hair towards the viewer (a north wall's owner is on its +y side, a west wall's
       // on its +x side, a floor's above it)
-      "   float lz = floor(P.z + 0.006);", // tile edge rows are written up to 0.005 levels low; at most one row of a wall's top goes up
+      // tile edge rows are written up to 0.005 levels low; at most one row of a wall's top goes up. Along the chunk edges the
+      // edge rows sit deeper and took the level below the texture's (no squares there: a black lattice, a dotted dark line
+      // along every chunk edge); a wall's top row that goes up in a chunk with no squares above took a black lattice as
+      // well (dots along the wall tops): the level stays within the ones the chunk texture holds (top = the chunk's
+      // highest level with squares)
+      "   float lz = clamp(floor(P.z + 0.006), float(pplLv.x), float(pplLv.y));",
       "   vec2 sq = floor(P.xy + 0.004);",
       "   vec2 fxy = clamp(P.xy - sq, 0.0, 1.0);",
-      "   float fz = clamp(P.z - lz, 0.0, 1.0);",
       "   ivec2 s = (ivec2(sq) + pplOrg.xy) & pplOrg.z;",
+      // lifted a level by the tolerance: a floor's edge row a hair low or the top row of a wall of the level below; the
+      // brighter of the two squares (an unseen upper floor put dark dots along the wall tops)
+      "   if (P.z < lz && lz > float(pplLv.x)) {",
+      "      vec3 a = pplInfoAt(s, int(lz) & pplOrg.w).rgb, b = pplInfoAt(s, int(lz - 1.0) & pplOrg.w).rgb;",
+      "      if (max(b.r, max(b.g, b.b)) > max(a.r, max(a.g, a.b))) lz -= 1.0;",
+      "   }",
+      "   float fz = clamp(P.z - lz, 0.0, 1.0);",
       "   int lvl = int(lz) & pplOrg.w;",
       "   int view = int(pplMapC.w + 0.5);",
       // 1. the base light is the native's sample at each square's centre (lightInfo without the torches: what stock draws

@@ -12,6 +12,7 @@ import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.opengl.GL33;
 import zombie.core.Core;
+import zombie.core.ShaderHelper;
 import zombie.core.SpriteRenderer;
 import zombie.core.opengl.GLStateRenderThread;
 import zombie.core.textures.Texture;
@@ -464,7 +465,9 @@ public final class FogPass {
          for (int i = 0; i < 5; i++) {
             GL20.glEnableVertexAttribArray(i);
          }
-         GL20.glUseProgram(0);
+         // Raw binds bypass ShaderHelper; invalidate its cached ID before restoring the default shader.
+         ShaderHelper.forgetCurrentlyBound();
+         ShaderHelper.glUseProgramObjectARB(0);
          GL11.glEnable(GL11.GL_DEPTH_TEST);
          GL11.glDepthMask(true);
          GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);

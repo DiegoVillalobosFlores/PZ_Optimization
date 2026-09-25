@@ -440,6 +440,13 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   60 fps from 4 s, quality above both drivers. `worker` = CPU encode (`pzopt.TexBc`, the macOS GL 4.1 path, untested on
   the Mac); `texCompressCache` (off, ~230 MB). Rigs: `tools/TexCompProbe.java` (+ `harness/texprobe/wrap.sh` via
   `run.sh --wrap`), `harness/texdiff.py`, `harness/pad/menu-idle.txt`, `devTexCompTiming`.
+- Soft sun / contact shadows (2026-09-25, `docs/findings-contact-shadows-2026-09-25.md`, off by default, Enhancements tab
+  "Sun shadows"): the static world's sun shadows baked by the chunk AO kernel (visibility bitmask over the sun disk, march
+  length from the sun height, outdoor squares only, a sun step recomputes a texture a frame); characters, atlas zombies and
+  cars as capsules in one instanced pass after the composite (`pzopt.CapsuleShadow`, Quilez capsule shadows on the scene
+  depth), also against torches / headlights at night; characters dimmed in static shade (`SunShadow.characterFactor`).
+  Desktop: capped drive tails at parity (+33 us GPU streaming), crowds +10-15 us; the flip's character pass ~125-200 us
+  (open). Rigs: `harness/contact/kernel_rig.py` (offline kernel on EGL), `alt.py` + `devSunAlternate`, flag `crowd=N`.
 - Open plans: `docs/plan-graphics-enhancements.md` (2026-09-25: visual features after AO, sun shadows and per-pixel lighting first), `docs/plan-game-load.md`, `docs/plan-vulkan-renderer.md`, `docs/plan-resource-use.md`,
   `docs/plan-zombie-multithread.md` (2026-09-22: the rest of the zombie simulation on all cores, phased).
   The game-thread optimization plans were dropped on 2026-09-21 at the maintainer's request.

@@ -176,6 +176,12 @@ happened, stock driver compression (run `tc-final-driver`) vs this release's def
 Texture compression on; the table: menu fps 4-16 s after launch, the slowest 1 % of menu frames, the render thread's
 compression time over a boot, game CPU in the first 30 s, and texture detail against uncompressed (zoom-1 screenshot).
 The per-pixel lighting card `31` lost its "New!" heading (its image stays).
+`33` the "New! Let There Be Light" card (`harness/sun-card-gif.py`; 2026-09-25, sun and contact shadows,
+`docs/findings-contact-shadows-2026-09-25.md`): the left half plays the horde-shoot scene at the Riverside pier (Jev shooting
+150 zombies, 16:30) from one recorded run whose sun shadows switch off and on every 4 s (`devSunTogglePeriod=4000`, run
+`cs-card-horde`), labelled from the console's toggle lines; 7 fps, temporally denoised (8.4 MB); the table: sun shadows,
+characters' and cars' shadows, torch / headlight shadows, the GPU cost and the p99 of the capped 120 km/h drive. The
+texture-compression card `32` lost its "New!" heading (its image stays).
 `description.txt` embeds them with `[img]` from the raw GitHub URL of `master`,
 so they render only after the folder is pushed. The staged page carries da.gd short links instead (2026-09-24,
 `scripts/workshop-shorten.py`, cache `docs/workshop/short-urls.txt`, ~80 characters saved per image; da.gd is the one

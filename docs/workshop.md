@@ -170,6 +170,12 @@ night with per-pixel lighting off and on (desktop `--shot-at` runs `ppl-shot-fal
 differs); the table: light between tiles, light through walls, the torch beam, and the GPU cost on the flip laptop from
 the drift-free A/B against the stock chunk program (night street +0.05 ms, torch-lit house +0.15 ms, cost rows). The
 Smooth Operator card `30` lost its "New!" heading (its image stays).
+`32` the "New! Texture compression on the GPU" card (`harness/texcomp-card-gif.py`; 2026-09-25, release dc24455;
+`docs/findings-texcompress-2026-09-25.md`): the left half draws the flip's main-menu frame rate from launch as it
+happened, stock driver compression (run `tc-final-driver`) vs this release's defaults (run `tc-stage-128`), both with
+Texture compression on; the table: menu fps 4-16 s after launch, the slowest 1 % of menu frames, the render thread's
+compression time over a boot, game CPU in the first 30 s, and texture detail against uncompressed (zoom-1 screenshot).
+The per-pixel lighting card `31` lost its "New!" heading (its image stays).
 `description.txt` embeds them with `[img]` from the raw GitHub URL of `master`,
 so they render only after the folder is pushed. The staged page carries da.gd short links instead (2026-09-24,
 `scripts/workshop-shorten.py`, cache `docs/workshop/short-urls.txt`, ~80 characters saved per image; da.gd is the one

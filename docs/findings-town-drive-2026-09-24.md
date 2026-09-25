@@ -282,3 +282,15 @@ driver round trips in the frames that create textures or bake a burst) and other
 entity update and chunk arrival, each 1 % or less; the bake emission itself (5.5 % of the game thread) records into the
 single-threaded SpriteRenderer state through static APIs, which rules out recording bakes on workers without a rewrite
 of the sprite path.
+
+## The flip (2026-09-25, release f05e11d, `flip-td-*`)
+
+Same route, 240 cap, balanced power profile, `--launcher direct`, no MangoHud; stock = `--prop enabled=false` on the
+installed build (the same stock path as the Workshop card), alternating pairs; all four drove the whole 852-tile path.
+
+| run | fps | p99 | p99.9 | max | 1 %-low | jitter | game thread | GPU |
+|---|---|---|---|---|---|---|---|---|
+| flip-td-stock-1 / 2 | 91.8 / 92.7 | 38.3 / 38.6 | 59.6 / 61.2 | 94.0 / 72.4 | 26 / 26 | 3.0 / 2.7 | 90-91 % | 37 % |
+| flip-td-opt-1 / 2 | 116.2 / 116.6 | 15.6 / 15.0 | 25.0 / 26.3 | 48.0 / 37.4 | 64 / 67 | 0.7 / 0.7 | 80 % | 40 % |
+
+The flip stays game-thread bound (80 % of a core with the release), far below the cap; the tail shrinks the most.

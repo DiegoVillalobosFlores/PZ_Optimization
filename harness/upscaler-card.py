@@ -91,7 +91,7 @@ text(X0, H - PAD - 108, "DLSS 4's transformer model costs ~2.5 ms per frame at 5
 text(X0, H - PAD - 84, "1-px detail (power lines, car lettering) that a 50 % spatial upscale loses. Spinning walk through Rosewood, same "
      "build: off 592 fps, FSR 1.0 50 % 802, DLSS 50 % 281, DLSS 67 % 301.", 12.5, INK2)
 text(X0, H - PAD - 60, "Options > Enhancements > Upscaling: Upscaler, Upscaler quality (67 / 58 / 50 / 33 / 100 %), Upscaler render scale of your own, "
-     "the AMD FSR 1.0 sharpening, the NVIDIA DLSS model preset and sharpening, the temporal motion vectors. Applies on the next launch.", 12.5, INK2)
+     "the AMD FSR 1.0 sharpening, the NVIDIA DLSS model preset and sharpening, the temporal motion vectors.", 12.5, INK2)
 text(X0, H - PAD - 30, "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, README \"Upscaling: FSR 1.0 and DLSS\" "
      "and docs/plan-upscalers.md, " + DATE + ".", 11.5, MUTED)
 fig.savefig(OUT, dpi=100, facecolor=BG)

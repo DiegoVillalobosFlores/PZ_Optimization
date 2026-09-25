@@ -58,7 +58,7 @@ FOOTER = [
     "Left: stock SDR and the HDR output of the same scene (fires and torch, headlights, lightning), both shown darker on "
     "this SDR image so the light above white fits. RTX 4090, 5120x2160 HDR panel (1307 nits), KDE Plasma 6.",
     "On by itself on an HDR screen: Linux with HDR on in a Wayland desktop with colour management, and Macs with an XDR "
-    "display. SDR screens are unchanged. Options > Optimizations > HDR output.",
+    "display. SDR screens are unchanged. Options > Enhancements > HDR output.",
     "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, docs/findings-hdr-2026-09-24.md.",
 ]
 

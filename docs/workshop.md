@@ -151,6 +151,12 @@ torch, headlights, a lightning strike) with a divider sweeping between the stock
 nits and shown with one exposure (the HDR peak at the GIF's white, the SDR white at ~63 % grey); the table keeps the still
 card's numbers and adds the 2026-09-25 fix (indoors by day the light map no longer follows the facing). `24` stays in
 the folder for older links.
+`29` the "New! Enhancements tab" card (`harness/enhancements-card-gif.py`; 2026-09-25, release f837467): the left half
+plays run `enh-live-card`, a running game in which the harness's `live_set` rig does what Apply does (ambient occlusion
+on, strengths 150 %, off) with a label naming the change in force; the table: upscaler / AO / HDR slider changes need no
+restart, DLSS switches the next frame, four AO strengths instead of one, seven before / after preview pairs. The AO card
+`27` lost its "New!" heading (its image stays). The HDR card `28` still names Options > Optimizations > HDR output in its
+footer (the section moved to the Enhancements tab); re-render it (`harness/hdr-card-gif.py`) when it next changes.
 `description.txt` embeds them with `[img]` from the raw GitHub URL of `master`,
 so they render only after the folder is pushed. The staged page carries da.gd short links instead (2026-09-24,
 `scripts/workshop-shorten.py`, cache `docs/workshop/short-urls.txt`, ~80 characters saved per image; da.gd is the one

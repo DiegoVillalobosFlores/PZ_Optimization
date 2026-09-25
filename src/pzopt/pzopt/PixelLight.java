@@ -528,6 +528,7 @@ public final class PixelLight {
          if (shader != baseShader && bits != -1) {
             GL.selectLights(program, bits);
          }
+         GL.selectLevels(program, texd.tex1);
       } catch (Throwable t) {
          fail("chunk uniforms: " + t);
       }
@@ -1265,6 +1266,24 @@ public final class PixelLight {
             st[1] = bits;
          }
       }
+
+      private final java.util.HashMap<Integer, int[]> levelState = new java.util.HashMap<>(); // program -> {pplLv location, min, top sent}
+
+      /** Per chunk draw on every program: the levels the chunk texture holds (a uniform, sent only when it changes). */
+      void selectLevels(int program, zombie.core.textures.Texture depth) {
+         int[] st = this.levelState.get(program);
+         if (st == null) {
+            st = new int[] {GL20.glGetUniformLocation(program, "pplLv"), Integer.MIN_VALUE, Integer.MIN_VALUE};
+            this.levelState.put(program, st);
+         }
+         Integer k = depth == null ? null : this.chunkIndex.get(depth);
+         int lo = k == null ? -64 : (int)this.chunkRect[k * 4 + 2], hi = k == null ? 64 : (int)this.chunkRect[k * 4 + 3];
+         if (st[0] >= 0 && (st[1] != lo || st[2] != hi)) {
+            GL20.glUniform2i(st[0], lo, hi);
+            st[1] = lo;
+            st[2] = hi;
+         }
+      }
       private final java.util.HashMap<Integer, int[]> chunkUniforms = new java.util.HashMap<>();
       private int diag;
 
@@ -1864,6 +1883,7 @@ public final class PixelLight {
       "uniform vec4 pplLb[16];", // direction x, y, cone cos (-2: a point light), strength
       "uniform int pplLn;",
       "uniform int pplSel = -1;", // the lights that reach the chunk texture being drawn (bits; set per draw in the composite: tiled light lists)
+      "uniform ivec2 pplLv = ivec2(-64, 64);", // the levels the chunk texture being drawn holds (min, top; set per draw in the composite)
       "uniform vec4 pplOpt;", // x: normals on, y: wrap, z: shadows on, w: shadow march length
       "uniform vec4 pplOpt2;", // x: smoothstep between centres, y: the light the shadow mask belongs to (-1: none)
       "layout(binding = 9) uniform sampler2D pplShadowMask;", // MASK_UNIT: the previous frame's torch shadow mask
@@ -1937,11 +1957,22 @@ public final class PixelLight {
       "   if ((cost & 8) != 0) return vec3(fract(P.x * 0.001) + 0.999);",
       // the square that owns the surface: a hair towards the viewer (a north wall's owner is on its +y side, a west wall's
       // on its +x side, a floor's above it)
-      "   float lz = floor(P.z + 0.006);", // tile edge rows are written up to 0.005 levels low; at most one row of a wall's top goes up
+      // tile edge rows are written up to 0.005 levels low; at most one row of a wall's top goes up. Along the chunk edges the
+      // edge rows sit deeper and took the level below the texture's (no squares there: a black lattice, a dotted dark line
+      // along every chunk edge); a wall's top row that goes up in a chunk with no squares above took a black lattice as
+      // well (dots along the wall tops): the level stays within the ones the chunk texture holds (top = the chunk's
+      // highest level with squares)
+      "   float lz = clamp(floor(P.z + 0.006), float(pplLv.x), float(pplLv.y));",
       "   vec2 sq = floor(P.xy + 0.004);",
       "   vec2 fxy = clamp(P.xy - sq, 0.0, 1.0);",
-      "   float fz = clamp(P.z - lz, 0.0, 1.0);",
       "   ivec2 s = (ivec2(sq) + pplOrg.xy) & pplOrg.z;",
+      // lifted a level by the tolerance: a floor's edge row a hair low or the top row of a wall of the level below; the
+      // brighter of the two squares (an unseen upper floor put dark dots along the wall tops)
+      "   if (P.z < lz && lz > float(pplLv.x)) {",
+      "      vec3 a = pplInfoAt(s, int(lz) & pplOrg.w).rgb, b = pplInfoAt(s, int(lz - 1.0) & pplOrg.w).rgb;",
+      "      if (max(b.r, max(b.g, b.b)) > max(a.r, max(a.g, a.b))) lz -= 1.0;",
+      "   }",
+      "   float fz = clamp(P.z - lz, 0.0, 1.0);",
       "   int lvl = int(lz) & pplOrg.w;",
       "   int view = int(pplMapC.w + 0.5);",
       // 1. the base light is the native's sample at each square's centre (lightInfo without the torches: what stock draws

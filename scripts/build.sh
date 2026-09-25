@@ -80,6 +80,10 @@ if [[ -d "$SRC/lua" ]]; then
   mkdir -p "$OUT/media/lua"
   cp -r "$SRC/lua/." "$OUT/media/lua/"
 fi
+# UI translations (media/pzopt/translate/<LANG>.json, pzopt.I18n): refresh the English template from the call sites,
+# then check every translation's placeholders (scripts/i18n.py; missing keys only listed, they fall back to English)
+python3 "$REPO/scripts/i18n.py"
+python3 "$REPO/scripts/i18n.py" --check || { echo "TRANSLATION CHECK FAILED: see the ERROR lines above (scripts/i18n.py)" >&2; exit 1; }
 # Other loose media (src/media/ui/pzopt/compare/*.gif: the Optimizations tab's stock-vs-optimized clips,
 # harness/menu-gifs.py) lands under the game dir's media/ the same way.
 if [[ -d "$SRC/media" ]]; then

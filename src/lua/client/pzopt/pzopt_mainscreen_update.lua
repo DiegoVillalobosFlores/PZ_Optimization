@@ -15,8 +15,9 @@
 -- Installed by scripts/pzopt.sh into <game dir>/media/lua/client/pzopt/ (loose game-dir Lua is
 -- loaded like any other, no mod to enable).
 
-local ITEM_TEXT = "UPDATE PZ OPTIMIZATION"   -- the stock items are capitals (UI_mainscreen_* translations)
-local ITEM_RESTART = "RESTART TO FINISH THE UPDATE"
+local T = PzoptT
+local ITEM_TEXT = T("update.item", "UPDATE PZ OPTIMIZATION")   -- the stock items are capitals (UI_mainscreen_* translations)
+local ITEM_RESTART = T("update.itemRestart", "RESTART TO FINISH THE UPDATE")
 
 local function perf()
     return getPerformance()
@@ -98,49 +99,49 @@ function PzoptUpdateDialog:refresh(force)
     local installed = p:getPzoptUpdateInstalledCommit()
     local tag = p:getPzoptUpdateTag()
     local published = p:getPzoptUpdatePublished()
-    local head = "Installed build: " .. installed .. " <LINE> Available: " .. tag
-    if published ~= "" then head = head .. " (published " .. published .. ")" end
+    local head = T("update.installed", "Installed build: %1", installed) .. " <LINE> " .. T("update.available", "Available: %1", tag)
+    if published ~= "" then head = head .. " " .. T("update.published", "(published %1)", published) end
     local body
     if s == "available" then
         if p:canPzoptUpdateInstall() then
             body = head .. " <LINE> <LINE> "
-                .. "Update now downloads the release zip, replaces the installed files (the ones listed in "
+                .. T("update.body.available", "Update now downloads the release zip, replaces the installed files (the ones listed in "
                 .. "pzopt-installed.txt; the game's own files are never touched) and asks to quit: the new classes load "
-                .. "on the next launch. Saves and options stay as they are."
-            self.primary:setTitle("Update now")
-            self.secondary:setTitle("Later")
+                .. "on the next launch. Saves and options stay as they are.")
+            self.primary:setTitle(T("update.button.updateNow", "Update now"))
+            self.secondary:setTitle(T("update.button.later", "Later"))
         else
             body = head .. " <LINE> <LINE> "
-                .. "This copy was not installed by install.sh / install.ps1 (no pzopt-installed.txt in the game folder), "
+                .. T("update.body.manual", "This copy was not installed by install.sh / install.ps1 (no pzopt-installed.txt in the game folder), "
                 .. "so it cannot replace its own files. Get the new zip from the release page and unpack it by hand, "
-                .. "or install it once with the installer."
-            self.primary:setTitle("Open release page")
-            self.secondary:setTitle("Close")
+                .. "or install it once with the installer.")
+            self.primary:setTitle(T("update.button.releasePage", "Open release page"))
+            self.secondary:setTitle(T("update.button.close", "Close"))
         end
         local notes = richNotes(p:getPzoptUpdateNotes())
         if notes ~= "" then body = body .. " <LINE> <LINE> <RGB:0.8,0.8,0.8> " .. notes end
     elseif s == "downloading" then
-        body = head .. " <LINE> <LINE> Downloading the release zip..."
-        self.primary:setTitle("Hide")
+        body = head .. " <LINE> <LINE> " .. T("update.body.downloading", "Downloading the release zip...")
+        self.primary:setTitle(T("update.button.hide", "Hide"))
         self.secondary:setTitle("")
     elseif s == "installing" then
-        body = head .. " <LINE> <LINE> Replacing the installed files..."
-        self.primary:setTitle("Hide")
+        body = head .. " <LINE> <LINE> " .. T("update.body.installing", "Replacing the installed files...")
+        self.primary:setTitle(T("update.button.hide", "Hide"))
         self.secondary:setTitle("")
     elseif s == "installed" then
         body = head .. " <LINE> <LINE> <RGB:0.6,1,0.6> " .. p:getPzoptUpdateMessage() .. " <RGB:1,1,1> <LINE> <LINE> "
-            .. "The game keeps running the previous build until it restarts. Quit now and launch it again to load the update."
-        self.primary:setTitle("Quit game")
-        self.secondary:setTitle("Later")
+            .. T("update.body.installedDone", "The game keeps running the previous build until it restarts. Quit now and launch it again to load the update.")
+        self.primary:setTitle(T("update.button.quit", "Quit game"))
+        self.secondary:setTitle(T("update.button.later", "Later"))
     elseif s == "error" then
         body = head .. " <LINE> <LINE> <RGB:1,0.6,0.6> " .. (p:getPzoptUpdateMessage():gsub("[<>]", "")) .. " <RGB:1,1,1> <LINE> <LINE> "
-            .. "Nothing was changed if the download failed; if the file swap failed, run the installer again "
-            .. "(install.sh / install.ps1, --uninstall first). The release page has the zip."
-        self.primary:setTitle("Open release page")
-        self.secondary:setTitle("Close")
+            .. T("update.body.error", "Nothing was changed if the download failed; if the file swap failed, run the installer again "
+            .. "(install.sh / install.ps1, --uninstall first). The release page has the zip.")
+        self.primary:setTitle(T("update.button.releasePage", "Open release page"))
+        self.secondary:setTitle(T("update.button.close", "Close"))
     else
-        body = "No update is offered right now."
-        self.primary:setTitle("Close")
+        body = T("update.body.none", "No update is offered right now.")
+        self.primary:setTitle(T("update.button.close", "Close"))
         self.secondary:setTitle("")
     end
     self.text.text = body
@@ -210,7 +211,7 @@ end
 function PzoptUpdateDialog:prerender()
     ISPanelJoypad.prerender(self)
     self:refresh(false)
-    self:drawText("PZ Optimization update", PAD, PAD, 1, 1, 1, 1, UIFont.Medium)
+    self:drawText(T("update.title", "PZ Optimization update"), PAD, PAD, 1, 1, 1, 1, UIFont.Medium)
     -- progress bar above the buttons: the download share, full while the files swap, green when done
     local s = self.shownState
     local barY = self.height - PAD - BTN_HGT - PAD - BAR_HGT
@@ -231,9 +232,9 @@ function PzoptUpdateDialog:prerender()
     end
     local label = nil
     if s == "downloading" then
-        label = "downloading " .. perf():getPzoptUpdateProgress() .. " %"
+        label = T("update.bar.downloading", "downloading %1 %", perf():getPzoptUpdateProgress())
     elseif s == "installing" then
-        label = "installing"
+        label = T("update.bar.installing", "installing")
     end
     if label then
         local lw = getTextManager():MeasureStringX(UIFont.Small, label)
@@ -341,7 +342,7 @@ end
 -- release (tag win-<revision>-<commit>) while one is offered, downloading, installed or failed.
 local function versionText()
     local p = perf()
-    local text = "Version " .. p:getPzoptUpdateInstalledCommit()
+    local text = T("update.version", "Version %1", p:getPzoptUpdateInstalledCommit())
     local tag = p:getPzoptUpdateTag()
     if tag ~= "" then
         text = text .. " -> " .. (tag:match("([^-]+)$") or tag)
@@ -461,13 +462,13 @@ local function syncItem(self)
     end
     local text = ITEM_TEXT
     if s == "downloading" then
-        text = "UPDATING... " .. perf():getPzoptUpdateProgress() .. " %"
+        text = T("update.item.downloading", "UPDATING... %1 %", perf():getPzoptUpdateProgress())
     elseif s == "installing" then
-        text = "UPDATING... INSTALLING"
+        text = T("update.item.installing", "UPDATING... INSTALLING")
     elseif s == "installed" then
         text = ITEM_RESTART
     elseif s == "error" and enabled then
-        text = "UPDATE FAILED"
+        text = T("update.item.failed", "UPDATE FAILED")
     end
     if label.name ~= text then
         label:setNameWithoutMoving(text)

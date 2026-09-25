@@ -622,7 +622,7 @@ public final class GameThreadProfile {
          for (Map.Entry<String, int[]> x : under(w, "w:" + phase + '/')) {
             phaseWaits += x.getValue()[0];
          }
-         rows.add(new Row(0, phase, 100f * p.getValue()[0] / total, 100f * phaseWaits / total, "", phaseColor(phase)));
+         rows.add(new Row(0, display(phase), 100f * p.getValue()[0] / total, 100f * phaseWaits / total, "", phaseColor(phase)));
          int shown = 0;
          for (Map.Entry<String, int[]> s : under(w, "s:" + phase + '/')) {
             if (shown >= maxSubs || 100 * s.getValue()[0] < total) {
@@ -642,7 +642,7 @@ public final class GameThreadProfile {
                hint.append(hots == 0 ? "" : "  ").append(shortHot(l.getKey())).append(' ').append(pct(l.getValue()[0], total));
                hots++;
             }
-            rows.add(new Row(1, sub, 100f * s.getValue()[0] / total, 100f * waits / total, hint.toString(), nameColor(sub)));
+            rows.add(new Row(1, display(sub), 100f * s.getValue()[0] / total, 100f * waits / total, hint.toString(), nameColor(sub)));
             shown++;
          }
       }
@@ -663,7 +663,7 @@ public final class GameThreadProfile {
       for (Map.Entry<String, int[]> e : under(w, "w:")) {
          waits += e.getValue()[0];
       }
-      return "game thread (" + n[0] + " stacks / " + WINDOW_SECONDS + " s), most time first   waiting " + pct(waits, n[0]);
+      return I18n.text("profile.header", "game thread (%1 stacks / %2 s), most time first   waiting %3", n[0], WINDOW_SECONDS, pct(waits, n[0]));
    }
 
    /** The two biggest sub-phases for the verdict line, e.g. {@code "chunk bakes 21 %, zombies 9 %"}; empty without data. */
@@ -684,9 +684,62 @@ public final class GameThreadProfile {
             break;
          }
          String name = e.getKey().substring(e.getKey().indexOf('/') + 1);
-         sb.append(i == 0 ? "" : ", ").append(name).append(' ').append(pct(e.getValue()[0], n[0]));
+         sb.append(i == 0 ? "" : ", ").append(display(name)).append(' ').append(pct(e.getValue()[0], n[0]));
       }
       return sb.toString();
+   }
+
+   /**
+    * A phase / sub-phase label ({@link #PHASES}, {@link #LABELS}) in the game's language, for the overlay only: the
+    * keys, the files and the colours keep the English label. Unlabelled sub-phases ({@code Class.method}) pass through.
+    */
+   static String display(String label) {
+      switch (label) {
+         case "update": return I18n.text("profile.update", "update");
+         case "render": return I18n.text("profile.render", "render");
+         case "lighting": return I18n.text("profile.lighting", "lighting");
+         case "outside frame": return I18n.text("profile.outsideFrame", "outside frame");
+         case "frame other": return I18n.text("profile.frameOther", "frame other");
+         case "player": return I18n.text("profile.player", "player");
+         case "zombies": return I18n.text("profile.zombies", "zombies");
+         case "animals": return I18n.text("profile.animals", "animals");
+         case "vehicles": return I18n.text("profile.vehicles", "vehicles");
+         case "chunk map": return I18n.text("profile.chunkMap", "chunk map");
+         case "chunk stream": return I18n.text("profile.chunkStream", "chunk stream");
+         case "weather update": return I18n.text("profile.weatherUpdate", "weather update");
+         case "ui update": return I18n.text("profile.uiUpdate", "ui update");
+         case "lua events": return I18n.text("profile.luaEvents", "lua events");
+         case "audio": return I18n.text("profile.audio", "audio");
+         case "world sounds": return I18n.text("profile.worldSounds", "world sounds");
+         case "zombie population": return I18n.text("profile.zombiePopulation", "zombie population");
+         case "objects update": return I18n.text("profile.objectsUpdate", "objects update");
+         case "chunk bakes": return I18n.text("profile.chunkBakes", "chunk bakes");
+         case "tree bake": return I18n.text("profile.treeBake", "tree bake");
+         case "translucent": return I18n.text("profile.translucent", "translucent");
+         case "translucent floor": return I18n.text("profile.translucentFloor", "translucent floor");
+         case "world items": return I18n.text("profile.worldItems", "world items");
+         case "characters draw": return I18n.text("profile.charactersDraw", "characters draw");
+         case "chunk composite": return I18n.text("profile.chunkComposite", "chunk composite");
+         case "prepare chunks": return I18n.text("profile.prepareChunks", "prepare chunks");
+         case "chunk checks": return I18n.text("profile.chunkChecks", "chunk checks");
+         case "chunk lighting": return I18n.text("profile.chunkLighting", "chunk lighting");
+         case "cutaways": return I18n.text("profile.cutaways", "cutaways");
+         case "weather fx": return I18n.text("profile.weatherFx", "weather fx");
+         case "fog": return I18n.text("profile.fog", "fog");
+         case "puddles": return I18n.text("profile.puddles", "puddles");
+         case "water": return I18n.text("profile.water", "water");
+         case "terrain": return I18n.text("profile.terrain", "terrain");
+         case "ui draw": return I18n.text("profile.uiDraw", "ui draw");
+         case "lighting jni": return I18n.text("profile.lightingJni", "lighting jni");
+         case "frame hand-off": return I18n.text("profile.frameHandOff", "frame hand-off");
+         case "render-thread call": return I18n.text("profile.renderThreadCall", "render-thread call");
+         case "overlay": return I18n.text("profile.overlay", "overlay");
+         case "game profiler": return I18n.text("profile.gameProfiler", "game profiler");
+         case "file system": return I18n.text("profile.fileSystem", "file system");
+         case "main-thread queue": return I18n.text("profile.mainThreadQueue", "main-thread queue");
+         case "saving": return I18n.text("profile.saving", "saving");
+         default: return label; // ecs, vispoly and Class.method names stay as they are
+      }
    }
 
    /**
@@ -714,7 +767,7 @@ public final class GameThreadProfile {
       if (!enabled() || sampler == null) {
          return null;
       }
-      Node root = new Node("game thread");
+      Node root = new Node(I18n.text("profile.gameThread", "game thread")); // the flame graph's root box (overlay only)
       int h = ringHead;
       for (int i = 1; i <= Math.min(WINDOW_SECONDS, Math.min(h, RING)); i++) {
          Second s = ring[(h - i) % RING];

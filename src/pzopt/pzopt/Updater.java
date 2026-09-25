@@ -182,8 +182,8 @@ public final class Updater {
          }
       } catch (Exception e) {
          state = State.ERROR;
-         message = "update check failed: " + e;
-         Log.warn(message);
+         message = I18n.text("updater.checkFailed", "update check failed: %1", e);
+         Log.warn("update check failed: " + e);
       }
    }
 
@@ -286,12 +286,12 @@ public final class Updater {
          AotCache.onInstallChanging(dir); // the loose files change: launcher back to them, jar and cache dropped
          String rev = Overrides.jarRevision();
          Map<String, String> installed = swap(zip, stage, dir, rev);
-         message = "installed " + r.tag + " (" + installed.size() + " files)";
+         message = I18n.text("updater.installed", "installed %1 (%2 files)", r.tag, installed.size());
          state = State.INSTALLED;
-         Log.info(message + "; restart the game to load it");
+         Log.info("installed " + r.tag + " (" + installed.size() + " files); restart the game to load it");
       } catch (Exception e) {
          state = State.ERROR;
-         message = "update failed: " + e.getMessage();
+         message = I18n.text("updater.failed", "update failed: %1", e.getMessage());
          Log.warn("update failed: " + e);
       } finally {
          deleteTree(stage);

@@ -108,13 +108,12 @@ public final class Power {
       }
    }
 
-   /** The overlay's power line, e.g. "power 245 W: CPU 60 + GPU 185   1.02 J/frame". */
+   /** The overlay's power line, e.g. "power 245 W: CPU 60 W + GPU 185 W   1.020 J/frame". */
    static String overlayLine(float fps) {
       if (!discovered) {
-         return "power: reading sensors";
+         return I18n.text("overlay.powerReading", "power: reading sensors");
       }
       float total = totalW;
-      StringBuilder b = new StringBuilder("power ");
       List<String> parts = new ArrayList<>();
       if (!Float.isNaN(cpuW)) {
          parts.add(String.format(Locale.ROOT, "CPU %.0f W", cpuW));
@@ -124,31 +123,47 @@ public final class Power {
       if (!Float.isNaN(gpuW)) {
          parts.add(String.format(Locale.ROOT, "GPU %.0f W", gpuW));
       }
+      String body;
       if (!Float.isNaN(batW)) {
-         b.append(String.format(Locale.ROOT, "%.1f W on battery (whole machine)", batW));
-         if (!parts.isEmpty()) {
-            b.append(": ").append(String.join(", ", parts));
-         }
+         body = onBattery(String.format(Locale.ROOT, "%.1f", batW)) + (parts.isEmpty() ? "" : ": " + String.join(", ", parts));
       } else if (!Float.isNaN(total)) {
-         b.append(String.format(Locale.ROOT, "%.0f W: ", total)).append(String.join(" + ", parts));
+         body = String.format(Locale.ROOT, "%.0f W: ", total) + String.join(" + ", parts);
       } else if (!parts.isEmpty()) {
-         b.append(String.join(", ", parts));
+         body = String.join(", ", parts);
       } else if (!rapl.isEmpty() || nvmlDevices.length > 0 || amdGpuPower != null || amdSocPower != null) {
-         return "power: reading sensors"; // the energy counters need two samples
+         return I18n.text("overlay.powerReading", "power: reading sensors"); // the energy counters need two samples
       } else {
-         return battery != null ? "power: n/a on mains (only the battery reports power here)" : "power: no readable sensor on this machine";
+         return battery != null ? I18n.text("overlay.powerMainsOnly", "power: n/a on mains (only the battery reports power here)")
+               : I18n.text("overlay.powerNoSensor", "power: no readable sensor on this machine");
       }
+      StringBuilder b = new StringBuilder(I18n.text("overlay.power", "power %1", body));
       if (!Float.isNaN(total) && fps > 0f) {
          b.append(String.format(Locale.ROOT, "   %.3f J/frame", total / fps));
       }
       if (Float.isNaN(cpuW) && Float.isNaN(socW) && !cpuMissing.isEmpty() && Float.isNaN(batW)) {
-         b.append("   CPU n/a (").append(cpuMissing).append(')');
+         b.append("   ").append(I18n.text("overlay.powerCpuMissing", "CPU n/a (%1)", cpuMissingText()));
       }
       return b.toString();
    }
 
+   private static String onBattery(String watts) {
+      return I18n.text("overlay.powerOnBattery", "%1 W on battery (whole machine)", watts);
+   }
+
+   /** {@link #cpuMissing} (English, it is logged too) in the game's language. */
+   private static String cpuMissingText() {
+      switch (cpuMissing) {
+         case "no CPU power counter on Windows": return I18n.text("overlay.powerNoCpuCounterWindows", "no CPU power counter on Windows");
+         case "RAPL counters are root-only": return I18n.text("overlay.powerRaplRootOnly", "RAPL counters are root-only");
+         case "no RAPL counters": return I18n.text("overlay.powerNoRapl", "no RAPL counters");
+         default: return cpuMissing;
+      }
+   }
+
    /** The widest line {@link #overlayLine} makes, for the overlay's steady panel width. */
-   static final String TEMPLATE = "power 88.8 W on battery (whole machine): SoC 88.8 W, GPU 888 W   8.888 J/frame";
+   static String template() {
+      return I18n.text("overlay.power", "power %1", onBattery("88.8") + ": SoC 88.8 W, GPU 888 W") + "   8.888 J/frame";
+   }
 
    private static void discover() {
       String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);

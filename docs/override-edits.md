@@ -806,6 +806,11 @@ so the restart dialog and `options.ini` behave as for any single change. A
 pinned `enabled` (pzopt.properties / `-Dpzopt.enabled`, e.g. a harness
 `--prop enabled=false` stock run) disables both buttons.
 
+UI translations (added 2026-09-26, issue #21): one more forward, `getPzoptText(key, english)`, returning
+`pzopt.I18n.text(key, english)`: pzopt's own UI text in the game's language from
+`media/pzopt/translate/<LANG>.json`, the English passed in when a language or key has no translation. The
+game's Translator cannot carry these strings (it only reads its fixed file names and clears its maps on reload).
+
 Preview clips (added 2026-09-21 night): five more forwards, one line each,
 for the tab's preview panel: `getPzoptGifFrame(path, nowMs)` (the frame of an
 animated GIF under the game dir, as a `Texture`, or null while it decodes / if

@@ -25,11 +25,15 @@
 -- Installed by scripts/pzopt.sh into <game dir>/media/lua/client/pzopt/ (loose game-dir Lua is
 -- loaded like any other, no mod to enable).
 
+-- Tab ids (SORT, PAGES, the build hooks); the tab captions are PAGES[i].label.
 local TAB = "Optimizations"
 local ENHANCEMENTS_TAB = "Enhancements"
 local PROFILER_TAB = "Profiler"
-local RESTART_NOTE = "Takes effect on the next launch."
-local LIVE_NOTE = "Applies as soon as you press Apply; no restart needed."
+-- Every text shown goes through PzoptT (shared/pzopt/pzopt_i18n.lua): the English here is the source and the fallback,
+-- media/pzopt/translate/<LANG>.json the translations (scripts/i18n.py extracts and checks the keys).
+local T = PzoptT
+local RESTART_NOTE = T("ui.restartNote", "Takes effect on the next launch.")
+local LIVE_NOTE = T("ui.liveNote", "Applies as soon as you press Apply; no restart needed.")
 
 -- The master switch, drawn before the sections with the two buttons.
 local MASTER = { key = "enabled", label = "Optimizations enabled (master switch)",
@@ -804,6 +808,27 @@ for _, section in ipairs(PROFILER_SECTIONS) do
     end
 end
 
+-- The tables above in the game's language: keys <key>.label / <key>.tip / <key>.note.<value> per setting and
+-- section.<first key of the section> per title. The English stays beside them (labelEN, tipEN, noteEN, titleEN) for the
+-- search index, so English words find a setting whatever the language.
+local function localizeEntry(entry)
+    entry.labelEN, entry.tipEN = entry.label, entry.tip
+    entry.label = T(entry.key .. ".label", entry.label)
+    entry.tip = T(entry.key .. ".tip", entry.tip)
+    if entry.note then
+        entry.noteEN, entry.note = entry.note, {}
+        for v, text in pairs(entry.noteEN) do entry.note[v] = T(entry.key .. ".note." .. v, text) end
+    end
+end
+localizeEntry(MASTER)
+for _, sections in ipairs({ SECTIONS, ENHANCEMENT_SECTIONS, PROFILER_SECTIONS }) do
+    for _, section in ipairs(sections) do
+        section.titleEN = section.title
+        section.title = T("section." .. section.entries[1].key, section.title)
+        for _, entry in ipairs(section.entries) do localizeEntry(entry) end
+    end
+end
+
 -- The "Sort by" combo shows the sections in this source order ("natural"), alphabetically (sections by title, settings
 -- by label) or by their effect on one resource. Settings that only make sense next to another one (a setting and its
 -- sub-settings, the fps colour tiers) carry labels that sort into the same order both ways, and a tip names another
@@ -849,9 +874,9 @@ local function afterStore(option, entry, value)
 end
 
 local function tooltipFor(entry, pinnedBy)
-    local t = entry.tip .. " " .. noteFor(entry) .. " Key: " .. entry.key .. "."
+    local t = entry.tip .. " " .. noteFor(entry) .. " " .. T("ui.tooltipKey", "Key: %1.", entry.key)
     if pinnedBy ~= "" then
-        t = t .. " Pinned by " .. pinnedBy .. " for this install; the menu cannot change it."
+        t = t .. " " .. T("ui.tooltipPinned", "Pinned by %1 for this install; the menu cannot change it.", pinnedBy)
     end
     return t
 end
@@ -925,6 +950,11 @@ local CLIP_NOTES = {
     hdrday = ". Same save, spot and machine; no counter.",
     ao = ". Same save, route and machine; no counter.",
 }
+for id, text in pairs(CLIP_TITLES) do CLIP_TITLES[id] = T("clip." .. id, text) end
+for id, text in pairs(CLIP_NOTES) do CLIP_NOTES[id] = T("clipNote." .. id, text) end
+for id, pair in pairs(CLIP_SIDES) do
+    pair[1], pair[2] = T("clipSide." .. id .. ".1", pair[1]), T("clipSide." .. id .. ".2", pair[2])
+end
 local function clipSides(clip)
     if CLIP_SIDES[clip] then return CLIP_SIDES[clip] end
     if string.sub(clip, 1, 2) == "ov" then return CLIP_SIDES.overlay end
@@ -985,7 +1015,13 @@ local AXES = {
 -- bar; the same words are the axis ticks (-1 shares "low": its bar is a third of the way, the word cannot be finer).
 local LEVELS = { [-3] = "lowest", [-2] = "low", [-1] = "low", [0] = "mid", [1] = "high", [2] = "ultra", [3] = "max" }
 local AXIS_TICKS = { -3, -2, 0, 1, 2, 3 }
-local AXIS_TITLE = "load on that part with this setting  (stock game = mid)"
+local AXIS_TITLE = T("ui.axisTitle", "load on that part with this setting  (stock game = mid)")
+for _, axis in ipairs(AXES) do
+    axis.labelEN = axis.label
+    axis.label = T("axis." .. axis.id, axis.label)
+    if axis.tip then axis.tip = T("axis." .. axis.id .. ".tip", axis.tip) end
+end
+for v, word in pairs(LEVELS) do LEVELS[v] = T("level." .. word, word) end
 
 -- How each key changes the load on the parts above against the stock game, -3 .. 3 (0 / absent = no measurable
 -- change): -1 a few percent, -2 clearly measurable, -3 the big wins (docs/archive/2026-09-24/results.md, docs/archive/2026-09-24/findings-*.md). A combo's
@@ -1247,7 +1283,7 @@ function PzoptPreview:layoutSlots()
     local lines = 1
     local function count(tip)
         local n = 0
-        for _ in string.gmatch(getTextManager():WrapText(self.fontS, tip, cw), "[^\n]+") do n = n + 1 end
+        for _ in string.gmatch(PzoptWrap(self.fontS, tip, cw), "[^\n]+") do n = n + 1 end
         if n > lines then lines = n end
     end
     for _, row in ipairs(self.rows) do count(row.entry.tip) end
@@ -1322,8 +1358,8 @@ function PzoptPreview:drawClip(x, y, w, h, caption, path, now, col)
         self:drawTextureScaledAspect(tex, x, y, w, h, 1, 1, 1, 1)
     else
         local state = ok and perf():getPzoptGifState(path) or "error"
-        local msg = "no clip for this setting yet"
-        if state == "loading" then msg = "loading..." elseif state == "error" then msg = "clip could not be decoded" end
+        local msg = T("preview.noClip", "no clip for this setting yet")
+        if state == "loading" then msg = T("preview.loading", "loading...") elseif state == "error" then msg = T("preview.clipError", "clip could not be decoded") end
         self:drawTextCentre(msg, x + w / 2, y + h / 2 - self.hS / 2, C_DIM.r, C_DIM.g, C_DIM.b, 1, self.fontS)
     end
     self:drawRectBorder(x, y, w, h, 1, 0.31, 0.31, 0.35)
@@ -1331,7 +1367,7 @@ function PzoptPreview:drawClip(x, y, w, h, caption, path, now, col)
 end
 
 function PzoptPreview:drawWrapped(str, x, y, w, col, font)
-    local wrapped = getTextManager():WrapText(font or self.fontS, str, w)
+    local wrapped = PzoptWrap(font or self.fontS, str, w)
     local h = font == self.fontM and self.hM or self.hS
     for line in string.gmatch(wrapped, "[^\n]+") do
         self:text(line, x, y, col, font)
@@ -1399,24 +1435,24 @@ function PzoptPreview:prerender()
     local pad = self.pad
     local x, y, w = self.colX, pad, self.colW
     if not row then
-        self:text("Point at a setting to see what it does.", x, y, C_GREY, self.fontM)
+        self:text(T("preview.pointAt", "Point at a setting to see what it does."), x, y, C_GREY, self.fontM)
         return
     end
     local entry = row.entry
     local p = perf()
     -- title and values: one line each, cut with "..." rather than wrapped
-    self:text(getTextManager():WrapText(self.fontM, entry.label, w, 1, "..."), x, y, C_TEXT, self.fontM)
+    self:text(PzoptWrap(self.fontM, entry.label, w, 1, "..."), x, y, C_TEXT, self.fontM)
     y = y + self.hM + 2
     local pinnedBy = p:getPzoptOptionPinnedBy(entry.key)
     local values = entry.live
-        and ("Key " .. entry.key .. "   now: " .. p:getPzoptOption(entry.key) .. "   after Apply: " .. row.option:pzoptCurrent())
-        or ("Key " .. entry.key .. "   since this boot: " .. p:getPzoptOption(entry.key) .. "   next launch: " .. row.option:pzoptCurrent())
-    if pinnedBy ~= "" then values = values .. "   (pinned by " .. pinnedBy .. ")" end
-    self:text(getTextManager():WrapText(self.fontS, values, w, 1, "..."), x, y, C_GREY)
+        and T("preview.valuesLive", "Key %1   now: %2   after Apply: %3", entry.key, p:getPzoptOption(entry.key), row.option:pzoptCurrent())
+        or T("preview.values", "Key %1   since this boot: %2   next launch: %3", entry.key, p:getPzoptOption(entry.key), row.option:pzoptCurrent())
+    if pinnedBy ~= "" then values = values .. "   " .. T("preview.pinned", "(pinned by %1)", pinnedBy) end
+    self:text(PzoptWrap(self.fontS, values, w, 1, "..."), x, y, C_GREY)
     y = y + self.hS + 2
     local classes = optionClasses(entry.key)
-    local java = #classes > 0 and ("Java: " .. table.concat(classes, ", ")) or "Java: read by pzopt.Config only"
-    self:text(getTextManager():WrapText(self.fontS, java, w, 1, "..."), x, y, C_DIM)
+    local java = #classes > 0 and ("Java: " .. table.concat(classes, ", ")) or T("preview.javaConfigOnly", "Java: read by pzopt.Config only")
+    self:text(PzoptWrap(self.fontS, java, w, 1, "..."), x, y, C_DIM)
     y = y + self.hS + 8
     -- the two clips, centred in the column
     local iw, ih, gap = self.clipW, self.clipH, pad
@@ -1425,19 +1461,19 @@ function PzoptPreview:prerender()
     local sides = clipSides(row.clip)
     self:drawClip(cx, y, iw, ih, sides[1], clipPath(row.clip, "stock"), now, C_STOCK)
     y = self:drawClip(cx + iw + gap, y, iw, ih, sides[2], clipPath(row.clip, "opt"), now, C_OPT) + 4
-    local same = sides == CLIP_SIDES.overlay and ". Same save, route and machine, a crop of the top-left corner at the Large overlay font."
-        or CLIP_NOTES[row.clip] or ". Same save, route and machine; the number is that run's live frame rate."
-    self:text(getTextManager():WrapText(self.fontS, (CLIP_TITLES[row.clip] or row.clip) .. same, w, 1, "..."), x, y, C_DIM)
+    local same = sides == CLIP_SIDES.overlay and T("clipNote.overlay", ". Same save, route and machine, a crop of the top-left corner at the Large overlay font.")
+        or CLIP_NOTES[row.clip] or T("clipNote.default", ". Same save, route and machine; the number is that run's live frame rate.")
+    self:text(PzoptWrap(self.fontS, (CLIP_TITLES[row.clip] or row.clip) .. same, w, 1, "..."), x, y, C_DIM)
     y = y + self.hS + 8
     -- what it does, in a slot tall enough for the longest description
     self:drawWrapped(entry.tip, x, y, w, C_TEXT)
     y = y + self.descLines * self.hS + 8
     -- the bars
-    self:text("Effect on your hardware", x, y, C_TEXT, self.fontM)
+    self:text(T("preview.effectTitle", "Effect on your hardware"), x, y, C_TEXT, self.fontM)
     y = y + self.hM + 4
     y = self:drawBars(x, y, w, EFFECTS[entry.key] or {})
-    self:drawWrapped("Against the stock game, from the measurements in docs/archive/2026-09-24/results.md: green = less load (or a shorter "
-        .. "load, chunks sooner), amber = more, blue = idle cores put to work. " .. noteFor(entry), x, y + 4, w, C_DIM)
+    self:drawWrapped(T("preview.effectLegend", "Against the stock game, from the measurements in docs/archive/2026-09-24/results.md: green = less load (or a shorter "
+        .. "load, chunks sooner), amber = more, blue = idle cores put to work.") .. " " .. noteFor(entry), x, y + 4, w, C_DIM)
 end
 
 -- ---------------------------------------------------------------------------------------------------
@@ -1466,10 +1502,31 @@ local function parts(word)
     return out
 end
 
+-- Text without spaces (Chinese, Japanese): the characters of every run of them (code points from U+2E80, full-width
+-- punctuation excluded), each alone and each with the next one (bigrams). A query run matches through its bigrams.
+local function isWideChar(c)
+    local b = string.byte(c)
+    return b >= 0x2E80 and not (b >= 0x3000 and b <= 0x303F) and not (b >= 0xFF00 and b <= 0xFF20)
+end
+local function wideRuns(text)
+    local runs, run = {}, {}
+    for i = 1, #text + 1 do
+        local c = string.sub(text, i, i)
+        if c ~= "" and isWideChar(c) then
+            table.insert(run, c)
+        elseif #run > 0 then
+            table.insert(runs, run)
+            run = {}
+        end
+    end
+    return runs
+end
+
 -- Adds the terms of a text to tf with a weight: every part, and the whole word (dots dropped) when it had several.
 local function addTerms(tf, text, weight)
     local n = 0
-    for word in string.gmatch(tostring(text or ""), "[%w%.]+") do
+    text = tostring(text or "")
+    for word in string.gmatch(text, "[%w%.]+") do
         local ps = parts(word)
         for _, t in ipairs(ps) do
             tf[t] = (tf[t] or 0) + weight
@@ -1481,6 +1538,24 @@ local function addTerms(tf, text, weight)
             n = n + weight
         end
     end
+    for _, run in ipairs(wideRuns(text)) do
+        for i, c in ipairs(run) do
+            tf[c] = (tf[c] or 0) + weight
+            n = n + weight
+            if run[i + 1] then
+                local t = c .. run[i + 1]
+                tf[t] = (tf[t] or 0) + weight
+                n = n + weight
+            end
+        end
+    end
+    return n
+end
+
+-- The translated text plus the English source when they differ (English words keep finding a setting).
+local function addBoth(tf, shown, english, weight)
+    local n = addTerms(tf, shown, weight)
+    if english and english ~= shown then n = n + addTerms(tf, english, weight) end
     return n
 end
 
@@ -1511,17 +1586,18 @@ local function buildIndex(rows, sectionOf)
     local total = 0
     for _, row in ipairs(rows) do
         local entry, tf, len = row.entry, {}, 0
-        len = len + addTerms(tf, entry.label, W_LABEL)
+        len = len + addBoth(tf, entry.label, entry.labelEN, W_LABEL)
         len = len + addTerms(tf, entry.key, W_KEY)
-        len = len + addTerms(tf, entry.tip, W_TIP)
+        len = len + addBoth(tf, entry.tip, entry.tipEN, W_TIP)
         if entry.note then
-            for _, v in pairs(entry.note) do len = len + addTerms(tf, v, W_TIP) end
+            for v, text in pairs(entry.note) do len = len + addBoth(tf, text, entry.noteEN and entry.noteEN[v], W_TIP) end
         end
-        len = len + addTerms(tf, sectionOf[row] and sectionOf[row].title, W_SECTION)
+        local sec = sectionOf[row]
+        len = len + addBoth(tf, sec and sec.title, sec and sec.titleEN, W_SECTION)
         local fx = EFFECTS[entry.key] or {}
         for _, axis in ipairs(AXES) do
             if fx[axis.id] and fx[axis.id] ~= 0 then
-                len = len + addTerms(tf, axis.id .. " " .. axis.label, W_RESOURCE)
+                len = len + addBoth(tf, axis.id .. " " .. axis.label, axis.id .. " " .. axis.labelEN, W_RESOURCE)
             end
         end
         for _, name in ipairs(optionClasses(entry.key)) do
@@ -1599,6 +1675,14 @@ local function search(index, query)
             table.insert(units, { whole = whole, parts = ps })
         end
     end
+    for _, run in ipairs(wideRuns(query)) do
+        for i, c in ipairs(run) do
+            if #run == 1 or run[i + 1] then
+                local t = #run == 1 and c or (c .. run[i + 1])
+                table.insert(units, { whole = t, parts = {} })
+            end
+        end
+    end
     if #units == 0 then return nil, 0 end
     local all, any = {}, {}
     local nAll, nAny = 0, 0
@@ -1641,8 +1725,8 @@ local COLLAPSED = {}
 -- The "Sort by" choice, kept for the session like the folds: "natural", "alpha" or an AXES id.
 local SORT = { [TAB] = "alpha", [ENHANCEMENTS_TAB] = "natural", [PROFILER_TAB] = "natural" }
 -- What the three headings of a resource sort say, per axis id (default: load).
-local LESS_WORDS = { load = "shorter", chunks = "sooner" }
-local MORE_WORDS = { load = "longer", chunks = "later", cores = "more work for idle cores" }
+local LESS_WORDS = { load = T("sort.less.load", "shorter"), chunks = T("sort.less.chunks", "sooner") }
+local MORE_WORDS = { load = T("sort.more.load", "longer"), chunks = T("sort.more.chunks", "later"), cores = T("sort.more.cores", "more work for idle cores") }
 
 -- The groups the list shows for the current sort, in display order: { sec = <heading>, rows = { ... } }.
 -- A resource sort regroups every setting under three headings of its own (S.virtual): the ones that lower that
@@ -1676,9 +1760,9 @@ local function sortedGroups(S)
     end)
     table.sort(none, byLabel)
     local V = S.virtual
-    V[1].title, V[1].rows = axis.label .. ": " .. (LESS_WORDS[axis.id] or "less load") .. ", biggest change first", less
-    V[2].title, V[2].rows = axis.label .. ": " .. (MORE_WORDS[axis.id] or "more load") .. ", biggest change first", more
-    V[3].title, V[3].rows = axis.label .. ": no measured change", none
+    V[1].title, V[1].rows = T("sort.heading", "%1: %2, biggest change first", axis.label, LESS_WORDS[axis.id] or T("sort.less", "less load")), less
+    V[2].title, V[2].rows = T("sort.heading", "%1: %2, biggest change first", axis.label, MORE_WORDS[axis.id] or T("sort.more", "more load")), more
+    V[3].title, V[3].rows = T("sort.none", "%1: no measured change", axis.label), none
     if axis.moreIsWork then
         return { { sec = V[2], rows = more }, { sec = V[1], rows = less }, { sec = V[3], rows = none } }
     end
@@ -1803,7 +1887,7 @@ end
 
 local function runSearch(S, text)
     local hits, n = nil, 0
-    if text and string.match(text, "%w") then
+    if text and (string.match(text, "%w") or #wideRuns(text) > 0) then
         hits, n = search(S.index, text)
     end
     S.hits = hits
@@ -1824,11 +1908,11 @@ local function runSearch(S, text)
         end
     end
     if not hits then
-        S.status:setName(S.total .. " settings")
+        S.status:setName(T("search.total", "%1 settings", S.total))
     elseif n == 0 then
-        S.status:setName("Nothing matches")
+        S.status:setName(T("search.none", "Nothing matches"))
     else
-        S.status:setName(n .. " of " .. S.total .. " match")
+        S.status:setName(T("search.matches", "%1 of %2 match", n, S.total))
     end
     S.panel:setYScroll(0)
     relayout(S)
@@ -1854,7 +1938,8 @@ local function addSectionHeader(self, S, sec, y, x0, width)
         local c = hot and 1 or 0.85
         local markW = getTextManager():MeasureStringX(UIFont.Medium, "+ ")
         o:drawText(open and "-" or "+", 2, spacing, c, c, c, 1, UIFont.Medium)
-        local count = S.hits and (#sec.hitRows .. " of " .. #sec.rows) or (#sec.rows .. (#sec.rows == 1 and " setting" or " settings"))
+        local count = S.hits and T("heading.countOf", "%1 of %2", #sec.hitRows, #sec.rows)
+            or (#sec.rows == 1 and T("heading.countOne", "1 setting") or T("heading.count", "%1 settings", #sec.rows))
         local countW = getTextManager():MeasureStringX(UIFont.Small, count)
         o:drawTextRight(count, o.width, spacing + math.floor((hM - hS) / 2), C_GREY.r, C_GREY.g, C_GREY.b, 1, UIFont.Small)
         -- the title is cut with "..." before the count (WrapText does not cut a single line reliably)
@@ -1878,16 +1963,16 @@ local function addSearchRows(self, S, splitpoint, y, width)
     local style = MainOptions.style
     local BUTTON_HGT = style.buttonHeight
     local spacing = style.borderSpacing
-    local label = ISLabel:new(splitpoint, y + self.addY, BUTTON_HGT, "Search settings", 1, 1, 1, 1, UIFont.Small)
+    local label = ISLabel:new(splitpoint, y + self.addY, BUTTON_HGT, T("search.label", "Search settings"), 1, 1, 1, 1, UIFont.Small)
     label:initialise()
     self.mainPanel:addChild(label)
     local entry = ISTextEntryBox:new("", splitpoint + 20, y + self.addY, width, BUTTON_HGT)
     entry:initialise()
     entry:instantiate()
     entry:setClearButton(true)
-    entry.tooltip = "Type words from a setting's name, description or key, a resource (gpu, vram, game thread, "
+    entry.tooltip = T("search.tooltip", "Type words from a setting's name, description or key, a resource (gpu, vram, game thread, "
         .. "load time...) or a Java class that reads it (FBORenderCell, IsoChunk, pzopt.FogPass...). Typos and "
-        .. "partial words are fine; the best matches come first."
+        .. "partial words are fine; the best matches come first.")
     -- the text is polled each frame (the clear button and pasting do not all go through onTextChange) and searched
     -- once it has been still for 120 ms, so typing a word runs one search, not one per letter
     entry.prerender = function(o)
@@ -1904,14 +1989,14 @@ local function addSearchRows(self, S, splitpoint, y, width)
     self.mainPanel:insertNewLineOfButtons(entry)
     self.addY = self.addY + BUTTON_HGT + spacing
     local x = splitpoint + 20
-    local fold = ISButton:new(x, y + self.addY, 100, BUTTON_HGT, "Collapse all", S, function(target)
+    local fold = ISButton:new(x, y + self.addY, 100, BUTTON_HGT, T("search.collapseAll", "Collapse all"), S, function(target)
         for _, sec in ipairs(target.allSections) do COLLAPSED[sec.title] = true end
         relayout(target)
     end)
     fold:initialise()
     fold:setWidthToTitle()
     self.mainPanel:addChild(fold)
-    local unfold = ISButton:new(x + fold:getWidth() + spacing, y + self.addY, 100, BUTTON_HGT, "Expand all", S, function(target)
+    local unfold = ISButton:new(x + fold:getWidth() + spacing, y + self.addY, 100, BUTTON_HGT, T("search.expandAll", "Expand all"), S, function(target)
         for _, sec in ipairs(target.allSections) do COLLAPSED[sec.title] = nil end
         relayout(target)
     end)
@@ -1924,12 +2009,12 @@ local function addSearchRows(self, S, splitpoint, y, width)
     self.mainPanel:insertNewLineOfButtons(fold, unfold)
     self.addY = self.addY + BUTTON_HGT + spacing
     -- "Sort by": the topic order, alphabetical, or one resource (the settings that lower its load first)
-    local keys, names = { "natural", "alpha" }, { "Natural (grouped by topic)", "Alphabetical" }
+    local keys, names = { "natural", "alpha" }, { T("sort.natural", "Natural (grouped by topic)"), T("sort.alpha", "Alphabetical") }
     for _, axis in ipairs(AXES) do
         table.insert(keys, axis.id)
-        table.insert(names, "Effect on " .. axis.label)
+        table.insert(names, T("sort.effectOn", "Effect on %1", axis.label))
     end
-    local sortLabel = ISLabel:new(splitpoint, y + self.addY, BUTTON_HGT, "Sort by", 1, 1, 1, 1, UIFont.Small)
+    local sortLabel = ISLabel:new(splitpoint, y + self.addY, BUTTON_HGT, T("sort.label", "Sort by"), 1, 1, 1, 1, UIFont.Small)
     sortLabel:initialise()
     self.mainPanel:addChild(sortLabel)
     local sort = ISComboBox:new(splitpoint + 20, y + self.addY, width, BUTTON_HGT, S, function(target, box)
@@ -1942,10 +2027,10 @@ local function addSearchRows(self, S, splitpoint, y, width)
         sort:addOption(name)
         if keys[i] == SORT[S.tab] then sort.selected = i end
     end
-    sort.tooltip = "Natural: the settings grouped by topic, in the order they were added. Alphabetical: the topics and "
+    sort.tooltip = T("sort.tooltip", "Natural: the settings grouped by topic, in the order they were added. Alphabetical: the topics and "
         .. "the settings in each by name. Effect on a resource: every setting that lowers that part's load first, "
         .. "biggest change first (the bars in the preview), then the ones that raise it, then the rest. A search "
-        .. "always lists the best matches first."
+        .. "always lists the best matches first.")
     self.mainPanel:addChild(sort)
     self.mainPanel:insertNewLineOfButtons(sort)
     self.addY = self.addY + BUTTON_HGT + spacing
@@ -1953,7 +2038,8 @@ local function addSearchRows(self, S, splitpoint, y, width)
 end
 
 local function comboLabels(entry, default, saved)
-    local labels = { "Default (" .. default .. ((entry.note and entry.note[default]) and (", " .. entry.note[default]) or "") .. ")" }
+    local shown = default .. ((entry.note and entry.note[default]) and (", " .. entry.note[default]) or "")
+    local labels = { T("combo.default", "Default (%1)", shown) }
     local values = {}
     local seen = {}
     for _, v in ipairs(entry.choices) do
@@ -2070,7 +2156,7 @@ local function addIntOption(self, entry, splitpoint, y, comboWidth)
         if box.selected > 1 and values[box.selected - 1] then
             return values[box.selected - 1]
         end
-        return perf():getPzoptOptionDefault(entry.key) .. " (default)"
+        return T("combo.defaultValue", "%1 (default)", perf():getPzoptOptionDefault(entry.key))
     end
     option.pzoptKey = entry.key
     self.gameOptions:add(option)
@@ -2081,7 +2167,7 @@ end
 -- coordinate (x1, y1, x2, y2 as in CSS cubic-bezier(), each 0..1 so the zoom never overshoots its target) with a
 -- plot of the curve in the label column beside them. A slider move selects the preset it matches, else "custom";
 -- picking a preset moves the sliders. The option's value is always what the sliders say.
-local BEZIER_AXES = { "Point 1 time (x1)", "Point 1 zoom (y1)", "Point 2 time (x2)", "Point 2 zoom (y2)" }
+local BEZIER_AXES = { T("bezier.x1", "Point 1 time (x1)"), T("bezier.y1", "Point 1 zoom (y1)"), T("bezier.x2", "Point 2 time (x2)"), T("bezier.y2", "Point 2 zoom (y2)") }
 
 local function parseBezier(spec)
     local v = {}
@@ -2143,7 +2229,7 @@ local function addBezierOption(self, entry, splitpoint, y, comboWidth, BUTTON_HG
     local pinnedBy = p:getPzoptOptionPinnedBy(entry.key)
     local default = p:getPzoptOptionDefault(entry.key)
     local labels, values = comboLabels(entry, default, "")
-    table.insert(labels, "custom (the sliders below)")
+    table.insert(labels, T("bezier.custom", "custom (the sliders below)"))
     local customIndex = #labels
     local combo = self:addCombo(splitpoint, y, comboWidth, 20, entry.label, labels, 1)
     combo:setToolTipMap({ defaultTooltip = tooltipFor(entry, pinnedBy) })
@@ -2264,7 +2350,7 @@ local function addBezierOption(self, entry, splitpoint, y, comboWidth, BUTTON_HG
     end
     function option.pzoptCurrent(self)
         if self.control.selected == 1 then
-            return default .. " (default)"
+            return T("combo.defaultValue", "%1 (default)", default)
         end
         return formatBezier(current())
     end
@@ -2310,8 +2396,8 @@ local function withValues(base, extra)
 end
 local PROFILES = {
     {
-        button = "Low-end hardware (4 cores or less)",
-        tip = "Turns the master switch on and picks the settings measured on a 4-core CPU with an old GPU "
+        button = T("profile.lowEnd.button", "Low-end hardware (4 cores or less)"),
+        tip = T("profile.lowEnd.tip", "Turns the master switch on and picks the settings measured on a 4-core CPU with an old GPU "
            .. "(Core i5-6300HQ / GTX 960M, 2026-09-21): no chunk worker pool (its threads took the game thread's core), "
            .. "trees baked only while walking (while driving a chunk texture lives seconds, and baking its trees cost "
            .. "more than drawing them per frame), and on the Display page lighting updates 10/s and the UI redrawn 30 "
@@ -2319,18 +2405,18 @@ local PROFILES = {
            .. "Everything else goes back to the build's default. 120 km/h drive 44 -> 68 fps, walking 49 -> 81 "
            .. "(p99 80 -> 40 ms / 69 -> 30 ms). It also turns on texture compression (Display page), which kept a 4 GB "
            .. "graphics card from filling up and the machine from swapping (worst frame 292 -> 120 ms, 2026-09-23). The G1 "
-           .. "collector these numbers need is now the default (gcMode). See docs/archive/2026-09-24/results.md.",
+           .. "collector these numbers need is now the default (gcMode). See docs/archive/2026-09-24/results.md."),
         values = LOW_END_VALUES,
         stock = LOW_END_STOCK,
     },
     {
-        button = "Low-end hardware + FSR 1.0 upscaling",
-        tip = "The Low-end hardware set above, plus the world rendered at 67 % of the screen per axis (44 % of the "
+        button = T("profile.lowEndFsr.button", "Low-end hardware + FSR 1.0 upscaling"),
+        tip = T("profile.lowEndFsr.tip", "The Low-end hardware set above, plus the world rendered at 67 % of the screen per axis (44 % of the "
            .. "pixels) and scaled back up with AMD FidelityFX Super Resolution 1.0, which runs on any GPU; the "
            .. "interface, text and cursor stay at full resolution. For a machine whose GPU is the wall as well as "
            .. "its CPU: measured on the same Core i5-6300HQ / GTX 960M at 1920x1080 (2026-09-22, docs/archive/2026-09-24/results.md) "
            .. "the GPU-bound scenes gain the most. Everything else goes back to the build's default; G1 "
-           .. "collector these numbers need is now the default (gcMode).",
+           .. "collector these numbers need is now the default (gcMode)."),
         values = withValues(LOW_END_VALUES, { upscaler = "fsr1", upscalerQuality = "quality" }),
         stock = LOW_END_STOCK,
     },
@@ -2374,13 +2460,15 @@ local function applyProfile(self, profile)
     end
 end
 
+local ENABLE_ALL = T("button.enableAll", "Enable all (recommended defaults)")
+local DISABLE_ALL = T("button.disableAll", "Disable all (stock game)")
 local function addAllButtons(self, splitpoint, y)
-    local on = self:addButton(splitpoint, y, "Enable all (recommended defaults)")
-    on.tooltip = "Turns the master switch on and puts every setting below back to the build's default on this machine. " .. RESTART_NOTE
+    local on = self:addButton(splitpoint, y, ENABLE_ALL)
+    on.tooltip = T("button.enableAll.tip", "Turns the master switch on and puts every setting below back to the build's default on this machine.") .. " " .. RESTART_NOTE
     on.target = self
     on.onclick = function(target) setAll(target, true) end
-    local off = self:addButton(splitpoint, y, "Disable all (stock game)")
-    off.tooltip = "Turns the master switch off: the game runs its original code everywhere, as if the overrides were not installed. The settings below are kept for when you enable them again; the Profiler tab and the performance overlay are not affected. " .. RESTART_NOTE
+    local off = self:addButton(splitpoint, y, DISABLE_ALL)
+    off.tooltip = T("button.disableAll.tip", "Turns the master switch off: the game runs its original code everywhere, as if the overrides were not installed. The settings below are kept for when you enable them again; the Profiler tab and the performance overlay are not affected.") .. " " .. RESTART_NOTE
     off.target = self
     off.onclick = function(target) setAll(target, false) end
     local profileButtons = {}
@@ -2394,7 +2482,7 @@ local function addAllButtons(self, splitpoint, y)
     if self.pzoptMaster and not self.pzoptMaster.control.enable then
         on:setEnable(false)
         off:setEnable(false)
-        on.tooltip = "Pinned by " .. perf():getPzoptOptionPinnedBy(MASTER.key) .. " for this install."
+        on.tooltip = T("button.pinned", "Pinned by %1 for this install.", perf():getPzoptOptionPinnedBy(MASTER.key))
         off.tooltip = on.tooltip
         for _, b in ipairs(profileButtons) do
             b:setEnable(false)
@@ -2405,10 +2493,10 @@ end
 
 -- The Enhancements and Profiler tabs' reset button: that tab's settings back to the build's defaults (the
 -- Optimizations tab's Enable all leaves them alone). `options` names the MainOptions field holding the page's options.
-local PAGE_RESET = "Reset to defaults"
+local PAGE_RESET = T("button.reset", "Reset to defaults")
 local function addResetButton(self, splitpoint, y, options, note)
     local b = self:addButton(splitpoint, y, PAGE_RESET)
-    b.tooltip = "Puts every setting on this tab back to the build's default. " .. note
+    b.tooltip = T("button.reset.tip", "Puts every setting on this tab back to the build's default.") .. " " .. note
     b.target = self
     b.onclick = function(target)
         for _, option in ipairs(target[options] or {}) do
@@ -2426,13 +2514,13 @@ end
 -- an RTX card). The button's title follows the Java side's state; every title is listed so the layout reserves
 -- the widest one.
 local DEPS_TITLES = {
-    missing = "Install DLSS files", error = "Retry the DLSS files download", checking = "Checking the DLSS files...",
-    idle = "Checking the DLSS files...", downloading = "Downloading the DLSS files 100 %", installing = "Installing the DLSS files...",
-    done = "DLSS files installed: restart the game", installed = "DLSS files installed", unsupported = "DLSS files: not available here",
+    missing = T("deps.missing", "Install DLSS files"), error = T("deps.error", "Retry the DLSS files download"), checking = T("deps.checking", "Checking the DLSS files..."),
+    idle = T("deps.checking", "Checking the DLSS files..."), downloading = T("deps.downloading", "Downloading the DLSS files %1 %", 100), installing = T("deps.installing", "Installing the DLSS files..."),
+    done = T("deps.done", "DLSS files installed: restart the game"), installed = T("deps.installed", "DLSS files installed"), unsupported = T("deps.unsupported", "DLSS files: not available here"),
 }
-local DEPS_TIP = "Downloads the two native files NVIDIA DLSS needs into the game's natives folder (the pzopt shim and NVIDIA's "
+local DEPS_TIP = T("deps.tip", "Downloads the two native files NVIDIA DLSS needs into the game's natives folder (the pzopt shim and NVIDIA's "
     .. "DLSS library; releases do not carry them) and checks each one's checksum. Linux or Windows with an NVIDIA RTX card; "
-    .. "FSR 1.0 needs no files. Then pick \"Upscaler\": dlss and restart the game."
+    .. "FSR 1.0 needs no files. Then pick \"Upscaler\": dlss and restart the game.")
 
 local function addUpscalerDepsButton(self, splitpoint, y)
     local b = self:addButton(splitpoint, y, DEPS_TITLES.checking)
@@ -2450,7 +2538,7 @@ local function addUpscalerDepsButton(self, splitpoint, y)
         if not ok then return end
         local title = DEPS_TITLES[s] or DEPS_TITLES.checking
         if s == "downloading" then
-            title = "Downloading the DLSS files " .. tostring(perf():getPzoptUpscalerDepsProgress()) .. " %"
+            title = T("deps.downloading", "Downloading the DLSS files %1 %", tostring(perf():getPzoptUpscalerDepsProgress()))
         end
         if o.title ~= title then
             o:setTitle(title)
@@ -2459,7 +2547,7 @@ local function addUpscalerDepsButton(self, splitpoint, y)
         local enable = s == "missing" or s == "error"
         if o.enable ~= enable then o:setEnable(enable) end
         local msg = perf():getPzoptUpscalerDepsMessage()
-        o.tooltip = msg ~= "" and (DEPS_TIP .. " Now: " .. msg .. ".") or DEPS_TIP
+        o.tooltip = msg ~= "" and (DEPS_TIP .. " " .. T("deps.now", "Now: %1.", msg)) or DEPS_TIP
     end
     return b
 end
@@ -2473,7 +2561,7 @@ local function addSectionLine(self, y, text, x0, width)
     line.render = function(o) o:drawRect(0, 0, o.width, 1, 1.0, 0.5, 0.5, 0.5) end
     line:initialise()
     self.mainPanel:addChild(line)
-    local shown = getTextManager():WrapText(UIFont.Medium, text, width, 1, "...")
+    local shown = PzoptWrap(UIFont.Medium, text, width, 1, "...")
     local label = ISLabel:new(x0, self.addY + y + spacing, hM, shown, 1, 1, 1, 1, UIFont.Medium, true)
     label:initialise()
     self.mainPanel:addChild(label)
@@ -2495,7 +2583,7 @@ local function layout(self, comboWidth)
     end
     labelW = labelW + 8
     local controlW = comboWidth
-    for _, title in ipairs({ "Enable all (recommended defaults)", "Disable all (stock game)", PAGE_RESET }) do
+    for _, title in ipairs({ ENABLE_ALL, DISABLE_ALL, PAGE_RESET }) do
         controlW = math.max(controlW, getTextManager():MeasureStringX(UIFont.Small, title) + 24)
     end
     for _, title in pairs(DEPS_TITLES) do
@@ -2520,33 +2608,37 @@ local PAGES = {
     {
         tab = TAB, sections = SECTIONS, master = MASTER, buttons = addAllButtons,
         panel = "pzoptPanel", options = "pzoptOptions", search = "pzoptSearch", preview = "pzoptPreview",
-        footer = "Changes take effect on the next launch. File: Zomboid/pzopt/options.ini",
+        label = T("tab.optimizations", "Optimizations"),
+        footer = T("footer.optimizations", "Changes take effect on the next launch. File: Zomboid/pzopt/options.ini"),
         headline = function(p)
-            return "All optimizations (since this boot: " .. (p:isPzoptEnabled() and "on" or "OFF: the game is running stock") .. ")"
+            return p:isPzoptEnabled() and T("headline.optimizationsOn", "All optimizations (since this boot: on)")
+                or T("headline.optimizationsOff", "All optimizations (since this boot: OFF: the game is running stock)")
         end,
     },
     {
         tab = ENHANCEMENTS_TAB, sections = ENHANCEMENT_SECTIONS,
         buttons = function(o, splitpoint, y)
-            addResetButton(o, splitpoint, y, "pzoptEnhancementOptions", "Applies as soon as you press Apply; the two HDR output switches on the next launch.")
+            addResetButton(o, splitpoint, y, "pzoptEnhancementOptions", T("ui.enhancementsNote", "Applies as soon as you press Apply; the two HDR output switches on the next launch."))
             addUpscalerDepsButton(o, splitpoint, y)
         end,
         panel = "pzoptEnhancementPanel", options = "pzoptEnhancementOptions", search = "pzoptEnhancementSearch",
         preview = "pzoptEnhancementPreview",
-        footer = "Changes apply as soon as you press Apply (the two HDR output switches on the next launch). File: Zomboid/pzopt/options.ini",
+        label = T("tab.enhancements", "Enhancements"),
+        footer = T("footer.enhancements", "Changes apply as soon as you press Apply (the two HDR output switches on the next launch). File: Zomboid/pzopt/options.ini"),
         -- part of the overrides: with the Optimizations tab's master switch off they are off too
         headline = function(p)
-            return "Graphics enhancements" .. (p:isPzoptEnabled() and ""
-                or " (off since this boot: they need the Optimizations tab's master switch on)")
+            return p:isPzoptEnabled() and T("headline.enhancements", "Graphics enhancements")
+                or T("headline.enhancementsOff", "Graphics enhancements (off since this boot: they need the Optimizations tab's master switch on)")
         end,
     },
     {
         tab = PROFILER_TAB, sections = PROFILER_SECTIONS, buttons = addProfilerButtons,
         panel = "pzoptProfilerPanel", options = "pzoptProfilerOptions", search = "pzoptProfilerSearch",
         preview = "pzoptProfilerPreview",
-        footer = "Changes apply as soon as you press Apply, no restart needed. File: Zomboid/pzopt/options.ini",
+        label = T("tab.profiler", "Profiler"),
+        footer = T("footer.profiler", "Changes apply as soon as you press Apply, no restart needed. File: Zomboid/pzopt/options.ini"),
         -- independent of the Optimizations tab: the overlay also runs with the master switch off (stock game)
-        headline = function() return "Performance overlay and game-thread profiler" end,
+        headline = function() return T("headline.profiler", "Performance overlay and game-thread profiler") end,
     },
 }
 
@@ -2556,7 +2648,7 @@ local PAGES = {
 function MainOptions:pzoptAddOptimizationsPanel()
     self.pzoptBuilt = {}
     for _, page in ipairs(PAGES) do
-        self:addPage(page.tab)
+        self:addPage(page.label)
         self[page.panel] = self.mainPanel
     end
 end
@@ -2619,7 +2711,7 @@ local function buildSettingsPage(self, page)
     local sectionOf = {}
     local managed = {}
     for si, section in ipairs(page.sections) do
-        local sec = { title = section.title, index = si, rows = {}, hitRows = {}, best = 0 }
+        local sec = { title = section.title, titleEN = section.titleEN, index = si, rows = {}, hitRows = {}, best = 0 }
         local header, button = capture(function() return addSectionHeader(self, S, sec, y, L.x0, L.lineW) end)
         header.button = button
         sec.header = header
@@ -2743,6 +2835,13 @@ local function install()
         local t0 = getTimestampMs()
         local r = stockCreate(self, ...)
         print("[pzopt] options screen: MainOptions:create took " .. (getTimestampMs() - t0) .. " ms")
+        -- the overlay key binding (shared/pzopt/pzopt_keybinding.lua) has no UI_optionscreen_binding_ entry in the
+        -- game's translations: its label shows pzopt's own
+        for _, k in ipairs(MainOptions.keyText or {}) do
+            if k.txt and k.txt.name == "Toggle performance overlay" then
+                k.txt:setTranslation(T("keybind.overlay", "Toggle performance overlay"))
+            end
+        end
         -- build each of our tabs when it is first shown (pzoptAddOptimizationsPanel added them empty)
         local tabs = self.tabs
         if tabs and self.pzoptPanel then

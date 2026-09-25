@@ -24,8 +24,10 @@ public final class ObjectMotion {
    private ObjectMotion() {
    }
 
-   /** Stencil ids 1..127 (bit 7 is the game's tree mask). */
-   static final int MAX_IDS = 127;
+   /** Stencil ids 1..126 for objects (bit 7 is the game's tree mask; 127 is the water, {@link #WATER_ID}). */
+   static final int MAX_IDS = 126;
+   /** The stencil id of the water surface (dlssWaterCurrent): ModelManager.RenderWater writes it, {@link Dlss} masks it. */
+   static final int WATER_ID = 127;
    private static final int SLOTS = 4;
 
    /** One frame's entries: rectangles in screen pixels (x, y, w, h; y down, relative to the player rect) and motion (dx, dy) in screen pixels from the current to the previous position. */
@@ -59,7 +61,7 @@ public final class ObjectMotion {
 
    /**
     * Game thread, from TextureDraw.drawModel: records the model's object and returns its stencil id for the
-    * frame (0 = no entry: not enabled, no object, or the frame's 127 ids are used up).
+    * frame (0 = no entry: not enabled, no object, or the frame's 126 ids are used up).
     */
    public static int record(ModelManager.ModelSlot modelSlot) {
       if (!enabled() || modelSlot == null) {
@@ -155,6 +157,29 @@ public final class ObjectMotion {
       zombie.core.opengl.GLStateRenderThread.StencilMask.restore();
       zombie.core.opengl.GLStateRenderThread.StencilTest.restore();
    }
+
+   /**
+    * Render thread, ModelManager.RenderWater inside its glPushAttrib / glPopAttrib (which puts the stencil state back):
+    * the water's pixels get {@link #WATER_ID} while the world pass of player 0 draws under DLSS. Objects drawn over the
+    * water later write their own id; a stand-in on a chunk-texture bake or another player's pass is left alone.
+    */
+   public static void beginWaterStencil() {
+      if (!Dlss.waterMasked()) {
+         waterOff++;
+         return;
+      }
+      if (!RenderScale.inWorldPass() || RenderScale.worldPassPlayer() != 0) {
+         waterElsewhere++;
+         return;
+      }
+      waterTagged++;
+      waterTaggedThisFrame++;
+      beginStencil(WATER_ID);
+   }
+
+   /** Render thread, the dlss stats line: water draws tagged / skipped because the feature was off / drawn outside player 0's world pass. */
+   static long waterTagged, waterOff, waterElsewhere;
+   static int waterTaggedThisFrame; // reset by the resolve
 
    /** Clears everything (a resolution change, a mode switch). */
    static void reset() {

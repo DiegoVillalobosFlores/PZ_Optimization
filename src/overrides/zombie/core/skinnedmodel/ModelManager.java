@@ -353,6 +353,7 @@ public final class ModelManager {
       }
 
       VertexBufferObject.setModelViewProjection(shader.getProgram());
+      pzopt.ObjectMotion.beginWaterStencil(); // pzopt: dlssWaterCurrent, the water's pixels tagged in the stencil (glPopAttrib below restores it)
       IsoWater.getInstance().waterGeometry(firstSquare, numSquares, bShore);
       ShaderHelper.glUseProgramObjectARB(0);
       Core.getInstance().projectionMatrixStack.pop();

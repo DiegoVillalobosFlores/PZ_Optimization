@@ -2397,6 +2397,18 @@ through `RenderScale.viewPx`, i.e. it is scaled inside the scaled world pass, si
 their size through `RenderScale.viewPx` (stock's numbers scaled like the rest of the pass; the stock behaviour
 at other zooms is unchanged).
 
+`RenderWater` (2026-09-25, `dlssWaterCurrent`): right before `IsoWater.waterGeometry` the draw calls
+`pzopt.ObjectMotion.beginWaterStencil()`, which under DLSS, in player 0's world pass only, writes stencil id 127
+(`ObjectMotion.WATER_ID`, the low seven bits; object ids now stop at 126) where the water's fragments pass the depth
+test. The method's own `glPushAttrib` / `glPopAttrib` puts the stencil state back. `pzopt.Dlss` turns the id into an
+R8 mask and composites DLSS's output with the frame's own colour on the water into a texture of its own (DLSS's output
+image stays untouched: writing into it changed DLSS's later frames far from the water): the ripples are animated in
+place without motion vectors, and DLSS's history blend had halved their motion (`harness/watermotion.py`, runs
+`waterflow-*`: stock 0.173, dlss 0.085, upscaler off 0.165, fsr1 0.184 levels per 1/15 s; with the fix the change over
+1 s is back to stock's; the sub-pixel jitter of the current frame, visible as shimmer, is averaged out by a one-frame
+camera-reprojected water history clamped to the current neighbourhood, `dlssWaterHistoryPct` 60: 0.183 frame to frame,
+0.649 over 1 s, stock 0.173 / 0.648). Nothing is written without DLSS.
+
 ### zombie.iso.weather.fog.ImprovedFog (edit of 2026-09-22, upscaling)
 
 `startFrame` values: `screenWidth/Height` and `cameraOffscreenLeft/Top` (the `screenInfo.xy` / `cameraInfo.xy`

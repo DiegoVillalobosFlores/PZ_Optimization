@@ -85,6 +85,7 @@ PzoptOptionClasses = {
     devCutawayLog = { "FBORenderCutaways" },
     devDlssGaps = { "pzopt.Dlss" },
     devDlssStateLog = { "pzopt.Dlss" },
+    devDlssWaterFilter = { "pzopt.Dlss" },
     devElectricityCheck = { "AmbientStreamManager" },
     devFogDepthView = { "pzopt.FogPass" },
     devFogFlat = { "pzopt.FogPass" },

@@ -7,7 +7,8 @@ package pzopt;
  * <ul>
  *   <li>upscaler, upscalerQuality, upscalerScalePct, dlssPreset, dlssOutputPct, dlssOutputFilter, dlssSharpen:
  *       {@link RenderScale#reconfigure} (new mode and scale from the next frame; the DLSS feature is built again).
- *       fsrSharpnessPct and upscalerObjectMv are read every frame.</li>
+ *       fsrSharpnessPct, upscalerObjectMv, dlssWaterCurrent and dlssWaterHistoryPct are read every frame (the water
+ *       resources are made on first use).</li>
  *   <li>the HDR sliders: {@link Hdr#retune} (read every frame). hdr and hdrAuto are not live: on Linux they pick the
  *       window (a native Wayland FP16 surface) the game is created with.</li>
  *   <li>ambientOcclusion, aoScalePct, aoRadiusPct, the four aoStrength*Pct: {@link ChunkAo#reconfigure} (every loaded
@@ -27,7 +28,7 @@ final class Enhancements {
    /** Game thread, after Config.reloadLive(key) returned true. */
    static void apply(String key) {
       switch (key) {
-         case "fsrSharpnessPct", "upscalerObjectMv" -> {
+         case "fsrSharpnessPct", "upscalerObjectMv", "dlssWaterCurrent", "dlssWaterHistoryPct" -> {
             // read every frame
          }
          case "upscaler", "upscalerQuality", "upscalerScalePct", "dlssPreset", "dlssOutputPct", "dlssOutputFilter", "dlssSharpen" ->

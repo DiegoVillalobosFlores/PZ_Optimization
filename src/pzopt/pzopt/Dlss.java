@@ -40,6 +40,16 @@ import zombie.iso.PlayerCamera;
  * output image is the composite texture ({@link Upscaler#output()}). The world pass is drawn with a Halton
  * sub-pixel jitter through the viewport ({@link RenderScale#setJitter}).
  *
+ * <p>dlssWaterCurrent (2026-09-25): the water ripples are animated in place and have no motion vectors, so DLSS's
+ * history blend halved their motion on screen (harness/watermotion.py: stock 0.173, dlss 0.085, fsr1 0.184 levels a
+ * frame step). The water shader tags its pixels with {@link ObjectMotion#WATER_ID} in the stencil; the resolve turns
+ * that into an R8 mask per image set and, once DLSS is done, composites DLSS's output with the frame's own colour on
+ * the water into a texture of its own, which is what the screen shows. DLSS's output image itself stays untouched:
+ * writing the water into it changed DLSS's next frames far from the water (it reads its output back; the far land's
+ * frame-to-frame change went 0.055 -> 0.17, runs waterflow-dlssfix-*). NGX's
+ * bias-current-colour mask would be the native route, but the DLSS guide (3.15, 2026) says the current models ignore it
+ * (preset F only). At the default dlssOutputPct the output is the render size, so the copy is 1:1.
+ *
  * <p>Any failure turns the pass off for the session (the frame then goes through the bicubic path).
  */
 final class Dlss {
@@ -100,6 +110,26 @@ final class Dlss {
    private static int directTex; // ... which image
    private static boolean directThisFrame; // the frame being resolved was drawn straight into its colour image
    private static int mvDepthStencilTex; // the world depth-stencil texture attached to mvFbo for the stencil-masked object rects
+   // dlssWaterCurrent: per image set the water mask (R8, render size, GL only), its framebuffer (+ the world
+   // depth-stencil), the composited output, whether the mask holds that set's frame, and its jitter
+   private static final int[] setWaterMask = new int[2], setWaterMaskFbo = new int[2], setWaterMaskDs = new int[2];
+   // the output with the water composited (RGBA8, output size): a ping-pong pair, the one shown last frame is the water's history
+   private static final int[] finalTex = new int[2], finalFbo = new int[2];
+   private static int finalIdx; // the one shown this frame
+   private static long lastComposite = -2L; // the frame number of the last composite (the history is the previous frame's only)
+   private static final int[] setWaterQuery = new int[2]; // GL_ANY_SAMPLES_PASSED around the mask pass: any water on screen
+   private static final boolean[] setWaterQueryPending = new boolean[2];
+   private static boolean waterOnScreen = true; // water was drawn in the last half second of read-back query results
+   private static int waterEmptyStreak; // consecutive query results without water
+   private static final boolean[] setWaterValid = new boolean[2];
+   private static boolean finalShown; // the screen shows finalTex[finalIdx], not DLSS's output image
+   private static final float[][] setWaterJitter = new float[2][2];
+   private static int waterProgram; // 0 = not built yet, -1 = refused (off for the session)
+   private static boolean waterReady; // the masks, queries and composite textures of the current sizes exist
+   private static int[] waterUniforms;
+   private static long waterFrames; // frames whose output got the water copy, since the last stats line
+   private static long waterEmpty; // mask queries that found no water, since the last stats line
+   private static long waterNoDraw; // resolves with no tagged water draw since the previous one
 
    private static void select(int k) {
       tex = setTex[k];
@@ -340,6 +370,7 @@ final class Dlss {
          }
          mvDepthStencilTex = 0;
          store(k);
+         setWaterValid[k] = false;
       }
       current = 0;
       pending = -1;
@@ -357,6 +388,7 @@ final class Dlss {
          return false;
       }
       rectUniforms = new int[]{GL20.glGetUniformLocation(rectProgram, "mv")};
+      waterReady = false; // the water resources follow the new sizes, made on first use (ensureWater)
       inputsUniforms = new int[]{GL20.glGetUniformLocation(inputsProgram, "SceneDepth"), GL20.glGetUniformLocation(inputsProgram, "origin"),
          GL20.glGetUniformLocation(inputsProgram, "constantDepth"), GL20.glGetUniformLocation(inputsProgram, "cur"), GL20.glGetUniformLocation(inputsProgram, "prev"),
          GL20.glGetUniformLocation(inputsProgram, "params")};
@@ -481,6 +513,55 @@ final class Dlss {
          GL11.glStencilMask(0xFF);
       }
 
+      // 2c. dlssWaterCurrent: the water's stencil id into this set's mask
+      setWaterValid[current] = false;
+      if (ObjectMotion.waterTaggedThisFrame == 0) {
+         waterNoDraw++;
+      }
+      ObjectMotion.waterTaggedThisFrame = 0;
+      if (Config.DLSS_WATER_CURRENT && sceneDepth != 0 && ensureWater() && waterMasked()) {
+         int q = setWaterQuery[current];
+         if (setWaterQueryPending[current] && GL15.glGetQueryObjecti(q, GL15.GL_QUERY_RESULT_AVAILABLE) != 0) {
+            if (GL15.glGetQueryObjecti(q, GL15.GL_QUERY_RESULT) != 0) {
+               waterEmptyStreak = 0;
+            } else {
+               waterEmpty++;
+               waterEmptyStreak++;
+            }
+            // the copy is skipped only after half a second of no water: a single frame without a water draw (seen right
+            // after the teleport onto the shore) would otherwise switch the next frame, which has water, off too
+            waterOnScreen = waterEmptyStreak < 30;
+            setWaterQueryPending[current] = false;
+         }
+         GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, setWaterMaskFbo[current]);
+         if (setWaterMaskDs[current] != sceneDepth) {
+            GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_DEPTH_STENCIL_ATTACHMENT, GL11.GL_TEXTURE_2D, sceneDepth, 0);
+            setWaterMaskDs[current] = sceneDepth;
+         }
+         GL11.glViewport(0, 0, inW, inH);
+         GL30.glClearBufferfv(GL11.GL_COLOR, 0, WATER_CLEAR);
+         GL11.glEnable(GL11.GL_STENCIL_TEST);
+         GL11.glStencilMask(0);
+         GL11.glStencilOp(GL11.GL_KEEP, GL11.GL_KEEP, GL11.GL_KEEP);
+         GL11.glStencilFunc(GL11.GL_EQUAL, ObjectMotion.WATER_ID, 0x7F);
+         GL20.glUseProgram(rectProgram);
+         GL20.glUniform2f(rectUniforms[0], 1.0F, 0.0F); // R8 takes the first component: 1 where the water is
+         boolean query = !setWaterQueryPending[current];
+         if (query) {
+            GL15.glBeginQuery(org.lwjgl.opengl.GL33.GL_ANY_SAMPLES_PASSED, q);
+         }
+         GL11.glDrawArrays(GL11.GL_TRIANGLE_STRIP, 0, 4);
+         if (query) {
+            GL15.glEndQuery(org.lwjgl.opengl.GL33.GL_ANY_SAMPLES_PASSED);
+            setWaterQueryPending[current] = true;
+         }
+         GL11.glDisable(GL11.GL_STENCIL_TEST);
+         GL11.glStencilMask(0xFF);
+         setWaterValid[current] = waterOnScreen;
+         setWaterJitter[current][0] = RenderScale.frameJitterX();
+         setWaterJitter[current][1] = RenderScale.frameJitterY();
+      }
+
       // 3. hand over to Vulkan and back
       GpuSections.markNow("dlss.inputs", true);
       GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
@@ -539,7 +620,13 @@ final class Dlss {
       if (++statFrames >= 600) {
          stats();
       }
-      Upscaler.output().set(setTex[shown][3], outW, outH);
+      finalShown = setWaterValid[shown];
+      if (finalShown) {
+         finalIdx ^= 1;
+         copyWater(shown, lastComposite == frames - 1 && !reset && Config.DLSS_WATER_HISTORY_PCT > 0);
+         lastComposite = frames;
+      }
+      Upscaler.output().set(finalShown ? finalTex[finalIdx] : setTex[shown][3], outW, outH);
       frames++;
 
       // 4. the next frame's jitter (Halton 2,3 over the phase count NVIDIA recommends: 8 x ratio^2)
@@ -568,6 +655,127 @@ final class Dlss {
       SpriteRenderer.ringBuffer.restoreVbos = true;
       SpriteRenderer.ringBuffer.restoreBoundTextures = true;
       GpuSections.markNow("upscale", true);
+   }
+
+   /**
+    * dlssWaterCurrent, render thread at the resolve: the water's program, per image set its mask, mask framebuffer and
+    * query, and the composite pair at the current sizes, made on first use (the key applies live from the Enhancements
+    * tab, so it may come on long after the feature was created). False when anything was refused (off for the session).
+    */
+   private static boolean ensureWater() {
+      if (waterReady) {
+         return true;
+      }
+      if (waterProgram < 0) {
+         return false;
+      }
+      if (waterProgram == 0) {
+         waterProgram = Shaders.program("dlss water copy", Upscaler.QUAD_VERT, WATER_FRAG);
+         if (waterProgram == 0) {
+            Log.warn("dlss: the water copy shader was refused, dlssWaterCurrent off for the session");
+            waterProgram = -1;
+            return false;
+         }
+         waterUniforms = new int[]{GL20.glGetUniformLocation(waterProgram, "Color"), GL20.glGetUniformLocation(waterProgram, "Mask"),
+            GL20.glGetUniformLocation(waterProgram, "map"), GL20.glGetUniformLocation(waterProgram, "filterMode"), GL20.glGetUniformLocation(waterProgram, "Dlss"),
+            GL20.glGetUniformLocation(waterProgram, "History"), GL20.glGetUniformLocation(waterProgram, "Motion"), GL20.glGetUniformLocation(waterProgram, "hist")};
+      }
+      int previousFbo = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+      for (int k = 0; k < sets; k++) {
+         setWaterMask[k] = GL11.glGenTextures();
+         GL11.glBindTexture(GL11.GL_TEXTURE_2D, setWaterMask[k]);
+         GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_R8, inW, inH, 0, GL11.GL_RED, GL11.GL_UNSIGNED_BYTE, (ByteBuffer)null);
+         texParams();
+         setWaterMaskFbo[k] = Upscaler.framebufferOf(setWaterMask[k]);
+         setWaterQuery[k] = GL15.glGenQueries();
+         setWaterQueryPending[k] = false;
+         setWaterMaskDs[k] = 0;
+         setWaterValid[k] = false;
+      }
+      for (int f = 0; f < 2; f++) {
+         finalTex[f] = GL11.glGenTextures();
+         GL11.glBindTexture(GL11.GL_TEXTURE_2D, finalTex[f]);
+         GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, outW, outH, 0, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, (ByteBuffer)null);
+         texParams();
+         finalFbo[f] = Upscaler.framebufferOf(finalTex[f]);
+      }
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+      GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, previousFbo);
+      lastComposite = -2L;
+      waterOnScreen = true;
+      waterEmptyStreak = 0;
+      for (int k = 0; k < sets; k++) {
+         if (setWaterMaskFbo[k] == 0) {
+            finalFbo[0] = 0;
+         }
+      }
+      if (finalFbo[0] == 0 || finalFbo[1] == 0) {
+         Log.warn("dlss: water mask framebuffers incomplete, dlssWaterCurrent off for the session");
+         waterProgram = -1;
+         return false;
+      }
+      waterReady = true;
+      return true;
+   }
+
+   private static void texParams() {
+      GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
+      GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+      GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL13.GL_CLAMP_TO_EDGE);
+      GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL13.GL_CLAMP_TO_EDGE);
+   }
+
+   /**
+    * dlssWaterCurrent, after GL's wait on set k's evaluation: DLSS's output into the set's own texture, with the frame's
+    * own colour where the water mask is set, mixed by the (bilinear) mask so the shore edge stays soft. Both the mask and the colour are
+    * read at the jittered position the world pass drew that pixel at, so the water does not wobble by the jitter; the
+    * colour through Catmull-Rom (devDlssWaterFilter A/B: bilinear, raw). With a history (the composite shown last frame,
+    * dlssWaterHistoryPct) the water mixes in the previous frame's water at the camera-reprojected position, clamped to
+    * the current 3x3 neighbourhood: the jitter's sub-pixel phase changes every frame and alone left the water shimmering
+    * (frame-to-frame change 0.257 vs stock 0.173, about half of it gone with dlssJitter=false); one frame of history
+    * averages it out without slowing the ripples (60 %: 0.183 frame to frame, 0.649 over 1 s, stock 0.173 / 0.648).
+    */
+   private static void copyWater(int k, boolean history) {
+      GpuSections.markNow("dlss.water", false);
+      GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, finalFbo[finalIdx]);
+      GL11.glViewport(0, 0, outW, outH);
+      GL20.glUseProgram(waterProgram);
+      GL13.glActiveTexture(GL13.GL_TEXTURE1);
+      int unit1 = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D); // the game's cache trusts units 1 and 2 across frames: put them back
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, setWaterMask[k]);
+      GL13.glActiveTexture(GL13.GL_TEXTURE2);
+      int unit2 = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, setTex[k][3]);
+      GL13.glActiveTexture(GL13.GL_TEXTURE3);
+      int unit3 = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, finalTex[finalIdx ^ 1]);
+      GL13.glActiveTexture(GL13.GL_TEXTURE4);
+      int unit4 = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, setTex[k][2]);
+      GL13.glActiveTexture(GL13.GL_TEXTURE0);
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, setTex[k][0]);
+      GL20.glUniform1i(waterUniforms[0], 0);
+      GL20.glUniform1i(waterUniforms[1], 1);
+      GL20.glUniform1i(waterUniforms[4], 2);
+      GL20.glUniform1i(waterUniforms[5], 3);
+      GL20.glUniform1i(waterUniforms[6], 4);
+      GL20.glUniform4f(waterUniforms[7], history ? Config.DLSS_WATER_HISTORY_PCT / 100.0F : 0.0F, Config.DLSS_MV_SIGN, 0.0F, 0.0F);
+      GL20.glUniform4f(waterUniforms[2], (float)inW / outW, (float)inH / outH, setWaterJitter[k][0], setWaterJitter[k][1]);
+      GL20.glUniform1i(waterUniforms[3], "bilinear".equals(Config.DEV_DLSS_WATER_FILTER) ? 1 : "raw".equals(Config.DEV_DLSS_WATER_FILTER) ? 2 : "mask".equals(Config.DEV_DLSS_WATER_FILTER) ? 3 : "none".equals(Config.DEV_DLSS_WATER_FILTER) ? 4 : 0);
+      GL11.glDrawArrays(GL11.GL_TRIANGLE_STRIP, 0, 4);
+      GL13.glActiveTexture(GL13.GL_TEXTURE4);
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, unit4);
+      GL13.glActiveTexture(GL13.GL_TEXTURE3);
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, unit3);
+      GL13.glActiveTexture(GL13.GL_TEXTURE2);
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, unit2);
+      GL13.glActiveTexture(GL13.GL_TEXTURE1);
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, unit1);
+      GL13.glActiveTexture(GL13.GL_TEXTURE0);
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);
+      GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
+      waterFrames++;
+      GpuSections.markNow("dlss.water", true);
    }
 
    /**
@@ -624,8 +832,13 @@ final class Dlss {
       String gapText = gapCount == 0 ? "" : String.format(java.util.Locale.ROOT, " gap_in_us=%.0f gap_out_us=%.0f (n=%d)",
          gapInNs / 1000.0 / gapCount, gapOutNs / 1000.0 / gapCount, gapCount);
       Log.info(String.format(java.util.Locale.ROOT, "dlss: stats frames=%d gpu_dlss_us=%.0f cpu_prep_us=%.0f cpu_eval_us=%.0f cpu_wait_us=%.0f cpu_between_us=%.0f preset=%s %dx%d->%dx%d",
-         statFrames, gpu, prepNs / 1000.0 / n, evalNs / 1000.0 / n, waitNs / 1000.0 / n, afterNs / 1000.0 / n, Config.DLSS_PRESET, inW, inH, outW, outH) + gapText);
+         statFrames, gpu, prepNs / 1000.0 / n, evalNs / 1000.0 / n, waitNs / 1000.0 / n, afterNs / 1000.0 / n, Config.DLSS_PRESET, inW, inH, outW, outH) + gapText
+         + (Config.DLSS_WATER_CURRENT ? " water_frames=" + waterFrames + " water_empty=" + waterEmpty + " water_nodraw=" + waterNoDraw + " water_draws=" + ObjectMotion.waterTagged + "/"
+            + ObjectMotion.waterOff + "/" + ObjectMotion.waterElsewhere + " (tagged/off/elsewhere)" : ""));
+      ObjectMotion.waterTagged = ObjectMotion.waterOff = ObjectMotion.waterElsewhere = 0L;
+      waterEmpty = waterNoDraw = 0L;
       statFrames = prepNs = evalNs = waitNs = afterNs = 0L;
+      waterFrames = 0L;
       gapInNs = gapOutNs = gapCount = 0L;
    }
 
@@ -646,8 +859,9 @@ final class Dlss {
    }
 
    static int outputTexture() {
-      return setTex[shown][3];
+      return finalShown ? finalTex[finalIdx] : setTex[shown][3];
    }
+
 
    static int[] outputRect() {
       return new int[]{0, 0, outW, outH};
@@ -655,6 +869,11 @@ final class Dlss {
 
    static long objectRects() {
       return objectRects;
+   }
+
+   /** Render thread: the water is tagged in the stencil (ObjectMotion.beginWaterStencil) and copied over the DLSS output. */
+   static boolean waterMasked() {
+      return Config.DLSS_WATER_CURRENT && ready && waterReady && "dlss".equals(RenderScale.mode()) && IsoPlayer.numPlayers <= 1;
    }
 
    /**
@@ -748,6 +967,15 @@ final class Dlss {
             }
          }
          mvDepthStencilTex = 0;
+         if (setWaterMask[k] != 0) GL11.glDeleteTextures(setWaterMask[k]);
+         if (setWaterMaskFbo[k] != 0) GL30.glDeleteFramebuffers(setWaterMaskFbo[k]);
+         if (finalTex[k] != 0) GL11.glDeleteTextures(finalTex[k]);
+         if (finalFbo[k] != 0) GL30.glDeleteFramebuffers(finalFbo[k]);
+         lastComposite = -2L;
+         waterReady = false;
+         if (setWaterQuery[k] != 0) GL15.glDeleteQueries(setWaterQuery[k]);
+         setWaterMask[k] = setWaterMaskFbo[k] = setWaterMaskDs[k] = finalTex[k] = finalFbo[k] = setWaterQuery[k] = 0;
+         setWaterValid[k] = setWaterQueryPending[k] = false;
          if (colorFbo != 0) GL30.glDeleteFramebuffers(colorFbo);
          if (mvFbo != 0) GL30.glDeleteFramebuffers(mvFbo);
          if (inputsFbo != 0) GL30.glDeleteFramebuffers(inputsFbo);
@@ -762,6 +990,7 @@ final class Dlss {
       current = 0;
       pending = -1;
       shown = -1;
+      finalShown = false;
       Upscaler.output().set(0, 0, 0);
    }
 
@@ -823,6 +1052,70 @@ final class Dlss {
       "   vec2 prevScreen = (world - prev.xy) / prev.z;",
       "   vec2 prevP = vec2(prevScreen.x * s, inH - prevScreen.y * s);",
       "   fragMv = (prevP - p) * params.z;",
+      "}");
+
+   private static final float[] WATER_CLEAR = {0.0F, 0.0F, 0.0F, 0.0F};
+
+   /**
+    * dlssWaterCurrent: DLSS's output with the frame's colour mixed in where the water mask is set. map.xy = render pixels
+    * per output pixel, map.zw = the world pass's jitter in render pixels (its viewport was offset by it, y up like the images).
+    */
+   static final String WATER_FRAG = String.join("\n",
+      "#version 330",
+      "uniform sampler2D Color;",
+      "uniform sampler2D Mask;",
+      "uniform sampler2D Dlss;",
+      "uniform sampler2D History; // the composite shown last frame",
+      "uniform sampler2D Motion; // DLSS's motion vectors (render pixels, current -> previous, times hist.y)",
+      "uniform vec4 hist; // x history weight (0 = none), y the motion-vector sign",
+      "uniform vec4 map;",
+      "uniform int filterMode; // 0 Catmull-Rom, 1 bilinear, 2 the texel under the pixel (no jitter compensation), 3 the mask in red, 4 DLSS's output only",
+      "out vec4 frag;",
+      // Catmull-Rom in nine bilinear taps: the jitter moves the sample point inside the texel every frame, and a
+      // bilinear read blurs by a different amount at each offset (measured as extra frame-to-frame change)
+      "vec3 catmullRom(vec2 uv, vec2 size) {",
+      "   vec2 sp = uv * size;",
+      "   vec2 t1 = floor(sp - 0.5) + 0.5;",
+      "   vec2 f = sp - t1;",
+      "   vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));",
+      "   vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);",
+      "   vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));",
+      "   vec2 w3 = f * f * (-0.5 + 0.5 * f);",
+      "   vec2 w12 = w1 + w2;",
+      "   vec2 p0 = (t1 - 1.0) / size, p3 = (t1 + 2.0) / size, p12 = (t1 + w2 / w12) / size;",
+      "   vec3 r = texture(Color, vec2(p0.x, p0.y)).rgb * w0.x * w0.y + texture(Color, vec2(p12.x, p0.y)).rgb * w12.x * w0.y",
+      "      + texture(Color, vec2(p3.x, p0.y)).rgb * w3.x * w0.y + texture(Color, vec2(p0.x, p12.y)).rgb * w0.x * w12.y",
+      "      + texture(Color, vec2(p12.x, p12.y)).rgb * w12.x * w12.y + texture(Color, vec2(p3.x, p12.y)).rgb * w3.x * w12.y",
+      "      + texture(Color, vec2(p0.x, p3.y)).rgb * w0.x * w3.y + texture(Color, vec2(p12.x, p3.y)).rgb * w12.x * w3.y",
+      "      + texture(Color, vec2(p3.x, p3.y)).rgb * w3.x * w3.y;",
+      "   return clamp(r, 0.0, 1.0);",
+      "}",
+      "void main() {",
+      "   vec4 d = texelFetch(Dlss, ivec2(gl_FragCoord.xy), 0);",
+      "   vec2 size = vec2(textureSize(Color, 0));",
+      "   vec2 uv = (gl_FragCoord.xy * map.xy + (filterMode == 2 ? vec2(0.0) : map.zw)) / size;",
+      "   float m = texture(Mask, uv).r;",
+      "   if (m <= 0.0 || filterMode == 4) { frag = d; return; }",
+      "   vec3 c = filterMode == 3 ? vec3(1.0, 0.0, 0.0) : filterMode == 0 ? catmullRom(uv, size) : filterMode == 1 ? texture(Color, uv).rgb",
+      "      : texelFetch(Color, ivec2(gl_FragCoord.xy * map.xy), 0).rgb;",
+      "   if (hist.x > 0.0 && filterMode != 3) {",
+      "      vec2 mv = texture(Motion, gl_FragCoord.xy * map.xy / size).xy * hist.y;",
+      "      vec2 q = (gl_FragCoord.xy + mv / map.xy) / vec2(textureSize(History, 0));",
+      "      if (all(greaterThanEqual(q, vec2(0.0))) && all(lessThanEqual(q, vec2(1.0)))) {",
+      "         ivec2 t = ivec2(floor(uv * size));",
+      "         ivec2 hiT = ivec2(size) - 1;",
+      "         vec3 lo = vec3(1.0), hi = vec3(0.0);",
+      "         for (int j = -1; j <= 1; j++) {",
+      "            for (int i = -1; i <= 1; i++) {",
+      "               vec3 n = texelFetch(Color, clamp(t + ivec2(i, j), ivec2(0), hiT), 0).rgb;",
+      "               lo = min(lo, n);",
+      "               hi = max(hi, n);",
+      "            }",
+      "         }",
+      "         c = mix(c, clamp(texture(History, q).rgb, lo, hi), hist.x);",
+      "      }",
+      "   }",
+      "   frag = vec4(mix(d.rgb, c, m), d.a);",
       "}");
 
    /** One object's motion over its stencil-masked rectangle. */

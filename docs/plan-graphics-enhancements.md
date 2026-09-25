@@ -39,6 +39,16 @@ between caster and receiver (PCSS-style: blocker search, then a filter radius fr
 - Ships as a second tick box next to "Ambient occlusion", off by default (a deliberate change of the picture).
 - Rig: the AO `--shot-at` comparison, a time-of-day sweep (`time_of_day=` flag) for the shadow direction.
 
+*Visual example.* Factorio's tree shadows as one merged layer over the terrain (left) and RimWorld's sun shadows
+lengthening from noon to twilight (right): isometric scenery casting soft directional shadows.
+<p><img src="https://cdn.factorio.com/assets/img/blog/fff-227-trees-natural-shadows.png" width="46%"> <img src="https://ludeon.com/blog/wp-content/uploads/2013/08/Twilight.jpg" width="46%"></p>
+Penumbra: hard vs percentage-closer-filtered shadow edges ([learnopengl figure](https://learnopengl.com/img/advanced-lighting/shadow_mapping_soft_shadows.png)); the
+widening-with-distance rule is NVIDIA's [PCSS whitepaper](https://developer.download.nvidia.com/shaderlibrary/docs/shadow_PCSS.pdf). In a 3D isometric game:
+[Diablo IV, bare trees on snow](https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/2344520/73d3413a15dcde01592a1e8e3c998ec128ef9676/ss_73d3413a15dcde01592a1e8e3c998ec128ef9676.1920x1080.jpg).
+In Project Zomboid itself: the [ShadowZ mod](https://steamcommunity.com/sharedfiles/filedetails/?id=3800671550) ([video](https://www.youtube.com/watch?v=ss0VTy-gmrY)),
+sprite-silhouette shadows, which is what the height-field march replaces. Sources: [FFF-227](https://factorio.com/blog/post/fff-227),
+[RimWorld sun shadows](https://ludeon.com/blog/2013/08/sun-shadows/).
+
 ### 2. Per-pixel lighting (light composed per frame instead of baked per square)
 
 Today the light map is per square (libLighting64), applied when the chunk texture bakes: a lamp is a stepped
@@ -81,6 +91,16 @@ performance win: light stops being a reason to re-bake.
 - Rig: the night bench route with the lamp-heavy Rosewood main street, the storm preset for lightning (frame-time
   tail with the re-bake path removed vs today), the Louisville night preset for the light count.
 
+*Visual example.* Today: a hand torch turning in place at 01:00 lands in per-square steps in every panel of our
+blocky-lights capture (the panels differ only in re-bake timing), which is the look phase A removes.
+<p><img src="media/blocky-lights-before-vs-after.jpg" width="94%"></p>
+The target: a sprite lit per pixel by a 2D point light (Unity URP, left) and Eastward's lamp posts lighting pixel art with a
+smooth falloff (right).
+<p><img src="https://docs.unity3d.com/uploads/urp/2D/point-light-in-edit-mode-and-effect.png" width="46%"> <img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/977880/ss_fc97f011126b32f77cbb66a9dc59e22cc353c2b8.1920x1080.jpg" width="46%"></p>
+Phase B's normal term: [flat vs normal-mapped wall under one light](https://learnopengl.com/img/advanced-lighting/normal_mapping_compare.png). More sprite worlds lit
+per pixel: [Songs of Conquest torches on fortress walls](https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/867210/ss_05aa6a23efd2bb4ef348f496836ea99287307763.1920x1080.jpg),
+[Graveyard Keeper's dynamic lights and sprite shadows](https://www.gamedeveloper.com/programming/graveyard-keeper-how-the-graphics-effects-are-made).
+
 ### 3. Wind on foliage
 
 Trees, bushes and grass sway with the climate manager's wind, with gusts, stronger in storms.
@@ -96,6 +116,10 @@ Trees, bushes and grass sway with the climate manager's wind, with gusts, strong
   pass removed, so the storm scenes pay for it exactly when they are slowest.
 - Rig: the storm preset with the tree-heavy spot of issue #5.
 
+*Visual example.* No hotlinkable still shows motion; watch [Procedural Grass in Ghost of Tsushima (GDC)](https://www.youtube.com/watch?v=Ibe1JBF5i5Y)
+for wind gusts rolling through vertex-offset grass, and Unreal's [SimpleGrassWind](https://dev.epicgames.com/documentation/en-us/unreal-engine/world-position-offset-material-functions-in-unreal-engine)
+for the standard vertex sway.
+
 ### 4. Screen-space reflections on water and puddles
 
 The scene mirrored into rivers, lakes and puddles, on top of the HDR glints.
@@ -105,6 +129,12 @@ The scene mirrored into rivers, lakes and puddles, on top of the HDR glints.
   animation. Puddles reuse the same lookup through `puddleVbo`'s squares.
 - Cost: one texture read per water pixel in the water shader; the puddle shaders are already ours.
 - Rig: the Riverside pier spot (`start=6445,5195`) at dawn and at night with lamps.
+
+*Visual example.* Screen-space reflections following a car over a wet floor (Unity HDRP, left) and rain puddles reflecting a
+street (Lagarde, right).
+<p><img src="https://docs.unity3d.com/Packages/com.unity.render-pipelines.high-definition@17.0/manual/images/ScreenSpaceReflectionPBR_SpeedRejectionSmooth.gif" width="46%"> <img src="https://seblagarde.wordpress.com/wp-content/uploads/2013/04/dualpuddles.png" width="46%"></p>
+Top-down water with reflections: [Anno 1800 harbour](https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/916440/ss_9756553b540fbfefc2d96baafc33aecd7ef1dc44.1920x1080.jpg),
+[Triangle Strategy (HD-2D) river beside pixel sprites](https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1850510/ss_462d6307727e2391acf87f028dab8fb8c50eed07.1920x1080.jpg).
 
 ### 5. Light shafts (god rays) through windows and canopies
 
@@ -116,6 +146,11 @@ Sun shafts in dusty interiors and under trees, lamp cones in fog.
 - Cost: bounded by the fog buffer size; one march per light on screen.
 - Ships under the fog tick box's family, strength as a percentage like `hdrBloomPct`.
 
+*Visual example.* Beams through a ruin's windows (Rise of the Tomb Raider, left) and HD-2D sun haze over pixel sprites
+(Octopath Traveler II, right).
+<p><img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/391220/ss_0602fd918166985793cbae01df4c8a944f1f76dd.1920x1080.jpg" width="46%"> <img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1971650/ss_063d6228ccd9256814aec0cd46ebb4c093b56fea.1920x1080.jpg" width="46%"></p>
+The real thing for reference: [crepuscular rays](https://en.wikipedia.org/wiki/Crepuscular_rays).
+
 ### 6. Cloud shadows
 
 Soft cloud shadows drifting across the ground with the wind.
@@ -124,11 +159,22 @@ Soft cloud shadows drifting across the ground with the wind.
   cover and the sun height, direction and speed from the wind. No engine data beyond what the climate manager has.
 - Cost: negligible. Very high mood per line of code. Check first that stock B42 has nothing similar.
 
+*Visual example.* Sea of Stars' cloud sprites shading the pixel-art overworld:
+<p><img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1244090/ss_c250a7fd789b3cbab5ca8e99e3530cf933656ad1.1920x1080.jpg" width="60%"></p>
+Unreal's [Volumetric Cloud "Cloud Shadows" section](https://dev.epicgames.com/documentation/en-us/unreal-engine/volumetric-cloud-component-in-unreal-engine) has the same landscape with the shadows off and on.
+
 ### 7. Anti-aliasing and depth of field
 
 - SMAA or a small TAA on the composite for players who do not run DLSS (FSR 1.0 and bicubic upscale do not
   anti-alias). Sprite edges and model edges are where the game looks dated at 4K.
 - Optional tilt-shift depth of field from the depth buffer, a "miniature" look; cheap, contentious, off by default.
+
+*Visual example.* A jagged vs anti-aliased edge (left) and Octopath Traveler's tilt-shift band, sharp centre, blurred top and
+bottom, on a pixel-art graveyard (right).
+<p><img src="https://learnopengl.com/img/advanced/anti_aliasing_zoomed.png" width="46%"> <img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/921570/ss_4e3218569723259a23262ec23cb0ebb6226e46b2.1920x1080.jpg" width="46%"></p>
+The miniature effect on a photograph: [Jodhpur tilt-shift](https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/Jodhpur_tilt_shift.jpg/960px-Jodhpur_tilt_shift.jpg) vs
+[the original](https://upload.wikimedia.org/wikipedia/commons/thumb/a/ae/Jodhpur_rooftops.jpg/960px-Jodhpur_rooftops.jpg). AA modes side by side: Unreal's
+[anti-aliasing page](https://dev.epicgames.com/documentation/en-us/unreal-engine/anti-aliasing-and-upscaling-in-unreal-engine) (FXAA / TAA / MSAA sliders).
 
 ### 8. Smaller ones
 
@@ -137,6 +183,12 @@ Soft cloud shadows drifting across the ground with the wind.
 - Eye adaptation between dark interiors and daylight (HDR options list item 11).
 - Foliage interaction (grass pushed by characters and vehicles): decals into the baked texture, restored on the
   next re-bake; only worth it together with 3.
+
+*Visual example.* Dry to wet material response (Lagarde: albedo darkens, gloss rises, left) and snow piled on stone steps
+(Rise of the Tomb Raider, right).
+<p><img src="https://seblagarde.wordpress.com/wp-content/uploads/2013/04/comparedrywet2.png" width="46%"> <img src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/391220/ss_2b612bfa62d920b061e900e1f7a975a2de6729ec.1920x1080.jpg" width="46%"></p>
+Eye adaptation: Unreal's [auto exposure page](https://dev.epicgames.com/documentation/en-us/unreal-engine/auto-exposure-in-unreal-engine), the underpass pair with local exposure off and on.
+Grass displaced by the player: the [Ghost of Tsushima grass talk](https://www.youtube.com/watch?v=Ibe1JBF5i5Y).
 
 ## What does not map
 
@@ -208,6 +260,12 @@ sampler change in the chunk composite and the per-frame sprite path, plus an Opt
 stock linear / texel-aware). Cost negl. Same place as an in-game SMAA toggle (item 7). Sources: d7samurai's
 "antialiased point sampling" gist; Golus, "Sharper mipmapping using shader-based supersampling".
 
+*Visual example.* The same sprite under plain nearest sampling vs texel-aware "antialiased point" sampling while it moves by
+fractions of a pixel (d7samurai, left: the nearest version crawls and shimmers) and nearest vs linear magnification (right).
+<p><img src="https://user-images.githubusercontent.com/5618797/212432783-20728d40-64be-44c4-9ed2-803b78b209cd.gif" width="46%"> <img src="https://learnopengl.com/img/getting-started/texture_filtering.png" width="46%"></p>
+More: [Cole Cecil, scaling pixel art without destroying it](https://colececil.dev/blog/2017/scaling-pixel-art-without-destroying-it/) (distorted / good / blurry),
+[a live demo of shader-supersampled mips](https://gnikoloff.github.io/webgl-mipmaps-explainer/) for the zoomed-out case, the [gist itself](https://gist.github.com/d7samurai/9f17966ba6130a75d1bfb0f1894ed377).
+
 **B. Darkness floor, memory tint, night LUT (demand #1, #3, #7).** Three knobs in the composite, none needing new
 data: (1) a minimum world luminance for seen squares (a sandbox-style "darkness floor", basements exempt), (2)
 squares the player has seen but cannot see now drawn desaturated and dimmed with a soft edge instead of the hard
@@ -216,11 +274,21 @@ LUTs blended (Graveyard Keeper: 10 LUTs by time and zone; Factorio FFF-320: nigh
 instead of a black overlay, and a LUT tool for modders). Grade in scene-linear before the HDR mapping. Cost negl.
 (1) and (2) change what the player can make out, so they are opt-in and off in the parity comparisons.
 
+*Visual example.* Factorio's night as a black overlay (left) vs as a colour LUT (right): hue and contrast survive the dark.
+<p><img src="https://cdn.factorio.com/assets/img/blog/fff-320-night-classic.png" width="46%"> <img src="https://cdn.factorio.com/assets/img/blog/fff-320-night-lutty.png" width="46%"></p>
+Memory rendering: seen-but-not-visible terrain under a grey shroud, unexplored black ([Freeciv](https://upload.wikimedia.org/wikipedia/commons/e/ee/Freeciv-net-screenshot-2011-06-23.png)), the
+convention the "remembered room" tint borrows. Graveyard Keeper's ten time-of-day LUTs and the same spot through the day are in
+[its graphics article](https://www.gamedeveloper.com/programming/graveyard-keeper-how-the-graphics-effects-are-made). Source: [FFF-320](https://factorio.com/blog/post/fff-320).
+
 **C. Dynamic resolution scaling driven by the GPU timer (the objective's own feature).** The upscaler already takes
 any input size (FSR1 / DLSS / bicubic) and `gpuSections` already has the GL timer queries: a controller that lowers
 the render scale when GPU frame time exceeds the cap's budget and raises it back is the one tool that turns "GPU
 bound in a 4K storm" into a held 240 with the GPU saturated. Cost: the controller only. Source: Binks, "Dynamic
 resolution rendering" (Intel, 2011).
+
+*Visual example.* Unreal's [dynamic resolution page](https://dev.epicgames.com/documentation/en-us/unreal-engine/dynamic-resolution-in-unreal-engine): the
+"cruising" graph (screen percentage tracking GPU frame time inside the budget), the "over budget panic" drop, and the 100 % vs
+50 % viewport pair. That controller shape, driven by our GL timer queries, is the whole feature.
 
 **D. Characters that sit in the world (demand #4, the "pasted on" look).** Three cheap terms on the model shader:
 (1) a Valve-style ambient cube per character from the 3x3 squares around it (sides from the neighbours, top from the
@@ -231,6 +299,12 @@ stretches with sun elevation and works in indirect light), and on the receiving 
 height field so item 1's march casts them onto walls for free. Cost light for ~1k zombies. Sources: Valve
 SIGGRAPH 2006 course; PoE update 79; UE capsule shadows.
 
+*Visual example.* Pillars of Eternity [update 79](https://eternity.obsidian.net/eternity/news/update--79-graphics-and-rendering-): the character-ambient
+off / on pair (the model takes the background's colour) and the shadow-blending pair; [video](https://www.youtube.com/watch?v=ak52BLOFyuo). Capsule shadows:
+Unreal's [overview](https://dev.epicgames.com/documentation/en-us/unreal-engine/capsule-shadows-overview-in-unreal-engine), "Capsule Indirect Shadow Enabled / Disabled",
+the soft grounding shadow under a skeletal mesh. The ambient cube figure is in Valve's
+[Source shading course](https://cdn.cloudflare.steamstatic.com/apps/valve/2006/SIGGRAPH06_Course_ShadingInValvesSourceEngine.pdf).
+
 **E. Local-light contact shadows and height-aware falloff (demand #4, #5).** Bend Studio's screen-space shadows
 run the item-1 march for the N nearest strong lights (headlights, fire, lamps) with a short ray, in their
 wavefront-aligned layout (each thread group walks one light-aligned pixel line, coalesced depth reads; code and
@@ -239,11 +313,20 @@ height with pixel height is a one-liner once the composite knows the height. Tog
 walls and lamps cast furniture shadows, the two things the light-mod crowd installs mods for. Cost light per sun,
 mod for many lights (budget the N). This is item 2D made concrete.
 
+*Visual example.* Unreal's [contact shadows page](https://dev.epicgames.com/documentation/en-us/unreal-engine/contact-shadows-in-unreal-engine): the character
+without / with a 0.1 contact-shadow length (the small shadows a shadow map misses appear where the feet meet the ground), plus the
+parallax-occlusion GIF. Days Gone's own: a [19 s clip](https://www.youtube.com/watch?v=SLTrPWTj-Ss); slides and code at
+[Inside Bend: screen space shadows](https://www.bendstudio.com/blog/inside-bend-screen-space-shadows/).
+
 **F. Screen-space decals on the height field.** Blood, tyre tracks, footprints, ash, snow patches as thin boxes
 projected onto the exact height field (Space Marine, SIGGRAPH 2012: reconstruct position from depth, reject outside
 the box or where the derived normal disagrees, stencil out moving objects) instead of extra sprites; static ones
 baked into the chunk texture through the existing re-bake path, transient ones per frame. They wrap onto walls
 correctly because the height field is exact. Cost light dynamic, negl baked.
+
+*Visual example.* The same scene without and with projected decals (Unity URP): they wrap over uneven geometry and hide seams.
+<p><img src="https://docs.unity3d.com/6000.0/Documentation/uploads/urp/decal/decal-sample-without.png" width="46%"> <img src="https://docs.unity3d.com/6000.0/Documentation/uploads/urp/decal/decal-sample-with.png" width="46%"></p>
+Space Marine's original slides: [Screen space decals in Warhammer 40,000: Space Marine](https://www.slideshare.net/blindrenderer/screen-space-decals-in-warhammer-40000-space-marine-14699854).
 
 **G. One world-aligned "surface state" texture: snow tracks, rain ripples, wetness.** Under a fixed orthographic
 camera a top-down texture around the camera is exactly the view, so three published mechanisms collapse into one
@@ -254,10 +337,20 @@ roof stays dry, puddles recede), driving Lagarde's wet-surface response (albedo 
 flat normals at "puddle"). Cost light. This subsumes the "wet and snowy material response" and "foliage
 interaction" lines of item 8.
 
+*Visual example.* Wetting levels by porosity (Lagarde, left: porosity 0 → 1, then textured porosity) and a wet surface drying over
+time (right, specular-only row).
+<p><img src="https://seblagarde.wordpress.com/wp-content/uploads/2013/04/factorwithporous.png" width="46%"> <img src="https://seblagarde.wordpress.com/wp-content/uploads/2013/04/dryinghistory2.png" width="46%"></p>
+Snow trails: [Rise of the Tomb Raider deferred snow deformation](https://www.youtube.com/watch?v=2esjGj81q2k). Ripples: Müller's
+[height-field water](https://matthias-research.github.io/pages/publications/hfFluid.pdf) (GDC 2008).
+
 **H. Height-field GPU particles with exact collision.** Leaves, ash, snow, dust motes, fireflies, sparks driven by
 the wind vector, colliding against the height field, which here is a true height map (UE's scene-depth collision
 fails off-screen and at grazing angles; an orthographic height field has neither problem). Cost light. Pairs with
 item 3 (wind).
+
+*Visual example.* GPU particles resting on geometry read from the depth buffer (Unity VFX Graph "Collide with Depth Buffer"):
+<p><img src="https://docs.unity3d.com/Packages/com.unity.visualeffectgraph@17.0/manual/images/Block-CollideWithDepthBufferMain.png" width="60%"></p>
+Unreal's version: [GPU particles with scene depth collision](https://dev.epicgames.com/documentation/en-us/unreal-engine/1.5---gpu-particles-with-scene-depth-collision?application_version=4.27).
 
 **I. Froxel fog lit by local lights.** Wronski's volumetric fog (SIGGRAPH 2014, 1.1 ms at 160x90x64 on a PS4,
 resolution independent): under the orthographic camera the froxel grid is a world-aligned box, light injection uses
@@ -265,15 +358,32 @@ the per-square light plus item 1's march for shadowing, temporal reprojection is
 world-fixed. Fog lit by street lamps and headlights, shadowed shafts: the visible step past the current fog pass and
 the proper form of item 5. Cost mod; off on the iGPU tier.
 
+*Visual example.* Today's fog pass on the 120 km/h storm drive, stock (left) vs ours (right), unlit fog either way:
+<p><img src="media/drive-120kmh-storm-fog-stock-vs-optimized.jpg" width="94%"></p>
+The target: Unreal's [volumetric fog page](https://dev.epicgames.com/documentation/en-us/unreal-engine/volumetric-fog-in-unreal-engine), a spot light's cone made visible in
+froxel fog next to the same scene with its scattering off, and shadowed fog through an arch. The method: Wronski's
+[Assassin's Creed 4 talk](https://bartwronski.com/wp-content/uploads/2014/08/bwronski_volumetric_fog_siggraph2014.pdf).
+
 **J. Indirect light: multi-bounce and bent normals on the existing AO, then SSGI.** Jimenez's GTAO multi-bounce is a
 cubic fit of GI vs AO per albedo evaluated in the AO resolve, and the bent normal is a by-product of the horizon
 search; both are negl on top of `ChunkAo`. One-bounce screen-space GI (lit walls bleeding onto floors, lamp light
 spilling round corners) at half resolution with temporal reuse is the next step, mod cost, needs the TAA of item 7.
 Sources: Jimenez et al. 2016; XeGTAO (MIT); Ritschel 2009 SSDO.
 
+*Visual example.* Our AO today (on, top; off, bottom; Rosewood, zoom 1), the term the multi-bounce and bent normals extend:
+<p><img src="media/ao-rosewood-on-vs-off.jpg" width="60%"></p>
+One-bounce colour bleeding from screen-space traces (Unity HDRP SSGI):
+<p><img src="https://docs.unity3d.com/Packages/com.unity.render-pipelines.high-definition@17.0/manual/images/HDRPFeatures-SSGI.png" width="60%"></p>
+Multi-bounce and bent-normal figures: the [GTAO paper](https://www.activision.com/cdn/research/Practical_Real_Time_Strategies_for_Accurate_Indirect_Occlusion_NEW%20VERSION_COLOR.pdf).
+
 **K. Water details.** Gerstner sum of 3-4 waves in the water tile shader, caustics from (water level - height) with
 an animated texture, foam by distance to shore (from tile adjacency), refraction by UV perturbation of the offscreen
 buffer, ripples from G. All negl to light; FFT oceans and planar reflections are not worth it top-down.
+
+*Visual example.* Gerstner wave crests (GPU Gems fig. 1-5, left) and projected caustics (fig. 2-9, right).
+<p><img src="https://developer.download.nvidia.com/books/gpugems/fig01-05.jpg" width="46%"> <img src="https://developer.download.nvidia.com/books/gpugems/fig02-09a.jpg" width="46%"></p>
+Real caustics for reference: [pool caustics](https://upload.wikimedia.org/wikipedia/commons/2/2a/Caustics.gif); refraction of a water surface:
+[GPU Gems 2 fig. 19-6](https://developer.download.nvidia.com/books/gpugems2/19_refraction_06a.jpg); foam and shorelines: [Water rendering in Far Cry 5](https://www.gdcvault.com/play/1025330/Water-Rendering-in-Far-Cry).
 
 **L. Small composite effects.** Heat haze above fire and exhausts (UV perturbation, depth-tested); the lightning
 flash as a directional flash from the strike point through the height-field march instead of a uniform brighten;
@@ -283,12 +393,27 @@ only from local lights (the sun is never in frame); low-health vignette and desa
 are game-side. Motion blur is off at 240 Hz (display persistence already blurs), per-object blur for the 120 km/h
 car is the only defensible use.
 
+*Visual example.* Banding vs dithering at 16 colours (left pair) and a lens flare from a local light (Unity HDRP, right).
+<p><img src="https://upload.wikimedia.org/wikipedia/commons/2/2d/Dithering_example_undithered_16color.png" width="30%"> <img src="https://upload.wikimedia.org/wikipedia/commons/c/c3/Dithering_example_dithered_16color.png" width="30%"> <img src="https://docs.unity3d.com/Packages/com.unity.render-pipelines.high-definition@17.0/manual/images/shared/lens-flare/lens-flare-header.png" width="34%"></p>
+Heat haze is the same UV perturbation as [screen-space refraction](https://developer.download.nvidia.com/books/gpugems2/19_refraction_06a.jpg). Tone mappers: Blender 4.0's
+[Filmic vs AgX pair](https://developer.blender.org/docs/release_notes/4.0/color_management/); Playdead's [INSIDE rendering slides](https://github.com/playdeadgames/publications/blob/master/INSIDE/rendering_inside_gdc2016.pdf) for the dithering recipe.
+
 **M. Outline / x-ray for zombies behind walls, dithered cutaways (demand #8).** Walls have exact per-pixel depth, so
 a depth-greater pass on the character models is enough for a silhouette; screen-door dithering under TAA converges
 to real translucency and could replace the hard cutaway pops. Shows what stock hides, so opt-in and out of parity.
 
+*Visual example.* Silhouettes through occluders (The Last of Us enemy outline) and comic outlines in Alexander Ameye's
+[outline survey](https://ameye.dev/notes/rendering-outlines/); screen-door dither instead of a pop in Cesium's
+[smoother LOD transitions](https://cesium.com/blog/2022/10/20/smoother-lod-transitions-in-cesium-for-unreal/) (Fig 1.0 vs 2.0 GIFs).
+
 **N. Emissive tiles as light sources.** Lit windows, signs and screens as small entries in the existing light list.
 Needs a hand list of emissive tile IDs (a luma threshold on the art misfires on bright paint). Negl.
+
+*Visual example.* Our emitters today: stock (left) vs the HDR pass (right) at night, headlights and fires pushed to the panel's
+peak but lighting nothing around them; N would let the lit windows and signs feed the light list.
+<p><img src="media/hdr-night-fires-sdr-vs-hdr.jpg" width="94%"></p>
+The target look: [The Last Night](https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/612400/805b1875126a2c5ab513b8aa97a2a82658d0dcfe/ss_805b1875126a2c5ab513b8aa97a2a82658d0dcfe.1920x1080.jpg),
+pixel-art neon and windows lighting a wet street; Lumen's [emissive materials figure](https://dev.epicgames.com/documentation/en-us/unreal-engine/lumen-global-illumination-and-reflections-in-unreal-engine).
 
 **O. Material classes for the tile set, offline.** For wet, specular and micro-relief to look right the composite
 needs porosity / roughness per tile and micro-normals for floors. RTX Remix / PBRFusion-style generation over the
@@ -297,6 +422,11 @@ glass); the 2022 survey of pixel-art normal generation says colour-Sobel is acce
 (grass, asphalt, wood) and wrong for objects, where the depth-derived normal is the right one. So: Sobel
 micro-normals for floors, depth normals for everything else, a hand table for glass, metal, water, emissive. A
 tooling task, not a runtime feature; unblocks G's porosity and item 2B's specular.
+
+*Visual example.* A flat sprite and the normal map Laigter generates from it:
+<p><img src="https://user-images.githubusercontent.com/46932830/90258696-4c14b780-de1f-11ea-8e33-33dbfc9fd86c.png" width="46%"> <img src="https://user-images.githubusercontent.com/46932830/90258716-51720200-de1f-11ea-900b-4511ec2b608b.png" width="46%"></p>
+Tools and papers: [Laigter](https://github.com/azagaya/laigter), [Sprite Lamp](https://www.snakehillgames.com/spritelamp/), the
+[pixel-art normal generation survey](https://arxiv.org/abs/2212.09692), NVIDIA's [Painkiller RTX write-up](https://developer.nvidia.com/blog/how-painkiller-rtx-uses-generative-ai-to-modernize-game-assets-at-scale/).
 
 ### Pitfalls the research turned up
 

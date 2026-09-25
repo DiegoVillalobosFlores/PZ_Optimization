@@ -87,7 +87,7 @@ FLAG_FILE="$ZOMBOID/Lua/pzopt-harness.txt"
 NATIVE_FLAG_FILE="${NATIVE_ZOMBOID:-$HOME/Zomboid}/Lua/pzopt-harness.txt"
 
 shot_at=""; label=""; quit_after=""; mode="verify"; source_save=""; extra_flags=(); props=(); mangohud_secs=""; mangohud_config=""
-resume_shot=""; keep_save=0; resume_from=""; record=0; jfr=0; jfr_period=""; jfr_settings=(); game_profiler=0; gc=""; no_dashboard=0; refresh_template=0; retries=2; renderer="nvidia"; game_env=(); lead=""; route_seconds=""; launcher="auto"; game_options=(); extra_mods=(); vmargs=()
+overrides_jar=0; resume_shot=""; keep_save=0; resume_from=""; record=0; jfr=0; jfr_period=""; jfr_settings=(); game_profiler=0; gc=""; no_dashboard=0; refresh_template=0; retries=2; renderer="nvidia"; game_env=(); lead=""; route_seconds=""; launcher="auto"; game_options=(); extra_mods=(); vmargs=()
 schedmon=""; asprof=""
 preset=""; mode_set=0; pad_script=""; inputlag=0
 while [[ $# -gt 0 ]]; do
@@ -118,6 +118,7 @@ while [[ $# -gt 0 ]]; do
     --env) game_env+=("$2"); shift 2 ;;
     --mod) extra_mods+=("$2"); shift 2 ;;
     --vmarg) vmargs+=("$2"); shift 2 ;;
+    --overrides-jar) overrides_jar=1; shift ;;              # the override classes from build/classes as <game>/pzopt-harness/pzopt.jar on the launcher classpath (a path with "pzopt.jar": the build guard skips it when it hashes the game jar) instead of "." (JAR-only classpath: the JDK's AOT cache, -XX:AOTCache / AOTCacheOutput, refuses directories)
     --schedmon) schedmon="$2"; shift 2 ;;                # per-thread run / run-queue wait / page faults + PSI every N s -> <run>/schedmon.txt (harness/schedmon.py)
     --asprof) asprof="$2"; shift 2 ;;                    # async-profiler agent (harness/asprof/libasyncProfiler.so) with these options, e.g. event=cpu,interval=5ms,threads -> <run>/asprof.jfr
     --pad) pad_script="$2"; shift 2 ;;               # drive the menus with a virtual pad (see below)
@@ -491,10 +492,27 @@ for p in "${props[@]}"; do [[ "$p" == "jitSteady=false" || "$p" == "enabled=fals
 (( jit_steady )) && vmargs+=("-Dpzopt.jit=steady" "-XX:PerMethodTrapLimit=0" "-XX:PerBytecodeTrapLimit=0")
 # The launcher is always edited for a run: a gc log (-Xlog:gc) is added when the
 # JSON has none, so harness/analyze.py can count collector events in the route window.
+if (( overrides_jar )); then
+  # the classes (and classpath resources) the game dir holds loose, installed from build/classes, as one jar first on the classpath
+  python3 - "$REPO/build/classes" "$PZ_DIR/pzopt-harness/pzopt.jar" <<'PY'
+import os, sys, zipfile
+src, out = sys.argv[1:]
+os.makedirs(os.path.dirname(out), exist_ok=True)
+with zipfile.ZipFile(out + ".tmp", "w", zipfile.ZIP_STORED) as z:
+    for root, _, files in os.walk(src):
+        for f in sorted(files):
+            p = os.path.join(root, f)
+            rel = os.path.relpath(p, src)
+            if not rel.startswith("media" + os.sep):  # classes and classpath resources (pzopt/build-info.properties); media/ is read from disk
+                z.write(p, rel)
+os.replace(out + ".tmp", out)
+print(f"overrides jar: {out} ({os.path.getsize(out) // 1024} KB)")
+PY
+fi
 {
   cp "$LAUNCHER" "$LAUNCHER.pzopt-orig"
   rm -f "$JFR_OUT"
-  PZOPT_VMARGS="$(printf '%s\n' "${vmargs[@]}")" python3 - "$LAUNCHER" "$jfr" "$jfr_period" "$gc" "$PZ_DIR_JVM/pzopt.jfr" "$PZ_DIR_JVM/gc.log" "$launcher" "$(IFS=,; echo "${jfr_settings[*]:-}")" <<'PY'
+  PZOPT_OVERRIDES_JAR="$overrides_jar" PZOPT_VMARGS="$(printf '%s\n' "${vmargs[@]}")" python3 - "$LAUNCHER" "$jfr" "$jfr_period" "$gc" "$PZ_DIR_JVM/pzopt.jfr" "$PZ_DIR_JVM/gc.log" "$launcher" "$(IFS=,; echo "${jfr_settings[*]:-}")" <<'PY'
 import json, sys, os
 path, jfr, period, gc, jfr_file, gc_log, launcher, jfr_settings = sys.argv[1:]
 j = json.load(open(path))
@@ -527,6 +545,8 @@ if gc:
 for a in os.environ.get("PZOPT_VMARGS", "").split("\n"):
     if a and a not in j["vmArgs"]:
         j["vmArgs"].append(a)
+if os.environ.get("PZOPT_OVERRIDES_JAR") == "1":
+    j["classpath"] = ["pzopt-harness/pzopt.jar" if c == "." else c for c in j["classpath"]]
 json.dump(j, open(path, "w"), indent="\t")
 PY
   echo "launcher vmArgs for this run: $(python3 -c 'import json,sys; j=json.load(open(sys.argv[1])); print(" ".join(a for a in j["vmArgs"]+[x for v in j.get("windows",{}).values() for x in v["vmArgs"]] if "GC" in a or "Flight" in a or "Xm" in a or "Xlog" in a))' "$LAUNCHER")"

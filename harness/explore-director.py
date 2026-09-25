@@ -29,7 +29,7 @@ from typesafe_client import ask, choice  # noqa: E402
 ZOMBOID = Path(os.environ.get("ZOMBOID", Path.home() / "Zomboid"))
 
 QUESTION = choice(
-    "You direct a character in Project Zomboid who inspects a restaurant by day, one decision at a time, from the scene "
+    "You direct a character in Project Zomboid who inspects a restaurant, one decision at a time, from the scene "
     "state. The visit goes in this order: walk to the restaurant; in every room of it, first look around once (a full "
     "turn in place), then face north for about four seconds; then walk to the next room not visited yet; when no room is "
     "left to visit, finish. Pick the character's next action.",

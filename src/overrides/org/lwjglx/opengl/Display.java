@@ -365,6 +365,7 @@ public class Display {
    }
 
    public static void swapBuffers() throws LWJGLException {
+      pzopt.FrameCapture.beforeSwap(); // pzopt: devCapture, the frame sequence rig
       pzopt.Hdr.beforeSwap(); // pzopt: HDR output, encode the frame for the HDR surface
       if (pzopt.HdrMac.present(Display.Window.handle)) { // pzopt: HDR output on macOS, presented through an EDR Metal layer
          return;

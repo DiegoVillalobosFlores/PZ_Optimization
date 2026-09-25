@@ -142,6 +142,7 @@ public final class Harness {
    private static float speed = 18f;
    /** bench: degrees per second the player facing rotates while on the route (flag turn, 0 = off). */
    private static float turnDegPerSec = 0f;
+   private static boolean faceSet;
    private static float turnAngle = 0f;
    /** bench/drive: seconds between one-level camera zoom steps on the route (flag zoom_cycle, 0 = off). */
    private static float zoomCycleSecs = 0f;
@@ -315,6 +316,11 @@ public final class Harness {
          }
          speed = Float.parseFloat(HarnessFlags.get("speed", "18"));
          turnDegPerSec = Float.parseFloat(HarnessFlags.get("turn", "0"));
+         String face = HarnessFlags.get("face", "").trim(); // face=deg: the facing the turn starts from (turn=0: held there)
+         if (!face.isEmpty()) {
+            faceSet = true;
+            turnAngle = Float.parseFloat(face);
+         }
          zoomCycleSecs = Float.parseFloat(HarnessFlags.get("zoom_cycle", "0"));
          zoomJump = "true".equals(HarnessFlags.get("zoom_jump", "false"));
          zoomSpan = Math.max(1, Integer.parseInt(HarnessFlags.get("zoom_span", "1")));
@@ -720,7 +726,7 @@ public final class Harness {
                // no teleports during the hold: the player may walk away from the end square (manual tests)
                p.teleportTo((int)x, (int)y, routeZ);
             }
-            if (turnDegPerSec != 0f) {
+            if (turnDegPerSec != 0f || faceSet) {
                // spin the facing so the vision cone, lighting cone and buildings-in-front scans keep changing
                turnAngle = (turnAngle + turnDegPerSec * Math.min(dt, 0.1f)) % 360f;
                p.setDirectionAngle(turnAngle);

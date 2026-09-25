@@ -426,11 +426,20 @@ public final class Scene {
 
    /** lights=on: grid power on, then every light switch within 50 tiles (levels 0-3) switched on, electricity check ignored. */
    private static void lightsOn() {
+      IsoPlayer p = IsoPlayer.getInstance();
+      lightsOnAround((int)p.getX(), (int)p.getY());
+   }
+
+   static boolean lightsFlag() {
+      return "on".equals(lights);
+   }
+
+   /** The same around a spot (explore=restaurant: the restaurant, loaded once the walk gets near it). */
+   static void lightsOnAround(int px, int py) {
       try {
          zombie.iso.IsoWorld.instance.setHydroPowerOn(true);
-         IsoPlayer p = IsoPlayer.getInstance();
          zombie.iso.IsoCell cell = zombie.iso.IsoWorld.instance.currentCell;
-         int px = (int)p.getX(), py = (int)p.getY(), on = 0;
+         int on = 0;
          for (int z = 0; z < 4; z++) {
             for (int y = py - 50; y <= py + 50; y++) {
                for (int x = px - 50; x <= px + 50; x++) {

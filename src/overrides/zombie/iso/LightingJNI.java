@@ -74,6 +74,7 @@ public final class LightingJNI {
       {-1, -1, 0, -1, 1, -1, 1, 0, 1, 1, 0, -2, 1, -2, 2, -2, 2, -1, 2, 0}
    };
    private static final ArrayList<TorchInfo> torches = new ArrayList<>();
+   public static ArrayList<TorchInfo> pzoptTorches() { return torches; } // pzopt: pixelLight, the torches / headlights as sent to the native (pzopt.PixelLight)
    private static final ArrayList<TorchInfo> activeTorches = new ArrayList<>();
    private static final ArrayList<IsoLightSource> JNILights = new ArrayList<>();
    private static final int[] updateCounter = new int[4];
@@ -1399,6 +1400,10 @@ public final class LightingJNI {
       private int lightLevel;
       private int pzoptLightAcc; // pzopt: size of this square's light changes summed since its level was last baked (pzopt.LightDirt)
       private int pzoptLightAccFrame = -1;
+      // pzopt: pixelLight (pzopt.PixelLight). While the square's chunk bakes, the light it hands out is white (the chunk
+      // texture holds the unlit surfaces, the light is composed per pixel afterwards); the real values stay in pzoptReal.
+      private boolean pzoptWhite; // pzopt
+      private final ColorInfo pzoptReal = new ColorInfo(); // pzopt
       public JNILighting(int playerIndex, IsoGridSquare square) {
          this.playerIndex = playerIndex;
          this.square = square;
@@ -1411,8 +1416,53 @@ public final class LightingJNI {
       }
 
       public int lightverts(int i) {
-         return this.cacheVertLight[i];
+         return this.pzoptWhite ? -1 : this.cacheVertLight[i]; // pzopt: pixelLight, white while the chunk bakes
       }
+
+      // pzopt: pixelLight. The corner colours as lit, whatever the bake state (pzopt.PixelLight packs them into its lattice).
+      public int pzoptVert(int i) { // pzopt
+         return this.cacheVertLight[i]; // pzopt
+      } // pzopt
+
+      public byte pzoptVis() { // pzopt
+         return this.vis; // pzopt
+      } // pzopt
+
+      // pzopt: pixelLight. The flat light objects are drawn with (the real one while the bake holds it white), no JNI call.
+      public ColorInfo pzoptInfo() { // pzopt
+         return this.pzoptWhite ? this.pzoptReal : this.lightInfo; // pzopt
+      } // pzopt
+
+      // pzopt: pixelLight. The light info object IsoGridSquare caches by reference turns white for the bake.
+      public void pzoptWhiten() { // pzopt
+         if (!this.pzoptWhite) { // pzopt
+            this.pzoptReal.set(this.lightInfo); // pzopt
+            this.lightInfo.set(1.0F, 1.0F, 1.0F, this.lightInfo.a); // pzopt
+            this.pzoptWhite = true; // pzopt
+         } // pzopt
+      } // pzopt
+
+      public void pzoptUnwhiten() { // pzopt
+         if (this.pzoptWhite) { // pzopt
+            this.lightInfo.set(this.pzoptReal); // pzopt
+            this.pzoptWhite = false; // pzopt
+         } // pzopt
+      } // pzopt
+
+      // pzopt: pixelLight dev dump (pzopt.PixelLight): the cached lighting as one text line, no JNI call
+      public void pzoptDump(StringBuilder sb) { // pzopt
+         sb.append(this.vis).append(' ').append(this.lightInfo.r).append(' ').append(this.lightInfo.g).append(' ').append(this.lightInfo.b); // pzopt
+         sb.append(' ').append(this.cacheDarkMulti).append(' ').append(this.cacheTargetDarkMulti).append(' ').append(this.lightLevel).append(' ').append(this.updateTick); // pzopt
+         for (int i = 0; i < 8; i++) { // pzopt
+            sb.append(' ').append(Integer.toHexString(this.cacheVertLight[i])); // pzopt
+         } // pzopt
+         sb.append(' ').append(this.lightsCount); // pzopt
+         for (int i = 0; i < this.lightsCount && this.lights != null; i++) { // pzopt
+            ResultLight l = this.lights[i]; // pzopt
+            sb.append(' ').append(l.id).append(',').append(l.x).append(',').append(l.y).append(',').append(l.z).append(',').append(l.radius) // pzopt
+               .append(',').append(l.r).append(',').append(l.g).append(',').append(l.b).append(',').append(l.flags); // pzopt
+         } // pzopt
+      } // pzopt
 
       public float lampostTotalR() {
          return 0.0F;
@@ -1677,6 +1727,9 @@ public final class LightingJNI {
                      dirty++;
                      int[] lightInts = pzoptLightInts.get(); // pzopt: lightingReadParallel, thread-local scratch
                      if (LightingJNI.getSquareLighting(this.playerIndex, this.square.x, this.square.y, this.square.z + 32, lightInts)) {
+                        boolean pzoptWasWhite = this.pzoptWhite; // pzopt: pixelLight, a lazy refresh in the middle of a bake reads and writes the real values
+                        this.pzoptUnwhiten(); // pzopt
+                        byte pzoptWasVis = this.vis; // pzopt: pixelLight, only a visibility change re-bakes
                         IsoPlayer player = IsoPlayer.players[this.playerIndex];
                         boolean wasCanSee = (this.vis & 2) != 0;
                         boolean wasCouldSee = (this.vis & 4) != 0;
@@ -1745,6 +1798,12 @@ public final class LightingJNI {
                            pzopt.PuddleCache.lightsChanged(this.square.chunk, this.square.z); // pzopt: puddleVbo re-uploads this level's puddle batch (the lower four vertex lights are the puddle colours)
                         }
                         FBORenderLevels renderLevels = this.square.chunk.getRenderLevels(this.playerIndex);
+                        if (pzopt.PixelLight.ACTIVE) { // pzopt: pixelLight, the chunk texture is unlit: a light change updates the lattice, a visibility change re-bakes
+                           pzopt.PixelLight.lightChanged(this.square); // pzopt
+                           if (pzoptWasVis != this.vis && !DebugOptions.instance.fboRenderChunk.nolighting.getValue()) { // pzopt
+                              renderLevels.invalidateLevel(this.square.z, 32L); // pzopt
+                           } // pzopt
+                        } else // pzopt
                         if (isDarkMulti == wasDarkMulti
                            && isDarkMultiTarget == wasDarkMultiTarget
                            && isLightLevel == wasLightLevel
@@ -1803,6 +1862,10 @@ public final class LightingJNI {
                         if (this.updateTick == -1 && renderLevels.isOnScreen(this.square.z)) {
                            renderLevels.invalidateLevel(this.square.z, 32L);
                         }
+
+                        if (pzoptWasWhite) { // pzopt: pixelLight
+                           this.pzoptWhiten(); // pzopt
+                        } // pzopt
 
                         this.updateTick = LightingJNI.updateCounter[this.playerIndex];
                         if ((this.vis & 1) != 0) {

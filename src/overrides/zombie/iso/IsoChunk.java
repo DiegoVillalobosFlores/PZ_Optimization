@@ -154,6 +154,8 @@ public final class IsoChunk {
    // level's texture was last baked (pzopt.LightDirt: a torch sweep re-bakes now, sky drift and flashes stay held)
    public final int[] pzoptLightStrongFrame = new int[64];
    public final int[] pzoptLightBakeFrame = new int[64];
+   public final byte[] pzoptPplDirty = new byte[64]; // pzopt: pixelLight, per level (z + 32): the light of a square changed since the lattice was uploaded (written by lighting-read workers, one level per task)
+   public final byte[] pzoptPplFlags = new byte[64]; // pzopt: pixelLight, per level (z + 32): 1 every square's light is saturated, 2 every square hides the torch (from the last pack)
    // pzopt: per 5x5 neighbour slot, a fingerprint of this chunk's baked trees whose sprite overlaps that neighbour's
    // chunk-level texture, so a tree removed or turned per-frame here re-bakes the neighbour that holds a copy of it
    // (Config.TREE_BAKE_PASS, pzopt.TreeBake, issue #5)

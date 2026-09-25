@@ -642,11 +642,39 @@ local ENHANCEMENT_SECTIONS = {
               tip = "The resolution the shading is computed at. Lower costs less when a chunk's picture is redrawn with new objects, and is softer." },
         },
     },
+    {
+        title = "Per-pixel lighting (smooth light, torch and headlight beams drawn per pixel)", clip = "torch",
+        entries = {
+            { key = "pixelLight", label = "Per-pixel lighting",
+              tip = "The world's light is drawn per pixel instead of being painted into the chunk pictures square by square. The game's own lighting still decides how much light every square gets and what walls hide; the picture follows it smoothly between squares instead of in blocky steps, and a torch or headlight beam is drawn from its own cone, so it has straight edges and follows your aim every frame. A light change no longer redraws chunk pictures, which saves work when torches, headlights or lightning move the light. Nights look a little darker than stock: stock spreads every lit square's light half a square into its neighbours, even through walls. Windows and Linux (not on macOS, OpenGL 2.1). Applies on the next launch." },
+            { key = "pplAnalytic", label = "Per-pixel lighting: torch, headlight, lamp and fire shapes",
+              tip = "Torches and headlights drawn from their cone, lamps and fires from their round falloff, pixel by pixel. Off: the game's per-square light only, smoothed between squares." },
+            { key = "pplPointLights", label = "Per-pixel lighting: lamp and fire shapes",
+              tip = "Lamps and fires drawn from their round falloff, pixel by pixel. Off: their light is the game's per-square light, smoothed between squares, and the pictures they reach are drawn with the cheaper light-free program (the GPU cost of per-pixel lighting then only applies near torches and headlights)." },
+            { key = "pplNormals", label = "Per-pixel lighting: surfaces facing the light",
+              tip = "Walls and objects turned towards a torch, a headlight or a lamp catch more of its light, those turned away less (the direction of every surface is read from the game's depth picture). Floors are unchanged." },
+            { key = "pplWrapPct", label = "Per-pixel lighting: how far light wraps around surfaces (%)",
+              choices = { "0", "20", "35", "50", "80" }, note = { ["35"] = "default" },
+              tip = "Higher softens the effect of the surface direction: the sprites already carry painted shading, so a strong effect can shade them twice." },
+            { key = "pplSmooth", label = "Per-pixel lighting: smooth between tiles",
+              tip = "The light changes smoothly from one tile to the next (no faint diamond pattern where its slope changes). Off: straight blends between tile centres." },
+            { key = "pplWetSpecular", label = "Per-pixel lighting: wet glints in the rain",
+              tip = "While the rain wets the ground outdoors (and while it dries), torches, headlights and lamps glint on it." },
+            { key = "pplSpecPct", label = "Per-pixel lighting: wet glint strength (%)",
+              choices = { "30", "60", "100" }, note = { ["60"] = "default" },
+              tip = "How bright the glints on wet ground are." },
+            { key = "pplShadows", label = "Per-pixel lighting: torch shadows (experimental)",
+              tip = "Fence posts, furniture and walls cast shadows into your torch's beam (computed from the picture's depth at half resolution, one frame late). Experimental." },
+        },
+    },
 }
 
 -- The Enhancements tab's keys apply as soon as Apply is pressed (Java: Config's live reload, pzopt.Enhancements), except
 -- the two HDR output switches: on Linux they pick the window the game is started with.
-local NEXT_LAUNCH_ONLY = { hdr = true, hdrAuto = true }
+local NEXT_LAUNCH_ONLY = { hdr = true, hdrAuto = true,
+    -- per-pixel lighting: read once at start-up (the chunk composite shader is patched when the game loads it)
+    pixelLight = true, pplAnalytic = true, pplPointLights = true, pplNormals = true, pplWrapPct = true, pplSmooth = true,
+    pplWetSpecular = true, pplSpecPct = true, pplShadows = true }
 for _, section in ipairs(ENHANCEMENT_SECTIONS) do
     for _, entry in ipairs(section.entries) do
         entry.live = not NEXT_LAUNCH_ONLY[entry.key]
@@ -892,6 +920,7 @@ local KEY_CLIP = {
     fogPass = "fog", fogScalePct = "fog", fogMaskFrames = "fog",
     fsrSharpnessPct = "fsrzoom", dlssWaterCurrent = "dlss", dlssWaterHistoryPct = "dlss", dlssPreset = "dlss", dlssOutputPct = "dlss", dlssOutputFilter = "dlsszoom", dlssSharpen = "dlsszoom",
     hdrSunPct = "hdrday", hdrGlintPct = "hdrday",
+    pixelLight = "torch", pplAnalytic = "torch", pplNormals = "torch", pplWrapPct = "torch", pplShadows = "torch", pplSmooth = "torch", pplPointLights = "torch", pplWetSpecular = "storm", pplSpecPct = "storm",
     lightingStrongDelta = "torch", lightingStrongBudget = "horde", lightingStrongFrameMs = "horde", lightingFlush = "torch", lightingBudget = "torch",
     audioLimiter = "horde", audioLimiterCeilingDb = "horde", audioLimiterStereoFold = "horde", soundTickHz = "horde", emitterIdleSkip = "horde", worldSoundCleanupFast = "horde", hearingHoist = "horde",
     lightSwitchCheckFrames = "horde", soundZoneCache = "horde", worldSoundFast = "horde", gridStackInterval = "horde",
@@ -1046,6 +1075,9 @@ local EFFECTS = {
     weatherFxScalePct = { gpu = -2, render = -1, vram = -1 },
     fogPass = { gpu = -3, render = -2, cpu = -1, vram = 1 },
     ambientOcclusion = { gpu = 1, vram = 1 },
+    pixelLight = { cpu = -1, gpu = 1, vram = 1 },
+    pplPointLights = { gpu = 1 },
+    pplShadows = { gpu = 2 },
     aoScalePct = { gpu = 1, vram = 1 },
     vrr = { gpu = -1, cpu = -1 },
     vrrCap = { gpu = -1, cpu = -1 },

@@ -52,5 +52,12 @@ int main(int argc, char **argv) {
    glGetProgramiv(p, GL_LINK_STATUS, &ok);
    glGetProgramInfoLog(p, sizeof log, NULL, log);
    printf("link %s\n%s", ok ? "ok" : "FAILED", log);
+   if (!ok) return 1;
+   // the game's ShaderProgram.compile also validates, with every sampler still on unit 0: two sampler types on one unit
+   // fail there on Mesa (pzopt.PixelLight, 2026-09-25)
+   glValidateProgram(p);
+   glGetProgramiv(p, GL_VALIDATE_STATUS, &ok);
+   glGetProgramInfoLog(p, sizeof log, NULL, log);
+   printf("validate %s\n%s", ok ? "ok" : "FAILED", log);
    return ok ? 0 : 1;
 }

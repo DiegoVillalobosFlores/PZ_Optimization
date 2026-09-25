@@ -1600,7 +1600,9 @@ public final class FBORenderCell {
       FBORenderCorpses.getInstance().update();
       FBORenderItems.getInstance().update();
       this.pzoptFlushTreeAppends(playerIndex, Core.getInstance().getZoom(playerIndex)); // pzopt: treeAppend, before the textures are composited
+      pzopt.PixelLight.bakeEnd(); // pzopt: pixelLight, no square stays white past the bakes
       pzopt.ChunkAo.flush(playerIndex); // pzopt: ambient occlusion, this frame's budget of AO computes, before the textures are composited
+      pzopt.PixelLight.beforeComposite(playerIndex, this.perPlayerData[playerIndex].onScreenChunks); // pzopt: pixelLight, the lattice uploads and the camera, ahead of the chunk composite that lights each pixel
       pzopt.GpuSections.begin("composite"); /* pzopt: GPU section: chunk textures into the combined FBO and onto the screen */
       if (pzopt.Config.COMPOSITE_SHADER_RUN && pzopt.Overrides.enabled() && !DebugOptions.instance.fboRenderChunk.combinedFbo.getValue()
             && DebugOptions.instance.fboRenderChunk.renderChunkTextures.getValue()) { // pzopt: compositeShaderRun
@@ -1610,6 +1612,7 @@ public final class FBORenderCell {
       } // pzopt
       pzopt.GpuSections.end("composite");
       pzopt.AmbientOcclusion.queue(playerIndex); // pzopt: ambient occlusion on the static world, before anything else is drawn over it
+      pzopt.PixelLight.afterComposite(playerIndex); // pzopt: pixelLight, the per-pixel light pass (pass mode) and the dev dumps, before anything else is drawn over the static world
       FBORenderShadows.getInstance().clear();
       boolean pzoptFloorOnly = pzopt.ResumeShot.noMoving; // pzopt: resumeShot's exit capture (below "full"): no players, shadows, corpses
       if (!pzoptFloorOnly) {
@@ -2098,7 +2101,7 @@ public final class FBORenderCell {
                if (pzoptDraw != null) {
                   // stale but complete texture: same as the clean path below
                   FBORenderChunkManager.instance.renderChunk = pzoptDraw;
-                  FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, false);
+                  FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, false); pzopt.PixelLight.bakeEnd(); // pzopt: pixelLight
                   if (!renderLevels.getCachedSquares_AnimatedAttachments(level).isEmpty()) {
                      perPlayerData1.addChunkWith_AnimatedAttachments(c);
                   }
@@ -2122,6 +2125,7 @@ public final class FBORenderCell {
          if (pzopt.BakeLog.ON && pzoptWasDirty) pzopt.BakeLog.bake(c, renderLevels, level, zoom); // pzopt: per-frame bake census
          boolean isDirty = FBORenderChunkManager.instance.beginRenderChunkLevel(c, level, zoom, canRender, true);
          if (pzopt.BakeLog.ON && isDirty && !pzoptWasDirty) pzopt.BakeLog.hidden(c, level); // pzopt: a texture made here without prior dirt (bypasses every budget)
+         if (isDirty && pzopt.PixelLight.ACTIVE) pzopt.PixelLight.bakeBegin(c, playerIndex); // pzopt: pixelLight, the chunk's squares hand out white light while its texture bakes
          if (isDirty && canRender) pzopt.GpuSections.begin("bake"); // pzopt: GPU section
          if (isDirty && canRender) pzopt.AmbientOcclusion.changed(); // pzopt: ambient occlusion, a chunk texture changes: recompute
          if (isDirty && canRender && pzopt.BakeMips.ON && FBORenderChunkManager.instance.renderChunk != null) { // pzopt: bakeMipLevels
@@ -2496,7 +2500,7 @@ public final class FBORenderCell {
                   }
 
                   if (!renderObjects) {
-                     FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, false);
+                     FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, false); pzopt.PixelLight.bakeEnd(); // pzopt: pixelLight
                      break label658;
                   }
 
@@ -2693,7 +2697,7 @@ public final class FBORenderCell {
                   pzopt.ChunkAo.bakeEnd(FBORenderChunkManager.instance.renderChunk, c, playerIndex, zoom, pzopt.ChunkAo.geometryDirty(renderLevels, level, zoom)); // pzopt
                } // pzopt
                pzopt.GpuSections.begin("bake.end"); // pzopt: GPU sub-section (unbind, mipmaps of the top level)
-               FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, true);
+               FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, true); pzopt.PixelLight.bakeEnd(); // pzopt: pixelLight
                pzopt.GpuSections.end("bake.end"); // pzopt: GPU sub-section
                pzopt.GpuSections.end("bake"); // pzopt: GPU section
                return;
@@ -2703,7 +2707,7 @@ public final class FBORenderCell {
                var17.close();
             }
          } else {
-            FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, false);
+            FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, false); pzopt.PixelLight.bakeEnd(); // pzopt: pixelLight
             if (!renderLevels.getCachedSquares_AnimatedAttachments(level).isEmpty()) {
                perPlayerData1.addChunkWith_AnimatedAttachments(c);
             }
@@ -3381,7 +3385,7 @@ public final class FBORenderCell {
                   continue; // a nearer chunk's tree: below this texture's depth range, its own and nearer textures hold it
                }
                ColorInfo light = this.sanitizeLightInfo(playerIndex, square);
-               boolean unlit = tree.getSprite().getProperties().has(IsoFlagType.unlit);
+               boolean unlit = tree.getSprite().getProperties().has(IsoFlagType.unlit) || pzopt.PixelLight.ACTIVE; // pzopt: pixelLight, trees bake unlit like the rest of the texture
                float cr = unlit ? 1.0F : light.r;
                float cg = unlit ? 1.0F : light.g;
                float cb = unlit ? 1.0F : light.b;
@@ -3488,7 +3492,7 @@ public final class FBORenderCell {
                continue;
             }
             ColorInfo light = this.sanitizeLightInfo(playerIndex, square);
-            boolean unlit = tree.getSprite().getProperties().has(IsoFlagType.unlit);
+            boolean unlit = tree.getSprite().getProperties().has(IsoFlagType.unlit) || pzopt.PixelLight.ACTIVE; // pzopt: pixelLight, trees bake unlit like the rest of the texture
             float cr = unlit ? 1.0F : light.r;
             float cg = unlit ? 1.0F : light.g;
             float cb = unlit ? 1.0F : light.b;
@@ -5007,7 +5011,7 @@ public final class FBORenderCell {
       }
       if (draw != null) {
          FBORenderChunkManager.instance.renderChunk = draw;
-         FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, false);
+         FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, false); pzopt.PixelLight.bakeEnd(); // pzopt: pixelLight
          if (!renderLevels.getCachedSquares_AnimatedAttachments(level).isEmpty()) {
             perPlayerData1.addChunkWith_AnimatedAttachments(c);
          }

@@ -40,7 +40,7 @@ public final class Explore {
    private static final String[] ACTIONS = {"go_to_restaurant", "next_room", "look_around", "face_north", "hold", "done"};
    private static final String[] DIRS = {"E", "SE", "S", "SW", "W", "NW", "N", "NE"}; // k * 45 deg, 0 = east, +y = south
 
-   private static boolean on, director, started, finished;
+   private static boolean on, director, started, finished, restaurantLit;
    private static String command = "hold";
    private static int commandSeq = -1, commands, dumpRooms, doorsOpened, replans, stuckMarks;
    private static long startNs, lastStateNs, lastCmdCheckNs, lastPlanNs, lastProgressNs;
@@ -136,6 +136,11 @@ public final class Explore {
    static void tick(IsoPlayer p, long nowNs) {
       if (!on || !started || finished) return;
       float dt = Math.min(0.1F, zombie.GameTime.getInstance().getRealworldSecondsSinceLastUpdate());
+      if (!restaurantLit && Scene.lightsFlag() && targetRoom != null
+            && Math.abs(p.getX() - targetRoom.getX()) < 30 && Math.abs(p.getY() - targetRoom.getY()) < 30) {
+         restaurantLit = true; // lights=on switched the ones near the start; the restaurant's too once its chunks are loaded
+         Scene.lightsOnAround(targetRoom.getX(), targetRoom.getY());
+      }
       RoomDef here = stickyRoom(roomOf(p.getCurrentSquare()), nowNs);
       if (here != null && rooms.contains(here) && visited.add(here)) {
          Log.info(String.format(Locale.ROOT, "harness: explore: entered %s at +%.1f s", here.name, (nowNs - startNs) / 1e9));

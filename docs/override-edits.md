@@ -3652,3 +3652,70 @@ it in place like the fog pass).
 - `Pacing.lastSubmitNs` (the render thread's acquire-to-swap time before any hold) feeds `bakeBudgetAdaptive`.
 - `Upscaler.savedState` / `boundFramebuffer` (`upscaleNoGlGet`, off): the resolve takes the bound framebuffer from
   `TextureFBO.lastID` and the viewport as the screen instead of asking the driver (0 disagreements with `devGlStateCheck`).
+
+## Per-pixel lighting (`pixelLight`, `ppl*`, 2026-09-25; pzopt.PixelLight, pzopt.FrameCapture)
+
+New visual feature, off by default (`docs/findings-per-pixel-lighting-2026-09-25.md`). The chunk textures bake unlit and
+the light is composed per pixel by the chunk composite shader: the scene depth after the composite is linear in
+x + y + 2z, so a pixel's screen position and depth give its exact world position. Per square the native's own light
+(`lightInfo`, the sample the corners are the max of) is interpolated between square centres across neighbours that share
+their corner colours (the native breaks them at walls); handheld torches are taken out of it and drawn from an analytic
+cone fitted to the native's per-square torch entries; vehicle lights and point lights keep the native value at the
+centres and add their own shape between them. A light change uploads 2.5 KB of lattice per chunk level instead of
+re-baking it.
+
+### zombie.iso.LightingJNI (JNILighting)
+
+- A per-square "white" state: while its chunk's texture bakes, `lightverts` returns white and the `lightInfo` object
+  (which `IsoGridSquare.getLightInfo` hands out by reference) holds (1, 1, 1), the real values kept aside; a lazy refresh
+  in the middle of a bake reads and writes the real ones and re-whitens.
+- With `pixelLight`, a square whose light was re-read marks its chunk level for the lattice (`PixelLight.lightChanged`)
+  instead of invalidating the level's texture; a change of the visibility bits still invalidates it (they decide object
+  alphas in the bake).
+- Accessors for PixelLight: the corners as lit, the visibility bits, the flat light, a one-line dump (dev), and the
+  torch list as sent to the native (`pzoptTorches`).
+
+### zombie.iso.fboRenderChunk.FBORenderCell
+
+- When `beginRenderChunkLevel` starts a bake, `PixelLight.bakeBegin` whitens the chunk's squares; after every
+  `endRenderChunkLevel` (and once before the composite) `PixelLight.bakeEnd` restores them once the texture stops caching.
+- The tree pass and the tree appends bake trees white (like the `unlit` sprite flag) when `pixelLight` is on.
+- `PixelLight.beforeComposite` (lattice packing, the frame's camera and light table) right before
+  `FBORenderChunkManager.endFrame()`, `PixelLight.afterComposite` (the pass mode, the dev dumps) right after it.
+
+### zombie.iso.IsoChunk
+
+- `pzoptPplDirty`, one byte per level: the lattice block of that level needs packing (written by the lighting-read
+  workers, one level per task).
+- `pzoptPplFlags`, one byte per level, written by the pack: 1 every square's light is saturated, 2 every square hides the
+  torch from the player. A chunk texture whose levels (and the eight chunks around) carry a flag leaves the lamps / torch
+  out of its light list, which usually leaves it on the light-free program.
+
+### zombie.viewCone.ChunkRenderShader (new override)
+
+- `startRenderThread` calls `PixelLight.chunkDraw(program)` after setting `DEPTH` and `chunkDepth`: it switches the draw
+  to the program variant compiled for the lights that reach that chunk texture (none: the light-free `PPL_BASE` one;
+  variants are compiled from the one placeholder `pzopt_chunkBase` with `PPL_NO_POINT` / `PPL_NO_TORCH` / `PPL_NO_WET` /
+  `PPL_NO_MASK`), sets the light uniforms at a program's first draw of the frame and the draw's light list (`pplSel`).
+  Constructor: the quiet load marker.
+
+### zombie.core.opengl.ShaderUnit
+
+- The shader source goes through `PixelLight.patchShader` after `Hdr.patchShader`: `chunkShader.frag` is replaced by a
+  GLSL 4.20 version (same uniforms and output, plus the light; test-compiled, stock on failure). Its lattice samplers
+  have fixed bindings on units 9-12 (units 4-8 are the fog's and the HDR passes'): the game validates programs with every
+  sampler on unit 0, and two sampler types on one unit fail validation on Mesa. The game then renumbers every
+  `sampler2D` after the link, so the shadow mask's unit is set again by `glUniform1i`. In pass mode (`pplMode=pass`)
+  the composite stays stock.
+
+### org.lwjglx.opengl.Display
+
+- `FrameCapture.beforeSwap()` before the HDR encode (dev rig `devCapture`, off unless set).
+
+### pzopt.FogPass.sceneDepthAsTexture
+
+The offscreen depth becomes a texture also with `pixelLight` (the pass mode reads it in place).
+
+### pzopt.Harness
+
+- `face=deg`: the facing the `turn` starts from (held there with `turn=0`).

@@ -576,6 +576,8 @@ while :; do
   attempt=$((attempt+1))
   rm -f "$ZOMBOID/Lua/pzopt-pad-ready.txt" "$ZOMBOID/Lua/pzopt-inputlag-ready.txt"
   rm -rf "$ZOMBOID/pzopt-hdr"   # HDR frame dumps (pzopt.Hdr) of the previous run
+  rm -rf "$ZOMBOID/pzopt-ppl"   # per-pixel lighting dumps (pzopt.PixelLight, devPplDumpAt) of the previous run
+  rm -rf "$ZOMBOID/pzopt-capture"   # frame sequence (pzopt.FrameCapture, devCapture) of the previous run
   rm -f "$ZOMBOID"/pzopt-*.out "$ZOMBOID/console.txt" "$ZOMBOID/pzopt-shot.now" "$ZOMBOID/pzopt-shot2.now" "$ZOMBOID/Screenshots/pzopt-shot.png" "$ZOMBOID/Screenshots/pzopt-shot2.png"
   restore_harness_flag; write_flags; write_launch_env
   launch_epoch=$(date +%s)
@@ -816,6 +818,8 @@ done
 cp "$ZOMBOID/console.txt" "$out/console.txt"
 cp "$ZOMBOID"/pzopt-*.out "$out/" 2>/dev/null || true
 [[ -d "$ZOMBOID/pzopt-hdr" ]] && mv "$ZOMBOID/pzopt-hdr" "$out/hdr"   # HDR frame dumps (tools/hdr/hdrframe.py)
+[[ -d "$ZOMBOID/pzopt-ppl" ]] && mv "$ZOMBOID/pzopt-ppl" "$out/ppl"   # per-pixel lighting dumps (harness/ppl/)
+[[ -d "$ZOMBOID/pzopt-capture" ]] && mv "$ZOMBOID/pzopt-capture" "$out/capture"   # frame sequence (harness/ppl/capture.py)
 [[ -f "$ZOMBOID/Screenshots/pzopt-shot.png" ]] && cp "$ZOMBOID/Screenshots/pzopt-shot.png" "$out/shot-game.png"
 [[ -f "$ZOMBOID/Screenshots/pzopt-shot2.png" ]] && cp "$ZOMBOID/Screenshots/pzopt-shot2.png" "$out/shot2-game.png"
 cp "$PZ_DIR/pzopt.properties" "$out/pzopt.properties"

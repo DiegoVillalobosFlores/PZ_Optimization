@@ -339,7 +339,6 @@ PzoptOptionClasses = {
     uniformCache = { "pzopt.UniformCache" },
     updateCheck = { "pzopt.Updater" },
     updateFromWorkshop = { "pzopt.Updater" },
-    updatePrefetch = { "pzopt.Updater", "pzopt.UpdateDelta" },
     updatePrefetch = { "pzopt.Updater" },
     updatePrefetchMaxKb = { "pzopt.Updater" },
     upscaleNoGlGet = { "pzopt.Upscaler" },

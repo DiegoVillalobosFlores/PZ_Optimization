@@ -78,6 +78,7 @@ final class Dlss {
    private static int semGlDone, semDlssDone;
    private static int quadVbo;
    private static final int[] SAVED_VIEWPORT = new int[4];
+   private static int devStateLogged; // devDlssStateLog
    private static final int[] LAYOUTS = new int[4];
    private static final int[] NO_BUFFERS = new int[0];
    private static final int[] OUT_LAYOUT = {EXTSemaphore.GL_LAYOUT_GENERAL_EXT};
@@ -395,8 +396,12 @@ final class Dlss {
       float s = RenderScale.scale();
       GpuSections.markNow("upscale", false);
       GpuSections.markNow("dlss.inputs", false);
-      GL11.glGetIntegerv(GL11.GL_VIEWPORT, SAVED_VIEWPORT);
-      int previousFbo = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+      int previousFbo = Upscaler.savedState(SAVED_VIEWPORT);
+      if (Config.DEV_DLSS_STATE_LOG && devStateLogged < 40 && (devStateLogged++ & 1) == 0) {
+         Log.info("dlss state: fbo=" + previousFbo + " TextureFBO.lastID=" + zombie.core.textures.TextureFBO.lastID + " viewport=" + SAVED_VIEWPORT[0] + "," + SAVED_VIEWPORT[1] + ","
+            + SAVED_VIEWPORT[2] + "," + SAVED_VIEWPORT[3] + " screen=" + zombie.core.Core.getInstance().getScreenWidth() + "x" + zombie.core.Core.getInstance().getScreenHeight()
+            + " offscreen=" + zombie.core.Core.getInstance().getOffscreenWidth(0) + "x" + zombie.core.Core.getInstance().getOffscreenHeight(0) + " inW=" + inW + " inH=" + inH);
+      }
       GL11.glDisable(GL11.GL_BLEND);
       GL11.glDisable(GL11.GL_DEPTH_TEST);
       GL11.glDisable(GL11.GL_SCISSOR_TEST);
@@ -679,7 +684,7 @@ final class Dlss {
       }
       TextureFBO world = Core.getInstance().getOffscreenBuffer();
       boolean drewHere = world != null && world.getBufferId() == directFbo && directTex == setTex[current][0];
-      int previous = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+      int previous = Upscaler.boundFramebuffer();
       GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, directFbo);
       if (world != null && world.getBufferId() == directFbo) {
          GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, ((Texture)world.getTexture()).getID(), 0);

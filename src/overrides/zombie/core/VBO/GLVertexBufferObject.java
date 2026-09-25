@@ -76,7 +76,7 @@ public class GLVertexBufferObject {
     * frame has been issued, so one fence here covers all reads of the buffers unmapped during the frame.
     */
    public static void pzoptFrameEnd() {
-      if (!pzopt.Config.PERSISTENT_VBO || !pzopt.Config.PERSISTENT_VBO_FRAME_FENCE) {
+      if (!pzopt.Config.PERSISTENT_VBO || !pzopt.Config.PERSISTENT_VBO_FRAME_FENCE && !pzopt.Config.PERSISTENT_VBO_FRAME_SYNC) { // pzopt: frameSync needs the frame fences too
          return;
       }
       int i = (int)(pzoptFrame % PZOPT_FRAME_RING);
@@ -135,7 +135,9 @@ public class GLVertexBufferObject {
    }
 
    private ByteBuffer pzoptMapPersistent() {
-      pzoptFencePrevious();
+      if (!pzopt.Config.PERSISTENT_VBO_FRAME_SYNC) { // pzopt: frameSync fences whole frames instead of every batch
+         pzoptFencePrevious();
+      }
       pzoptMaps++;
       pzoptMapsThisFrame++;
       if (this.buffer == null) {
@@ -173,8 +175,32 @@ public class GLVertexBufferObject {
             funcs.glBindBuffer(this.type, this.id); // the caller bound the previous slot; the draws must see this one
             this.buffer = this.pzoptSlotBuffers[this.pzoptSlot];
          }
-         if (pzopt.Config.PERSISTENT_VBO_FRAME_FENCE) {
+         if (pzopt.Config.PERSISTENT_VBO_FRAME_FENCE && !pzopt.Config.PERSISTENT_VBO_FRAME_SYNC) {
             this.pzoptWaitFrame(this.pzoptSlotUnmapFrame[this.pzoptSlot]);
+         }
+         if (pzopt.Config.PERSISTENT_VBO_FRAME_SYNC) {
+            // pzopt: persistentVboFrameSync (2026-09-24). A fence per 64 KB batch meant a glFenceSync + glClientWaitSync per
+            // map, and with NVIDIA's threaded driver every wait is a round trip to the driver thread even when the fence has
+            // long signalled (37 % of the render thread in late frames on the Rosewood drive). Here a slot last drawn in an
+            // earlier frame waits for that frame's fence only when it is not yet known done (one wait covers every older
+            // frame); a slot drawn earlier in this very frame (the ring wrapped inside one frame) waits for a fence set now,
+            // behind the draws already issued from it.
+            // A slot drawn persistentVboTrustFrames or more frames ago needs no call at all: the driver blocks the swap
+            // while 2-3 frames are queued behind the GPU (the swap-chain limit), so that frame is long finished.
+            long f = this.pzoptSlotUnmapFrame[this.pzoptSlot];
+            if (f != 0L && f > pzoptFrameDone && pzoptFrame - f < pzopt.Config.PERSISTENT_VBO_TRUST_FRAMES) {
+               if (f >= pzoptFrame) {
+                  pzoptSameFrameReuse++;
+                  long t0 = System.nanoTime();
+                  long sync = org.lwjgl.opengl.GL32.glFenceSync(0x9117, 0);
+                  org.lwjgl.opengl.GL32.glClientWaitSync(sync, 0x0001, 1_000_000_000L);
+                  org.lwjgl.opengl.GL32.glDeleteSync(sync);
+                  pzoptFrameWaits++;
+                  pzoptFrameWaitNs += System.nanoTime() - t0;
+               } else {
+                  this.pzoptWaitFrame(f);
+               }
+            }
          }
       }
       long fence = this.pzoptSlotFences[this.pzoptSlot];
@@ -371,7 +397,9 @@ public class GLVertexBufferObject {
                funcs.glBindBuffer(this.type, this.id);
                GL30.glFlushMappedBufferRange(this.type, 0L, this.size); // publish the batch (MAP_FLUSH_EXPLICIT)
             }
-            pzoptUnmappedSinceFence.add(this); // the draws from this buffer follow; fenced at the next map()
+            if (!pzopt.Config.PERSISTENT_VBO_FRAME_SYNC) { // pzopt: frameSync, the frame fence covers them
+               pzoptUnmappedSinceFence.add(this); // the draws from this buffer follow; fenced at the next map()
+            } // pzopt
             this.pzoptUnmappedSlot = this.pzoptSlot;
             this.pzoptSlotUnmapFrame[this.pzoptSlot] = pzoptFrame; // and covered by this frame's fence (pzoptFrameEnd)
             return true;

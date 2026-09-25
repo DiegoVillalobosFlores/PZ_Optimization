@@ -32,13 +32,27 @@ public final class GpuSections {
       final String name;
       final int beginId;
       final int endId;
+      final long beginCpuNs;
+      final long endCpuNs;
 
-      Pair(String name, int beginId, int endId) {
+      Pair(String name, int beginId, int endId, long beginCpuNs, long endCpuNs) {
          this.name = name;
          this.beginId = beginId;
          this.endId = endId;
+         this.beginCpuNs = beginCpuNs;
+         this.endCpuNs = endCpuNs;
       }
    }
+
+   /**
+    * Per-pair log (Zomboid/pzopt-gpusections.out, instrumented runs with gpuSections): one line per finished section,
+    * "begin_cpu_ns name gpu_ns", begin_cpu_ns = System.nanoTime() when the render thread issued the begin timestamp,
+    * so each pair joins the pzopt-pacing.out frame whose acquire..swap-call window holds it (harness/frame-causes.py).
+    */
+   private static final boolean LOG = Config.INSTRUMENT;
+   private static java.io.BufferedWriter log;
+   private static boolean logFailed;
+   private static final HashMap<String, Long> openCpu = new HashMap<>();
 
    /** One queued timestamp; render() runs on the render thread. */
    private static final class Marker extends TextureDraw.GenericDrawer {
@@ -58,13 +72,19 @@ public final class GpuSections {
          }
          GL33.glQueryCounter(id, GL33.GL_TIMESTAMP);
          if (isEnd) {
+            long cpu;
+            synchronized (open) {
+               Long c = openCpu.remove(name);
+               cpu = c == null ? 0L : c;
+            }
             synchronized (pending) {
-               pending.add(new Pair(name, openBegin(name), id));
+               pending.add(new Pair(name, openBegin(name), id, cpu, System.nanoTime()));
             }
             collect();
          } else {
             synchronized (open) {
                open.put(name, id);
+               openCpu.put(name, System.nanoTime());
             }
          }
       }
@@ -157,6 +177,39 @@ public final class GpuSections {
                t[0] += Math.max(0L, t1 - t0);
                t[1]++;
             }
+            if (LOG) {
+               logPair(p, Math.max(0L, t1 - t0));
+            }
+         }
+      }
+   }
+
+   private static void logPair(Pair p, long gpuNs) {
+      if (logFailed) {
+         return;
+      }
+      try {
+         if (log == null) {
+            String dir = zombie.ZomboidFileSystem.instance.getCacheDir();
+            if (dir == null) {
+               return;
+            }
+            log = new java.io.BufferedWriter(new java.io.FileWriter(new java.io.File(dir, "pzopt-gpusections.out"), false), 1 << 16);
+            log.write("# begin_cpu_ns name gpu_ns cpu_ns (begin = System.nanoTime of the begin timestamp's issue on the render thread; cpu_ns = render-thread time from begin to end issue)\n");
+         }
+         log.write(p.beginCpuNs + " " + p.name + " " + gpuNs + " " + (p.endCpuNs - p.beginCpuNs) + "\n");
+      } catch (java.io.IOException | RuntimeException e) {
+         logFailed = true;
+      }
+   }
+
+   /** Render thread, once a second or at exit: push the per-pair log to disk. */
+   public static void flushLog() {
+      java.io.BufferedWriter w = log;
+      if (w != null) {
+         try {
+            w.flush();
+         } catch (java.io.IOException ignored) {
          }
       }
    }

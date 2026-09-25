@@ -118,6 +118,11 @@ public final class Pacing {
       capIntervalNs = intervalNs;
    }
 
+   /** Game thread: System.nanoTime() at the start of the current step (bakeDeadlinePct). */
+   public static long stepStartNs() {
+      return stepStartNs;
+   }
+
    /** Game thread, right before SpriteRenderer.pushFrameDown: the frame being pushed shows this step's time. */
    public static void onPush() {
       if (!ACTIVE) {
@@ -146,11 +151,15 @@ public final class Pacing {
       }
    }
 
+   /** Render thread: the last frame's acquire -> swap-call time before any hold (pzopt.BakeScheduler's adaptive budget). */
+   public static volatile long lastSubmitNs;
+
    /** Render thread, right before Display.update (the swap): optionally hold the present, then stamp the call. */
    public static void beforeSwap() {
       if (!ACTIVE) {
          return;
       }
+      lastSubmitNs = System.nanoTime() - acquireNs;
       if (!glChecked) {
          initGl();
       }
@@ -228,13 +237,25 @@ public final class Pacing {
       }
    }
 
-   /** The pacing mode for this frame: AUTO follows pzopt.Vrr. */
+   /**
+    * The pacing mode for this frame. AUTO: gpu wherever the GL has timestamp queries (since 2026-09-25 also at a fixed
+    * refresh: the Rosewood drive's present jitter 1.3 -> 0.4 ms, frames below the cap 28 -> 11 %, for ~1.7 ms more
+    * step-to-screen time on average), the cpu fallback only while VRR is active, off under the macOS Metal bridge
+    * (it paces its own presents).
+    */
    static int effectiveMode() {
-      return mode == AUTO ? (Vrr.active() && !MacPresent.active() ? autoMode : OFF) : mode;
+      return mode == AUTO ? autoResolved() : mode;
+   }
+
+   private static int autoResolved() {
+      if (MacPresent.active()) {
+         return OFF;
+      }
+      return autoMode == GPU || Vrr.active() ? autoMode : OFF;
    }
 
    public static String describeMode() {
-      return mode == AUTO ? "auto (" + NAMES[Vrr.active() ? autoMode : OFF] + ")" : NAMES[mode];
+      return mode == AUTO ? "auto (" + NAMES[autoResolved()] + ")" : NAMES[mode];
    }
 
    private static void addLag(long lag) {
@@ -266,7 +287,7 @@ public final class Pacing {
             }
          }
          if (MODE != OFF) {
-            Log.info("pacing: presentPacing=" + Config.PRESENT_PACING + " -> " + NAMES[mode] + (mode == AUTO ? " (" + NAMES[autoMode] + " while VRR is active)" : "")
+            Log.info("pacing: presentPacing=" + Config.PRESENT_PACING + " -> " + NAMES[mode] + (mode == AUTO ? " (" + NAMES[autoMode] + (autoMode == GPU ? ")" : " while VRR is active)") : "")
                + " (GL timestamps " + (timestamps ? "yes" : "no") + ", p" + Config.PRESENT_PACING_PCT + " + " + Config.PRESENT_PACING_MARGIN_US + " us)");
          }
       } catch (Throwable t) {

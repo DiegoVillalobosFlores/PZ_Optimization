@@ -3504,3 +3504,113 @@ the one-row depth steps tile edges have, a 4x4 Bayer rotation of two slices and 
 
 The offscreen depth becomes a texture also when `ambientOcclusion` with `aoMode=screen` is on (the screen mode reads
 it in place like the fog pass).
+
+## Town drive pass: one bake budget, cheaper bakes, fewer driver syncs (2026-09-24/25; docs/findings-town-drive-2026-09-24.md)
+
+### zombie.iso.fboRenderChunk.FBORenderCell
+
+- `bakeScheduler` (pzopt.BakeScheduler): `renderTilesInternal` makes the frame's bake grants right before
+  `prepareChunksForUpdating` (`pzoptSchedulePlan`): every dirty on-screen chunk level is offered once with a class (an
+  existing texture whose objects / items / trees / obscuring changed = must; never-textured = arrival; cutaway; strong
+  lighting (pzopt.LightDirt); redraw; lighting drift, which is still held `lightingRebakeMs` since its last bake) and its
+  chunk's distance to the camera character. A level last found fully occluded is not offered while the occlusion stays as
+  it was (only the stored count is read: the plan runs before this frame's occlusion pass, and writing a count from last
+  frame's grid left levels at 0 visible squares for good). In `renderOneLevel` the scheduler's grant replaces the per-kind
+  budget decision for the lower level of a texture (the upper level follows it as before); a level not granted takes the
+  existing deferral path (previous texture, or nothing for a never-textured one). `prepareChunksForUpdating` skips a level
+  that holds no grant but has a texture (its square flags from the last preparation match what is on screen); a
+  never-textured level is always prepared, since the occlusion count reads those flags. `pzoptHasDirtyChunkTexturesForOcclusion`
+  looks only at granted levels (`occlusionGrantedOnly`). The scheduler is off during a zoom flood and the resume-shot capture.
+- `bakeMipLevels`: the first bake of each render chunk queues pzopt.BakeMips (GL_TEXTURE_MAX_LEVEL on its colour texture).
+- `renderChunkTopUp`: `checkNewlyOnScreenChunks` keeps that many free render chunks of the current texture size in the
+  pool, a few a frame; their GL objects are made on the render thread through pzopt.GlTask (a `TextureFBO` built on the
+  game thread waits for the render thread).
+- `seamSpread` / `seamDirections` (both off): `checkSeamChunks` queues a baked neighbour's seam re-bake (pzopt.SeamSpread),
+  or marks it with the pzopt dirty bit `BakeScheduler.DIRTY_SEAM_LOW` when the chunk that loaded is not south or east of
+  it (the only squares SeamFix2 reads); the scheduler bakes that bit with lighting drift.
+- `occlusionRetain` (off): a fully occluded level keeps its texture and dirt instead of clearing and freeing them.
+- `compositeShaderRun` (off): `pzoptCompositeChunks` replaces `FBORenderChunkManager.endFrame`'s non-combined path with
+  the same per-chunk composite (`pzoptCompositeOne` = `FBORenderChunk.renderInWorldMainThread`) and one `EndShader` after
+  the last chunk instead of one per chunk.
+- Instrumented runs: `pzopt.BakeLog` (per-frame bake census and one row per bake, `pzopt-bakes.out`), GPU sub-sections
+  `bake.trees` and `bake.end` (`gpuSections`).
+- The periodic counters line carries the `glNoSync` counters (`pzopt.GlNames.summary`).
+
+### zombie.FliesSound (new override, `fliesToggleFix`, default on)
+
+- `ChunkLevelData.update`: with an emitter already playing, the old square's `setHasFlies(false)` is skipped when the flies
+  square stays the same (it is set back to true a few lines later, nothing reads it between). Each toggle dirtied the chunk
+  level (object remove + add, never held), and the update runs for the 3x3 chunks around the player whenever any chunk
+  loads: an immediate re-bake next to the player every few frames while driving.
+- Decompiler fix: `ChunkData`'s constructor creates `ChunkLevelData` unqualified (Vineflower's `FliesSound.this.new` added
+  a `requireNonNull` the jar does not have).
+
+### zombie.iso.IsoChunk
+
+- `checkAdjacentChunks` records on each neighbour which side the loaded chunk is on (`pzoptSeamDirs`, `seamDirections`);
+  reset with the other per-chunk stamps on reuse. `invalidateRenderChunkLevel` can log the stacks of object add / remove
+  invalidations (`devInvalidateStacks`, pzopt.DevStacks). Chunk reuse also clears pzopt.BakeScheduler's waits.
+
+### zombie.iso.IsoChunkMap
+
+- The chunk hand-off is timed in instrumented runs and may wait for a frame with headroom (`chunkHandoffSlack`, off;
+  pzopt.ChunkHandoff).
+
+### zombie.core.VBO.GLVertexBufferObject (`persistentVboFrameSync`, `persistentVboTrustFrames`)
+
+- With `persistentVboFrameSync` the persistent sprite buffers are fenced per frame (`pzoptFrameEnd`) instead of per 64 KB
+  batch: `pzoptMapPersistent` no longer fences the previous batch, and a slot last drawn in an earlier frame waits for that
+  frame's fence only when that frame is not yet known done and was drawn fewer than `persistentVboTrustFrames` frames ago
+  (the swap chain caps the frames in flight at 2-3); a slot drawn earlier in the same frame waits for a fence set now.
+
+### zombie.core.textures.TextureDraw
+
+- `run`: `uniformCache` (off) resets pzopt.UniformCache on every command other than a shader start; a start of the same
+  program as the previous command skips `TileDepthShader.startRenderThread`'s sampler setup (only its MVP update runs) and
+  sends the uniform chain through `ShaderUniformSetter.pzoptInvokeAllCached`. Instrumented runs count shader starts per
+  program inside and outside chunk bakes (pzopt.DrawStats).
+
+### zombie.core.opengl.ShaderUniformSetter (new override, `uniformCache`)
+
+- `pzoptInvokeAllCached`: the chain of a shader start, skipping every 1f / 1i uniform whose value the program already holds
+  (pzopt.UniformCache); other shapes are sent and forget their cached location.
+
+### zombie.core.textures.TextureID (new override, `glNoSync`)
+
+- `generateHwId`: the texture name comes from `pzopt.GlNames.texture()` (a render-thread pool refilled after the swap;
+  any other thread, or `glNoSync` off, calls `glGenTextures` as before).
+- Decompiler fix in `getData`: `glBindTexture(3553, Texture.lastTextureID = 0)` as the jar (Vineflower wrote the
+  assignment and a second constant).
+
+### zombie.core.textures.TextureFBO (new override, `glNoSync`)
+
+- `initInternal`: the framebuffer name from `pzopt.GlNames.framebuffer` (GL 3.0 framebuffers on the pool's thread only);
+  `glCheckFramebufferStatus` is skipped for an attachment shape (colour size, depth texture size or renderbuffer, stencil)
+  that already came out complete; a first one is checked and recorded after the stock error handling.
+- Decompiler fixes (`reset`, `initInternal`): the jar binds the assigned value (`lastID = 0`, `Texture.lastTextureID = 0`).
+
+### zombie.core.skinnedmodel.DeadBodyAtlas (new override, `glNoSync`)
+
+- `toBodyAtlas`: the program to restore is `pzopt.GlState.currentProgramNoSync()` (ShaderHelper's record, as
+  `weatherNoGlGet` does for the weather particles) instead of `glGetInteger(GL_CURRENT_PROGRAM)`, a driver round trip per
+  corpse drawn into the atlas (19 % of the render thread's late-frame samples on the drive at upscaler=off).
+- Decompiler fixes in `toBodyAtlas`: the two `glBindTexture(3553, Texture.lastTextureID = 0)` as the jar.
+
+### zombie.core.opengl.RenderThread
+
+- After the swap: `pzopt.GlNames.refill()` (`glNoSync`), one batched `glGenTextures` / `glGenFramebuffers` when a pool
+  is under half, while the render thread waits for the next frame anyway.
+
+### pzopt classes (not game classes)
+
+- `GlNames` (`glNoSync`): the name pools and the complete-shape set; `TreeBake`'s append check reads the render
+  chunk the render thread bound (`FBORenderChunkManager.renderThreadCurrent`, whose FBO keeps one colour texture for life)
+  instead of `glGetFramebufferAttachmentParameteri` (0 refusals in 402 recorded runs with the query); `devGlStateCheck`
+  still asks the driver and counts disagreements.
+- `BakeScheduler` `bakeSmooth`: the normal tier grants the demand bound (the most over d of ceil(levels due within d
+  frames / d)) in deadline order, under the adaptive budget.
+- `BakeScheduler`, `BakeMips`, `BakeLog`, `SeamSpread`, `ChunkHandoff`, `GlTask`, `DrawStats`, `UniformCache`, `DevStacks`.
+- `GpuSections` logs every section pair with its render-thread issue time (`pzopt-gpusections.out`, instrumented runs).
+- `Pacing.lastSubmitNs` (the render thread's acquire-to-swap time before any hold) feeds `bakeBudgetAdaptive`.
+- `Upscaler.savedState` / `boundFramebuffer` (`upscaleNoGlGet`, off): the resolve takes the bound framebuffer from
+  `TextureFBO.lastID` and the viewport as the screen instead of asking the driver (0 disagreements with `devGlStateCheck`).

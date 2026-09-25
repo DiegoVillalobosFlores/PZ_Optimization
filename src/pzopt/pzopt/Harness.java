@@ -249,6 +249,7 @@ public final class Harness {
       Log.info("harness: quit requested");
       Overlay.flushLog();
       Pacing.flushLog();
+      GpuSections.flushLog();
       GameThreadProfile.flushLog();
       Core.getInstance().quit();
       // frames stop once the world is gone, so the escalation cannot rely on onFrame:

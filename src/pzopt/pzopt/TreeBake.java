@@ -213,8 +213,23 @@ public final class TreeBake {
             return;
          }
          if (this.expect != null) {
-            int bound = org.lwjgl.opengl.GL30.glGetFramebufferAttachmentParameteri(org.lwjgl.opengl.GL30.GL_DRAW_FRAMEBUFFER,
-               org.lwjgl.opengl.GL30.GL_COLOR_ATTACHMENT0, org.lwjgl.opengl.GL30.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
+            int bound;
+            if (Config.GL_NO_SYNC) {
+               // glNoSync: the render chunk the render thread bound (each chunk FBO keeps its one colour texture for life)
+               // instead of asking the driver, which waits for NVIDIA's driver thread to drain its queue
+               zombie.iso.fboRenderChunk.FBORenderChunk cur = zombie.iso.fboRenderChunk.FBORenderChunkManager.instance.renderThreadCurrent;
+               bound = cur == null || cur.tex == null || cur.tex.getTextureId() == null ? -1 : cur.tex.getTextureId().getID();
+               if (Config.DEV_GL_STATE_CHECK) {
+                  GlState.checks++;
+                  if (bound != org.lwjgl.opengl.GL30.glGetFramebufferAttachmentParameteri(org.lwjgl.opengl.GL30.GL_DRAW_FRAMEBUFFER,
+                        org.lwjgl.opengl.GL30.GL_COLOR_ATTACHMENT0, org.lwjgl.opengl.GL30.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME)) {
+                     GlState.mismatches++;
+                  }
+               }
+            } else {
+               bound = org.lwjgl.opengl.GL30.glGetFramebufferAttachmentParameteri(org.lwjgl.opengl.GL30.GL_DRAW_FRAMEBUFFER,
+                  org.lwjgl.opengl.GL30.GL_COLOR_ATTACHMENT0, org.lwjgl.opengl.GL30.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
+            }
             if (this.expect.getTextureId() == null || bound != this.expect.getTextureId().getID()) {
                appendsRefused++;
                return;

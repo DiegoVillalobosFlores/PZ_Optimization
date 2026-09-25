@@ -188,6 +188,7 @@ public final class IsoChunk {
    public IsoChunk next;
    public final zombie.pathfind.CollideWithObstaclesPoly.ChunkData collision = new zombie.pathfind.CollideWithObstaclesPoly.ChunkData();
    public int adjacentChunkLoadedCounter;
+   public int pzoptSeamDirs; // pzopt: seamDirections, 1 = a south / east neighbour loaded since the last seam check, 2 = another side
    public VehicleStorySpawnData vehicleStorySpawnData;
    public Object loadVehiclesObject;
    public final zombie.audio.ObjectAmbientEmitters.ChunkData objectEmitterData = new zombie.audio.ObjectAmbientEmitters.ChunkData();
@@ -4330,6 +4331,9 @@ public final class IsoChunk {
                IsoChunk adjacent = cell.getChunk(this.wx + dx, this.wy + dy);
                if (adjacent != null) {
                   adjacent.adjacentChunkLoadedCounter++;
+                  // pzopt: seamDirections, the side this chunk is on as seen from the neighbour: SeamFix2 reads only the
+                  // squares south (0,+1) and east (+1,0) of a chunk, so only those neighbours' seams wait for this one
+                  adjacent.pzoptSeamDirs |= (dx == -1 && dy == 0 || dx == 0 && dy == -1) ? 1 : 2; // pzopt
                }
             }
          }
@@ -5461,6 +5465,8 @@ public final class IsoChunk {
       this.pzoptOccluderMaskSet = 0L; // pzopt: a reused chunk object starts without stored occluder masks
       this.pzoptTreeExportFp = null; // pzopt: tree export fingerprints belong to the previous chunk
       pzopt.LightDirt.chunkReused(this); // pzopt: strong-light and bake frame stamps belong to the previous chunk
+      this.pzoptSeamDirs = 0; // pzopt: seamDirections
+      if (pzopt.BakeScheduler.ON) pzopt.BakeScheduler.chunkReused(this); // pzopt: bakeScheduler waits belong to the previous chunk
       this.pzoptFog = null; // pzopt: fog masks belong to the previous chunk
       this.pzoptClearPerFrameLists(); // pzopt: FBORenderCell keeps them across invalidations; a reused chunk starts empty
       pzopt.PuddleCache.chunkReused(this); // pzopt: the cached puddle batches (and their GL buffers) are rebuilt for the new position
@@ -5601,6 +5607,7 @@ public final class IsoChunk {
    }
 
    public void invalidateRenderChunkLevel(int level, long dirtyFlags) {
+      if (pzopt.Config.DEV_INVALIDATE_STACKS && (dirtyFlags & 192L) != 0L) pzopt.DevStacks.record("flags=" + dirtyFlags); // pzopt: dev rig
       if (PerformanceSettings.fboRenderChunk) {
          if (!GameServer.server) {
             for (int playerIndex = 0; playerIndex < 4; playerIndex++) {

@@ -292,6 +292,7 @@ public class RenderThread {
             pzopt.Pacing.beforeSwap(); // pzopt: optional present pacing (presentPacing) + swap-call stamp
             Display.update(true);
             pzopt.Pacing.afterSwap(); // pzopt: swap-return stamp, pzopt-pacing.out row
+            pzopt.GlNames.refill(); // pzopt: glNoSync, top up the GL name pools while the frame is handed over
             checkControllers();
          } catch (Throwable var7) {
             if (var10 != null) {

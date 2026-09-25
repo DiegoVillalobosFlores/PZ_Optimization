@@ -230,6 +230,9 @@ public final class IsoChunkMap {
          if (pzoptDiv > 0) {
             count = Math.min(count, 1 + IsoChunk.loadGridSquare.size() / pzoptDiv);
          }
+         if (pzopt.ChunkHandoff.defer(IsoChunk.loadGridSquare.size())) { // pzopt: chunkHandoffSlack, wait for a frame with headroom
+            count = 0; // pzopt
+         } // pzopt
       }
 
       while (count > 0) {
@@ -257,7 +260,9 @@ public final class IsoChunkMap {
                ProfileArea var17 = GameProfiler.getInstance().profile("IsoChunk.doLoadGridsquare");
 
                try {
+                  long pzoptT0 = System.nanoTime(); // pzopt: chunkHandoff census
                   chunk.doLoadGridsquare();
+                  pzopt.ChunkHandoff.done(System.nanoTime() - pzoptT0); // pzopt
                   bChanged = true;
                } catch (Throwable var13) {
                   if (var17 != null) {

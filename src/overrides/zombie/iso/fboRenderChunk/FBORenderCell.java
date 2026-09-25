@@ -539,6 +539,14 @@ public final class FBORenderCell {
             }
 
             boolean var38 = var37 | FBORenderCutaways.getInstance().checkOccludedRooms(playerIndex, perPlayerData1.onScreenChunks);
+            // pzopt: bakeScheduler. The frame's grants are made before the bake preparation, which then prepares only the
+            // granted levels: it walked every dirty level every frame (64 squares x 2 levels of cutaway tests and light-info
+            // calls each), a held one included (17 % of the game thread in late frames, run td-prof3). Occlusion counts are
+            // last frame's here.
+            this.pzoptSchedPlanned = pzopt.BakeScheduler.ON && !this.pzoptZoomFlood && !pzopt.ResumeShot.capturing; // pzopt
+            if (this.pzoptSchedPlanned) { // pzopt
+               this.pzoptSchedulePlan(playerIndex, this.currentTimeMillis); // pzopt
+            } // pzopt
             this.prepareChunksForUpdating(playerIndex);
             if (var38) {
                FBORenderCutaways.getInstance().doCutawayVisitSquares(playerIndex, this.pzoptCutawayVisitChunks(perPlayerData1));
@@ -1170,9 +1178,21 @@ public final class FBORenderCell {
          FBORenderLevels renderLevels = c.getRenderLevels(playerIndex);
          if (renderLevels.adjacentChunkLoadedCounter != c.adjacentChunkLoadedCounter) {
             renderLevels.adjacentChunkLoadedCounter = c.adjacentChunkLoadedCounter;
+            int pzoptDirs = c.pzoptSeamDirs; // pzopt: seamDirections
+            c.pzoptSeamDirs = 0; // pzopt
+            if (pzopt.SeamSpread.ON && pzopt.SeamSpread.defer(c, playerIndex, renderLevels, Core.getInstance().getZoom(playerIndex), IsoWorld.instance.getFrameNo())) { // pzopt: seamSpread, queued
+               continue; // pzopt
+            } // pzopt
+            if (pzopt.BakeScheduler.ON && pzopt.Config.SEAM_DIRECTIONS && pzoptDirs == 2) { // pzopt: seamDirections, no seam of this chunk reads the new neighbour
+               renderLevels.invalidateAll(pzopt.BakeScheduler.DIRTY_SEAM_LOW); // pzopt: re-baked at the scheduler's lowest priority
+               continue; // pzopt
+            } // pzopt
             renderLevels.invalidateAll(1024L);
          }
       }
+      if (pzopt.SeamSpread.ON) { // pzopt: seamSpread, release the oldest queued seam re-bakes within this frame's allowance
+         pzopt.SeamSpread.release(playerIndex, IsoWorld.instance.getFrameNo(), this.pzoptBakesThisFrame); // pzopt: pzoptBakesThisFrame still holds last frame's count here
+      } // pzopt
    }
 
    private boolean checkTreeTranslucency(int playerIndex, FBORenderLevels renderLevels) {
@@ -1347,7 +1367,7 @@ public final class FBORenderCell {
       }
       pzoptPoolLogNs = now;
       FBORenderChunkManager m = FBORenderChunkManager.instance;
-      StringBuilder sb = new StringBuilder("renderChunks: created=").append(m.rcIndex).append(" pooled");
+      StringBuilder sb = new StringBuilder("renderChunks: created=").append(m.rcIndex).append(" toppedUp=").append(pzoptTopUpMade).append(" pooled"); // pzopt: renderChunkTopUp count
       int pooled = 0;
       for (java.util.Map.Entry<Integer, ArrayList<FBORenderChunk>> e : m.sizeChunkStore.entrySet()) {
          sb.append(' ').append(e.getKey()).append(':').append(e.getValue().size());
@@ -1387,8 +1407,43 @@ public final class FBORenderCell {
       }
    }
 
+   // pzopt: renderChunkTopUp (2026-09-24, the Rosewood drive). The prewarm fills the pool once at load; a 120 km/h town drive
+   // still made ~190 render chunks mid-drive (peak in use 481 vs 400 prewarmed), several in one frame, each two textures, an
+   // FBO and a framebuffer check on the render thread (6 % of its samples in late frames). While the free pool for this zoom's
+   // texture size holds fewer than renderChunkTopUp, up to renderChunkTopUpPerFrame new ones are made each frame, ahead of need;
+   // their GL objects are made on the render thread (a TextureFBO built on the game thread blocks it until the render thread ran it).
+   private static void pzoptTopUpRenderChunks(float zoom) { // pzopt
+      int low = pzopt.Config.RENDER_CHUNK_TOP_UP;
+      if (low <= 0 || !pzopt.Overrides.enabled()) {
+         return;
+      }
+      FBORenderChunkManager m = FBORenderChunkManager.instance;
+      for (int levels = 1; levels <= 2; levels++) {
+         int h = FBORenderLevels.calculateTextureHeightForLevels(0, levels - 1, zoom);
+         ArrayList<FBORenderChunk> st = m.sizeChunkStore.computeIfAbsent(h, k -> new ArrayList<>());
+         if (st.size() >= low) {
+            continue;
+         }
+         int w = FBORenderLevels.calculateTextureWidthForLevels(0, levels - 1, zoom);
+         for (int i = 0; i < pzopt.Config.RENDER_CHUNK_TOP_UP_PER_FRAME && st.size() < low; i++) {
+            FBORenderChunk rc = new FBORenderChunk();
+            rc.w = w;
+            rc.h = h;
+            rc.index = m.rcIndex++;
+            rc.preInit();
+            SpriteRenderer.instance.drawGeneric(new pzopt.GlTask(rc::init)); // on the render thread, in stream order before any bake that takes it (init on the game thread waited for the render thread: TextureFBO)
+            st.add(0, rc); // the pool hands out from the end
+            pzoptTopUpMade++;
+         }
+         return; // one size a frame
+      }
+   }
+
+   static long pzoptTopUpMade; // pzopt
+
    private boolean checkNewlyOnScreenChunks(int playerIndex) {
       pzoptLogRenderChunkPool(); // pzopt
+      pzoptTopUpRenderChunks(Core.getInstance().getZoom(playerIndex)); // pzopt: renderChunkTopUp
       boolean bForceCutawaysUpdate = false;
       float cameraZoom = Core.getInstance().getZoom(playerIndex);
       FBORenderCell.PerPlayerData perPlayerData1 = this.perPlayerData[playerIndex];
@@ -1471,6 +1526,7 @@ public final class FBORenderCell {
       this.renderTranslucentOnly = false;
       this.renderWindowFrameOutline = false;
       FBORenderChunkManager.instance.startFrame();
+      if (pzopt.BakeLog.ON) pzopt.BakeLog.frame(); // pzopt: per-frame bake census (instrumented runs)
       this.pzoptBakesThisFrame = 0;
       this.pzoptRebakesThisFrame = 0; // pzopt: re-bake budget
       this.pzoptZoomRebakesThisFrame = 0; // pzopt: zoomRetain re-bake budget
@@ -1490,6 +1546,7 @@ public final class FBORenderCell {
          }
       }
       this.pzoptStrongThisFrame = 0; // pzopt: strong re-bake budget
+      this.pzoptSchedNow = this.pzoptSchedPlanned && !this.pzoptZoomFlood; // pzopt: bakeScheduler, planned before the bake preparation
       this.pzoptCreatesThisFrame = 0; // pzopt: never-baked levels started this frame (the bakeBudget counts these alone)
       this.pzoptCreatesDeferredLastFrame = this.pzoptCreatesDeferredThisFrame;
       this.pzoptCreatesDeferredThisFrame = 0;
@@ -1542,7 +1599,12 @@ public final class FBORenderCell {
       this.pzoptFlushTreeAppends(playerIndex, Core.getInstance().getZoom(playerIndex)); // pzopt: treeAppend, before the textures are composited
       pzopt.ChunkAo.flush(playerIndex); // pzopt: ambient occlusion, this frame's budget of AO computes, before the textures are composited
       pzopt.GpuSections.begin("composite"); /* pzopt: GPU section: chunk textures into the combined FBO and onto the screen */
-      FBORenderChunkManager.instance.endFrame();
+      if (pzopt.Config.COMPOSITE_SHADER_RUN && pzopt.Overrides.enabled() && !DebugOptions.instance.fboRenderChunk.combinedFbo.getValue()
+            && DebugOptions.instance.fboRenderChunk.renderChunkTextures.getValue()) { // pzopt: compositeShaderRun
+         this.pzoptCompositeChunks(); // pzopt
+      } else { // pzopt
+         FBORenderChunkManager.instance.endFrame();
+      } // pzopt
       pzopt.GpuSections.end("composite");
       pzopt.AmbientOcclusion.queue(playerIndex); // pzopt: ambient occlusion on the static world, before anything else is drawn over it
       FBORenderShadows.getInstance().clear();
@@ -1835,7 +1897,7 @@ public final class FBORenderCell {
                   c.pzoptZoomReturned[playerIndex] &= ~(1L << (renderLevels.getMinLevel(level) + 32)); // pzopt: zoomRetain, nothing pending for a culled level
                   c.pzoptZoomAllowed[playerIndex] &= ~(1L << (renderLevels.getMinLevel(level) + 32));
                }
-               if (level == renderLevels.getMaxLevel(level)) {
+               if (level == renderLevels.getMaxLevel(level) && !(pzopt.Config.OCCLUSION_RETAIN && pzopt.Overrides.enabled())) { // pzopt: occlusionRetain keeps the texture and its dirt
                   renderLevels.clearDirty(level, zoom);
                   if (renderLevels.getFBOForLevel(level, zoom) != null) {
                      renderLevels.freeFBOsForLevel(level);
@@ -1860,7 +1922,17 @@ public final class FBORenderCell {
          if ((pzoptBudget > 0 || pzoptRebakeMs > 0 || pzoptZoomRetain) && (renderLevels.isDirty(level, zoom) || pzoptZoomFresh)) {
             FBORenderChunk pzoptRc = renderLevels.getFBOForLevel(level, zoom);
             boolean pzoptDefer;
-            if (level == renderLevels.getMinLevel(level)) {
+            if (level == renderLevels.getMinLevel(level) && this.pzoptSchedNow) { // pzopt: bakeScheduler decides (pzoptSchedulePlan)
+               pzoptDefer = !pzopt.BakeScheduler.get(playerIndex).granted(c, level); // pzopt
+               if (pzoptDefer) { // pzopt
+                  pzoptDeferredTotal++; // pzopt
+                  if (pzoptRc != null) { // pzopt
+                     this.pzoptDeferredTextures.add(pzoptRc); // pzopt: the level's upper half follows
+                  } // pzopt
+               } else { // pzopt
+                  this.pzoptBakesThisFrame++; // pzopt
+               } // pzopt
+            } else if (level == renderLevels.getMinLevel(level)) { // pzopt: (was the only branch) the per-kind budgets
                // lighting-only re-bake (flag 32 alone: daylight drifted by 1/255 on some square) of a texture baked
                // less than LIGHTING_REBAKE_MS ago: hold it, the previous texture stays on screen
                boolean pzoptOnly32 = pzoptRc != null && !renderLevels.isDirty(level, ~32L, zoom);
@@ -2039,9 +2111,15 @@ public final class FBORenderCell {
 
          int frameNo = IsoWorld.instance.getFrameNo();
          boolean canRender = true;
+         boolean pzoptWasDirty = renderLevels.isDirty(level, zoom); // pzopt: per-frame bake census
+         if (pzopt.BakeLog.ON && pzoptWasDirty) pzopt.BakeLog.bake(c, renderLevels, level, zoom); // pzopt: per-frame bake census
          boolean isDirty = FBORenderChunkManager.instance.beginRenderChunkLevel(c, level, zoom, canRender, true);
+         if (pzopt.BakeLog.ON && isDirty && !pzoptWasDirty) pzopt.BakeLog.hidden(c, level); // pzopt: a texture made here without prior dirt (bypasses every budget)
          if (isDirty && canRender) pzopt.GpuSections.begin("bake"); // pzopt: GPU section
          if (isDirty && canRender) pzopt.AmbientOcclusion.changed(); // pzopt: ambient occlusion, a chunk texture changes: recompute
+         if (isDirty && canRender && pzopt.BakeMips.ON && FBORenderChunkManager.instance.renderChunk != null) { // pzopt: bakeMipLevels
+            pzopt.BakeMips.onBake(FBORenderChunkManager.instance.renderChunk, FBORenderChunkManager.instance.renderChunk.getTexture()); // pzopt
+         } // pzopt
          if (DebugOptions.instance.delayObjectRender.getValue()) {
             canRender = frameNo == c.loadedFrame || frameNo >= c.renderFrame;
          }
@@ -2049,6 +2127,7 @@ public final class FBORenderCell {
          if (isDirty && canRender) {
             if (level == renderLevels.getMinLevel(level)) {
                pzopt.LightDirt.baked(c, level, frameNo); // pzopt: the accumulated light changes of this level are on screen
+               if (pzopt.BakeScheduler.ON) pzopt.BakeScheduler.get(playerIndex).baked(c, level); // pzopt: bakeScheduler, its wait restarts
             }
             if (level == renderLevels.getMinLevel(level) && pzoptRebakeMs > 0) {
                this.pzoptLastBakeMs.put(FBORenderChunkManager.instance.renderChunk, currentTimeMillis);
@@ -2599,12 +2678,16 @@ public final class FBORenderCell {
                // against walls and roofs of all its levels; neighbours' trees that reach into this texture come too.
                if (pzoptTreePassActive() && FBORenderChunkManager.instance.renderChunk != null
                      && FBORenderChunkManager.instance.renderChunk.isTopLevel(level)) {
+                  pzopt.GpuSections.begin("bake.trees"); // pzopt: GPU sub-section
                   this.pzoptBakeTrees(c, playerIndex, zoom);
+                  pzopt.GpuSections.end("bake.trees"); // pzopt: GPU sub-section
                }
                if (pzopt.ChunkAo.enabled() && FBORenderChunkManager.instance.renderChunk != null && FBORenderChunkManager.instance.renderChunk.isTopLevel(level)) { // pzopt: ambient occlusion baked into the texture
                   pzopt.ChunkAo.bakeEnd(FBORenderChunkManager.instance.renderChunk, c, playerIndex, zoom, pzopt.ChunkAo.geometryDirty(renderLevels, level, zoom)); // pzopt
                } // pzopt
+               pzopt.GpuSections.begin("bake.end"); // pzopt: GPU sub-section (unbind, mipmaps of the top level)
                FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, true);
+               pzopt.GpuSections.end("bake.end"); // pzopt: GPU sub-section
                pzopt.GpuSections.end("bake"); // pzopt: GPU section
                return;
             }
@@ -4652,6 +4735,148 @@ public final class FBORenderCell {
 
    private static long pzoptStrongBudgetCuts; // pzopt: frames that halved the strong budget (log)
 
+   // pzopt: compositeShaderRun (2026-09-25, the Rosewood drive). FBORenderChunkManager.endFrame's non-combined path, with one
+   // difference: FBORenderChunk.renderInWorldMainThread ends the chunk shader after every chunk-level texture, so the render
+   // thread switched chunk shader -> default -> chunk shader ~350 times a frame (DrawStats: program 0 was the most started
+   // program) with nothing drawn in between; here the shader ends once after the last chunk. Each chunk still starts the
+   // chunk shader with its own depth texture and chunk depth, draws its quad and sets the same state, in the same order.
+   private void pzoptCompositeChunks() {
+      FBORenderChunkManager m = FBORenderChunkManager.instance;
+      if (!m.toRenderThisFrame.isEmpty()) {
+         int playerIndex = IsoCamera.frameState.playerIndex;
+         int offscreenWidth = Core.getInstance().getOffscreenWidth(playerIndex);
+         int offscreenHeight = Core.getInstance().getOffscreenHeight(playerIndex);
+         SpriteRenderer.instance.glDoEndFrame();
+         SpriteRenderer.instance.glDoStartFrameNoZoom(offscreenWidth, offscreenHeight, Core.getInstance().getCurrentPlayerZoom(), playerIndex);
+         boolean started = false;
+         for (int i = 0; i < m.toRenderThisFrame.size(); i++) {
+            FBORenderChunk rc = m.toRenderThisFrame.get(i);
+            if (rc.getRenderLevels().getPlayerIndex() == playerIndex) {
+               pzoptCompositeOne(rc, playerIndex);
+               started |= zombie.core.SceneShaderStore.chunkRenderShader != null;
+            }
+         }
+         if (started) {
+            IndieGL.EndShader();
+         }
+         SpriteRenderer.instance.glDoEndFrame();
+         SpriteRenderer.instance.glDoStartFrame(offscreenWidth, offscreenHeight, Core.getInstance().getCurrentPlayerZoom(), playerIndex);
+      }
+      m.submitCachesForFrame();
+      SpriteRenderer.instance.releaseFBORenderChunkLock();
+   }
+
+   /** FBORenderChunk.renderInWorldMainThread without its closing EndShader (non-combined path; see pzoptCompositeChunks). */
+   private static void pzoptCompositeOne(FBORenderChunk rc, int playerIndex) {
+      if (zombie.core.SceneShaderStore.chunkRenderShader != null) {
+         IndieGL.StartShader(zombie.core.SceneShaderStore.chunkRenderShader.getID());
+         int numSprites = SpriteRenderer.instance.states.getPopulatingActiveState().numSprites;
+         TextureDraw texd = SpriteRenderer.instance.states.getPopulatingActiveState().sprite[numSprites - 1];
+         texd.tex1 = rc.depth;
+         IsoDepthHelper.Results result = IsoDepthHelper.getChunkDepthData(PZMath.fastfloor(IsoCamera.frameState.camCharacterX / 8.0F),
+            PZMath.fastfloor(IsoCamera.frameState.camCharacterY / 8.0F), rc.chunk.wx, rc.chunk.wy, rc.getMinLevel());
+         texd.chunkDepth = result.depthStart;
+         zombie.iso.PlayerCamera camera = IsoCamera.cameras[playerIndex];
+         float dx = camera.fixJigglyModelsSquareX;
+         float dy = camera.fixJigglyModelsSquareY;
+         float depthStart = (result.indexX + result.indexY - dx - dy) / 8.0F / 40.0F;
+         depthStart *= 0.46187335F;
+         texd.chunkDepth = depthStart - FBORenderLevels.calculateMinLevel(rc.getMinLevel()) * 0.0028867084F;
+      }
+      IndieGL.glBlendFuncSeparate(1, 771, 773, 1);
+      float x = IsoUtils.XToScreen(rc.chunk.wx * 8, rc.chunk.wy * 8, rc.getMinLevel(), 0);
+      float y = IsoUtils.YToScreen(rc.chunk.wx * 8, rc.chunk.wy * 8, rc.getMinLevel(), 0);
+      float w = rc.w;
+      float h = rc.h;
+      if (rc.highRes) {
+         w /= 2.0F;
+         h /= 2.0F;
+      }
+      y -= FBORenderChunk.PIXELS_PER_LEVEL * (rc.getTopLevel() - rc.getMinLevel() + 1);
+      y -= FBORenderLevels.extraHeightForJumboTrees(rc.getMinLevel(), rc.getTopLevel());
+      x -= IsoCamera.getOffX();
+      y -= IsoCamera.getOffY();
+      x /= IsoCamera.frameState.zoom;
+      y /= IsoCamera.frameState.zoom;
+      w /= IsoCamera.frameState.zoom;
+      h /= IsoCamera.frameState.zoom;
+      x -= w / 2.0F;
+      x += IsoCamera.cameras[playerIndex].fixJigglyModelsX;
+      y += IsoCamera.cameras[playerIndex].fixJigglyModelsY;
+      if (rc.tex.getTextureId() != null) {
+         boolean bMipMaps = DebugOptions.instance.fboRenderChunk.mipMaps.getValue() && !rc.highRes;
+         rc.tex.getTextureId().setMinFilter(bMipMaps ? 9987 : 9728);
+         rc.tex.getTextureId().setMagFilter(IsoCamera.frameState.zoom == 0.75F ? 9729 : 9728);
+      }
+      IndieGL.glDepthFunc(515);
+      IndieGL.glDepthMask(true);
+      IndieGL.enableDepthTest();
+      SpriteRenderer.instance.render(rc.getTexture(), x, y, w, h, 1.0F, 1.0F, 1.0F, 1.0F, null);
+      IndieGL.enableDepthTest();
+      IndieGL.glDepthMask(true);
+      rc.renderX = x;
+      rc.renderY = y;
+      rc.renderW = w;
+      rc.renderH = h;
+   }
+
+   private boolean pzoptSchedNow; // pzopt: bakeScheduler decides this frame (off during a zoom flood and the resume-shot capture)
+   private boolean pzoptSchedPlanned; // pzopt: bakeScheduler planned this frame (renderTilesInternal, before prepareChunksForUpdating)
+
+   // pzopt: bakeScheduler (pzopt.BakeScheduler). Every dirty on-screen level is offered once a frame with its class and
+   // its chunk's distance to the camera character; the grants are read back in renderOneLevel. A lighting-only level
+   // (flag 32 alone, not strong) baked less than lightingRebakeMs ago is not offered: it keeps its texture, as before.
+   private void pzoptSchedulePlan(int playerIndex, long currentTimeMillis) { // pzopt
+      pzopt.BakeScheduler s = pzopt.BakeScheduler.get(playerIndex);
+      int frameNo = IsoWorld.instance.getFrameNo();
+      s.begin(frameNo);
+      float zoom = Core.getInstance().getZoom(playerIndex);
+      int pcx = PZMath.fastfloor(IsoCamera.frameState.camCharacterX / 8.0F);
+      int pcy = PZMath.fastfloor(IsoCamera.frameState.camCharacterY / 8.0F);
+      FBORenderCell.PerPlayerData perPlayerData1s = this.perPlayerData[playerIndex];
+      ArrayList<IsoChunk> chunks = perPlayerData1s.onScreenChunks;
+      for (int i = 0; i < chunks.size(); i++) {
+         IsoChunk c = chunks.get(i);
+         FBORenderLevels rl = c.getRenderLevels(playerIndex);
+         for (int z = c.minLevel; z <= c.maxLevel; z++) {
+            if (z != rl.getMinLevel(z) || !rl.isOnScreen(z) || !rl.isDirty(z, zoom)) {
+               continue;
+            }
+            FBORenderChunk rc = rl.getFBOForLevel(z, zoom);
+            // A level last found fully occluded (renderOneLevel returns before the bake decision) is not offered while the
+            // occlusion stays as it was. The plan runs before this frame's occlusion pass, so it only reads the stored count
+            // (writing one from last frame's grid left levels at 0 for good: nothing baked, run td-combo5); a level without
+            // a texture is always offered (at worst an unused grant).
+            if (FBORenderOcclusion.getInstance().enabled && rc != null && !perPlayerData1s.occlusionChanged && rl.getRenderedSquaresCount(z) == 0) {
+               continue;
+            }
+            boolean noTexture = rc == null || rl.isDirty(z, 512L, zoom);
+            int klass;
+            if (!noTexture && rl.isDirty(z, 1L | 2L | 4L | 8L | 16L | 64L | 128L | 256L | 4096L | 8192L, zoom)) {
+               klass = pzopt.BakeScheduler.MUST;
+            } else if (noTexture) {
+               klass = pzopt.BakeScheduler.ARRIVAL;
+            } else if (rl.isDirty(z, 2048L | 16384L, zoom)) {
+               klass = pzopt.BakeScheduler.CUTAWAY;
+            } else if (rl.isDirty(z, ~(32L | pzopt.BakeScheduler.DIRTY_SEAM_LOW), zoom)) {
+               klass = pzopt.BakeScheduler.REDRAW;
+            } else if (rl.isDirty(z, pzopt.BakeScheduler.DIRTY_SEAM_LOW, zoom)) {
+               klass = pzopt.BakeScheduler.LIGHT; // seamDirections: a neighbour this level's seams do not read loaded
+            } else if (pzopt.LightDirt.rebakeNow(c, z, frameNo)) {
+               klass = pzopt.BakeScheduler.STRONG;
+            } else {
+               Long last = this.pzoptLastBakeMs.get(rc);
+               if (last != null && currentTimeMillis - last < pzopt.Config.LIGHTING_REBAKE_MS) {
+                  continue; // held like before: the drift shows at the next re-bake
+               }
+               klass = pzopt.BakeScheduler.LIGHT;
+            }
+            s.offer(c, z, klass, Math.max(Math.abs(c.wx - pcx), Math.abs(c.wy - pcy)));
+         }
+      }
+      s.plan(s.budget(pzopt.Pacing.capIntervalNs()));
+   }
+
    private boolean pzoptStrongNow(IsoChunk c, int level) {
       if (!pzopt.LightDirt.rebakeNow(c, level, IsoWorld.instance.getFrameNo())) {
          return false;
@@ -4882,6 +5107,9 @@ public final class FBORenderCell {
          .append(" | occlusion rebuilds skipped=").append(pzoptOcclusionRebuildsSkipped)
          .append(" light info skipped=").append(pzoptLightInfoSkipped).append(" levels gated=").append(pzoptLightInfoLevelsGated);
       sb.append(pzopt.GpuSections.summary()); // pzopt: GPU sections (Config.GPU_SECTIONS)
+      if (pzopt.SeamSpread.ON) sb.append(pzopt.SeamSpread.summary()); // pzopt: seamSpread counters
+      if (pzopt.BakeScheduler.ON) sb.append(pzopt.BakeScheduler.get(0).summary()); // pzopt: bakeScheduler counters
+      if (pzopt.GlNames.ON) sb.append(pzopt.GlNames.summary()); // pzopt: glNoSync counters
       if (pzopt.PuddleCache.enabled()) { sb.append(" | ").append(pzopt.PuddleCache.stats()); } // pzopt
       if (pzopt.RainSplashes.enabled()) { sb.append(" | ").append(pzopt.RainSplashes.stats()); } // pzopt
       if (pzopt.RainTiles.enabled()) { sb.append(" | ").append(pzopt.RainTiles.stats()); } // pzopt
@@ -5585,6 +5813,11 @@ public final class FBORenderCell {
          FBORenderLevels renderLevels = c.getRenderLevels(playerIndex);
          for (int z = c.minLevel; z <= c.maxLevel; z++) {
             if (renderLevels.isOnScreen(z) && renderLevels.isDirty(z, zoom)) {
+               // pzopt: bakeScheduler, a held level re-bakes in a later frame; the occluders only change with the levels
+               // granted now (the rebuild ran every frame while any re-bake waited: 7 % of late game steps, run td-prof4)
+               if (this.pzoptSchedPlanned && pzopt.Config.OCCLUSION_GRANTED_ONLY && !pzopt.BakeScheduler.get(playerIndex).peek(c, renderLevels.getMinLevel(z))) {
+                  continue;
+               }
                if (renderLevels.isDirty(z, ~32L, zoom)) {
                   return true;
                }
@@ -5746,6 +5979,13 @@ public final class FBORenderCell {
             if (z == renderLevels.getMinLevel(z) && renderLevels.isOnScreen(z) && renderLevels.isDirty(z, zoom)) {
                if (pzoptZoomRetain && pzopt.ZoomRetain.waiting(c, playerIndex, z)) {
                   continue; // pzopt: zoomRetain, prepared in the frame the plan bakes it (a zoom-out dirties ~200 levels at once)
+               }
+               if (this.pzoptSchedPlanned && !pzopt.BakeScheduler.get(playerIndex).peek(c, z) && renderLevels.getFBOForLevel(z, zoom) != null
+                     && !renderLevels.isDirty(z, 512L, zoom)) {
+                  // pzopt: bakeScheduler, a held level keeps its texture and the square flags of its last preparation (they
+                  // match what is on screen); a never-textured level is always prepared: the occlusion count reads these
+                  // flags, and one never prepared counted 0 squares, was skipped as occluded and never baked (holes, td-combo6r)
+                  continue; // pzopt
                }
                this.prepareChunkForUpdating(playerIndex, c, z);
             }

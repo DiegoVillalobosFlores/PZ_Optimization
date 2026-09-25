@@ -31,7 +31,16 @@ public final class GlState {
 
    /** GL_CURRENT_PROGRAM, from ShaderHelper's record when it has one. Render thread. */
    public static int currentProgram() {
-      if (BOUND == null || !Config.WEATHER_NO_GLGET) {
+      return currentProgram(Config.WEATHER_NO_GLGET);
+   }
+
+   /** glNoSync callers (DeadBodyAtlas.toBodyAtlas): the same record, under their own key. */
+   public static int currentProgramNoSync() {
+      return currentProgram(Config.GL_NO_SYNC);
+   }
+
+   private static int currentProgram(boolean useRecord) {
+      if (BOUND == null || !useRecord) {
          return GL11.glGetInteger(35725);
       }
       int v = (int)BOUND.get();

@@ -54,6 +54,49 @@ public final class Upscaler {
    private static long resolves;
    private static final FloatBuffer QUAD = BufferUtils.createFloatBuffer(8);
    private static final int[] SAVED_VIEWPORT = new int[4];
+   private static final int[] CHECK_VIEWPORT = new int[4];
+   private static int stateMismatches;
+
+   /**
+    * The framebuffer bound and the viewport at the resolve, for the passes to put back (upscaleNoGlGet). Each glGet is a
+    * round trip to NVIDIA's driver thread that waits until it has worked off the whole world pass (a quarter of the render
+    * thread's time in on-time frames, run td-prof3), and the resolve asked five times a frame. The resolve runs in the
+    * screen composite (MultiTextureFBO2.render), where the default framebuffer is bound through TextureFBO (lastID) and the
+    * viewport is the screen: devDlssStateLog showed exactly that on every frame. devGlStateCheck still asks the driver and
+    * logs every disagreement.
+    */
+   static int savedState(int[] viewport) {
+      if (!Config.UPSCALE_NO_GLGET) {
+         GL11.glGetIntegerv(GL11.GL_VIEWPORT, viewport);
+         return GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+      }
+      int fbo = zombie.core.textures.TextureFBO.lastID;
+      viewport[0] = 0;
+      viewport[1] = 0;
+      viewport[2] = zombie.core.Core.getInstance().getScreenWidth();
+      viewport[3] = zombie.core.Core.getInstance().getScreenHeight();
+      if (Config.DEV_GL_STATE_CHECK) {
+         GL11.glGetIntegerv(GL11.GL_VIEWPORT, CHECK_VIEWPORT);
+         int real = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+         if (real != fbo || !java.util.Arrays.equals(CHECK_VIEWPORT, viewport)) {
+            if (stateMismatches++ < 10) {
+               Log.warn("upscaleNoGlGet: recorded fbo " + fbo + " viewport " + java.util.Arrays.toString(viewport) + ", driver fbo " + real + " viewport "
+                  + java.util.Arrays.toString(CHECK_VIEWPORT));
+            }
+            System.arraycopy(CHECK_VIEWPORT, 0, viewport, 0, 4);
+            return real;
+         }
+      }
+      return fbo;
+   }
+
+   /** The framebuffer bound now, as savedState records it (detachDirectColor). */
+   static int boundFramebuffer() {
+      if (!Config.UPSCALE_NO_GLGET || Config.DEV_GL_STATE_CHECK) {
+         return GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+      }
+      return zombie.core.textures.TextureFBO.lastID;
+   }
 
    /** The mode of this session ("off" when the pass is inactive). */
    public static String mode() {
@@ -289,8 +332,7 @@ public final class Upscaler {
          }
       }
       GpuSections.markNow("upscale.rcas", false);
-      GL11.glGetIntegerv(GL11.GL_VIEWPORT, SAVED_VIEWPORT);
-      int previousFbo = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+      int previousFbo = savedState(SAVED_VIEWPORT);
       GL11.glDisable(GL11.GL_BLEND);
       GL11.glDisable(GL11.GL_DEPTH_TEST);
       GL11.glDisable(GL11.GL_SCISSOR_TEST);

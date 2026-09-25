@@ -424,6 +424,7 @@ public final class TextureDraw {
    }
 
    public void run() {
+      if (pzopt.UniformCache.ON && this.type != TextureDraw.Type.StartShader) pzopt.UniformCache.reset(); // pzopt: uniformCache, any other command may touch uniforms
       switch (this.type) {
          case glBuffer:
             if (Core.getInstance().supportsFBO()) {
@@ -530,9 +531,17 @@ public final class TextureDraw {
             IndieGL.glTexParameteriActual(this.a, this.b, this.c);
             break;
          case StartShader:
+            if (pzopt.DrawStats.ON) pzopt.DrawStats.shaderStart(this.a); // pzopt: instrumented runs, draw-call census
             ShaderHelper.glUseProgramObjectARB(this.a);
+            boolean pzoptSame = pzopt.UniformCache.ON && pzopt.UniformCache.startProgram(this.a); // pzopt: uniformCache
             if (Shader.ShaderMap.containsKey(this.a)) {
-               ((Shader)Shader.ShaderMap.get(this.a)).startRenderThread(this);
+               Shader pzoptShader = (Shader)Shader.ShaderMap.get(this.a); // pzopt
+               if (pzoptSame && pzoptShader instanceof zombie.tileDepth.TileDepthShader) { // pzopt: uniformCache, its samplers (0 / 1) are set on this program already
+                  zombie.core.skinnedmodel.model.VertexBufferObject.setModelViewProjection(pzoptShader.getProgram()); // pzopt: the rest of TileDepthShader.startRenderThread
+                  pzopt.UniformCache.samplerSkips++; // pzopt
+               } else { // pzopt
+                  pzoptShader.startRenderThread(this);
+               } // pzopt
             }
 
             if (this.a == 0) {
@@ -540,7 +549,11 @@ public final class TextureDraw {
             }
 
             if (this.drawer instanceof ShaderUniformSetter uniforms) {
-               uniforms.invokeAll();
+               if (pzopt.UniformCache.ON) { // pzopt: uniformCache
+                  uniforms.pzoptInvokeAllCached(); // pzopt
+               } else { // pzopt
+                  uniforms.invokeAll();
+               } // pzopt
             }
             break;
          case glLoadIdentity:
@@ -685,9 +698,11 @@ public final class TextureDraw {
             Core.getInstance().DoPopIsoStuff();
             break;
          case FBORenderChunkEnd:
+            if (pzopt.DrawStats.ON) pzopt.DrawStats.bakeEnd(); // pzopt: instrumented runs, draw-call census
             FBORenderChunkManager.instance.renderThreadChunkEnd();
             break;
          case FBORenderChunkStart:
+            if (pzopt.DrawStats.ON) pzopt.DrawStats.bakeStart(); // pzopt: instrumented runs, draw-call census
             FBORenderChunkManager.instance.renderThreadChunkStart(this.a, this.b == 1);
             break;
          case glDoStartFrameNoZoom:

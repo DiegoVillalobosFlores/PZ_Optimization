@@ -14,6 +14,7 @@ import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.opengl.GL33;
 import zombie.core.Core;
+import zombie.core.ShaderHelper;
 import zombie.core.SpriteRenderer;
 import zombie.core.opengl.GLStateRenderThread;
 import zombie.core.textures.TextureDraw;
@@ -1369,7 +1370,9 @@ public final class ChunkAo {
          for (int i = 0; i < 5; i++) {
             GL20.glEnableVertexAttribArray(i);
          }
-         GL20.glUseProgram(0);
+         // Raw binds bypass ShaderHelper; invalidate its cached ID before restoring the default shader.
+         ShaderHelper.forgetCurrentlyBound();
+         ShaderHelper.glUseProgramObjectARB(0);
          GL11.glEnable(GL11.GL_DEPTH_TEST);
          GL11.glDepthMask(true);
          GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
@@ -1479,7 +1482,9 @@ public final class ChunkAo {
          for (int i = 0; i < 9; i++) {
             GL20.glUniform1i(GL20.glGetUniformLocation(this.aoProgram, "Src" + i), i); // texture unit i = source i, fixed
          }
-         GL20.glUseProgram(0);
+         // multiply() can return immediately after init(), without running restore().
+         ShaderHelper.forgetCurrentlyBound();
+         ShaderHelper.glUseProgramObjectARB(0);
          this.uBlur[0] = GL20.glGetUniformLocation(this.blurProgram, "Ao");
          this.uBlur[1] = GL20.glGetUniformLocation(this.blurProgram, "params");
          this.uBlur[2] = GL20.glGetUniformLocation(this.blurProgram, "sunOnly");

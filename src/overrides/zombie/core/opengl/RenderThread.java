@@ -293,6 +293,7 @@ public class RenderThread {
             Display.update(true);
             pzopt.Pacing.afterSwap(); // pzopt: swap-return stamp, pzopt-pacing.out row
             pzopt.GlNames.refill(); // pzopt: glNoSync, top up the GL name pools while the frame is handed over
+            pzopt.TexCompress.pollStaging(); // pzopt: texCompress, staging ranges the GPU has finished reading go back to the workers
             checkControllers();
          } catch (Throwable var7) {
             if (var10 != null) {

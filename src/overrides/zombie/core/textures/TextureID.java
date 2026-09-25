@@ -393,6 +393,7 @@ public final class TextureID extends Asset implements IDestroyable, Serializable
    }
 
    private void generateHwId(boolean setPixels) {
+      pzopt.TexCompress.pollStaging(); // pzopt: texCompress, releases GPU staging ranges whose fence signalled
       this.id = pzopt.GlNames.texture(); // pzopt: glNoSync, a pooled name instead of a driver round trip
       Texture.totalTextureID++;
       GL11.glBindTexture(3553, Texture.lastTextureID = this.id);
@@ -435,7 +436,10 @@ public final class TextureID extends Asset implements IDestroyable, Serializable
          GL11.glTexParameteri(3553, 10243, 10497);
       }
 
-      if (setPixels) {
+      if (setPixels && this.internalFormat == 34030 && pzopt.TexCompress.upload(this.data, bFilterMipMaps, this.widthHw, this.heightHw)) { // pzopt: texCompress, BC3 levels instead of the driver compressing GL_COMPRESSED_RGBA
+         totalMemUsed = totalMemUsed + this.widthHw * this.heightHw * 4; // pzopt: the stock path's accounting (it counts the RGBA bytes)
+         PZGLUtil.checkGLErrorThrowTexture("TextureID.texCompress.end", new Object[0]); // pzopt
+      } else if (setPixels) { // pzopt: was if (setPixels)
          if (bFilterMipMaps) {
             PZGLUtil.checkGLErrorThrowTexture("TextureID.mipMaps.start", new Object[0]);
             int mipMapCount = this.data.getMipMapCount();

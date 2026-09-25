@@ -3719,3 +3719,40 @@ The offscreen depth becomes a texture also with `pixelLight` (the pass mode read
 ### pzopt.Harness
 
 - `face=deg`: the facing the `turn` starts from (held there with `turn=0`).
+
+## Texture compression without the driver (2026-09-25, `texCompress`, default `auto`)
+
+With `textureCompression=true` (the Steam Deck defaults and the low-end preset turn it on) stock creates every texture as
+`GL_COMPRESSED_RGBA` and the driver compresses each mip level inside `glTexImage2D` on the render thread. Mesa does that
+on the CPU (41 ns a pixel on the flip's Radeon 890M; Mesa and NVIDIA both pick DXT5): the flip's main menu ran at 15-30
+fps for 10-30 s after boot with the render thread 99 % in `glTexImage2D`. BC3 is now encoded by pzopt itself:
+`pzopt.TexBcGpu` (a GL 4.3 compute shader; `auto` and `gpu`) or `pzopt.TexBc` on the file-pool worker (`worker`, and
+`auto` without compute: macOS GL 4.1). Fit: stb_dxt-style principal axis + least squares with optimal single-colour
+tables, alpha least squares + the 6-level mode; sampled quality above both drivers' own compressors
+(`tools/TexCompProbe.java`, `harness/texdiff.py`). In `auto` the worker writes the raw level 0 straight into a
+persistently mapped staging buffer (`texCompressStagingMb`), the GPU builds ImageData's mip chain from it (bit-exact:
+`TexCompProbe -Dprobe.mipcheck`), premultiplies as it encodes, and the blocks reach the texture through a pixel-unpack
+buffer; the render thread issues a few GL calls a texture.
+
+### zombie.core.textures.TextureIDAssetManager
+
+- `startLoading`: both texture file tasks (pack page, loose image) keep their callback in a local and are wrapped by
+  `pzopt.TexCompress.wrap` (with the pack and page names) when the texture will be created compressed (asset flag 4, not
+  a depth texture). The wrapper runs on the file-pool worker: in `worker` mode the stock task, then the levels the render
+  thread would upload (`ImageData.getMipMapData`, which builds the mips and premultiplies, work stock does lazily on the
+  render thread for loose images) encoded to BC3; in `auto` / `gpu` a pack page is loaded with the stock task's own calls
+  minus its `initMipMaps` and only level 0 is staged (premultiplied on the GPU when stock would have: a mipmapped upload,
+  or a pack whose flags mipmap). The flag rule is `generateHwId`'s (asset flags, or the compression option without
+  asset params).
+
+### zombie.core.textures.ImageData
+
+- Transient fields for the worker's BC3 levels, the staging range and its flags; `dispose` frees both first (a texture
+  that never reached `generateHwId`, or the original of a `limitMaxSize` downscale).
+
+### zombie.core.textures.TextureID
+
+- `generateHwId`: first releases staging ranges whose GPU fence has signalled; where stock uploads `GL_COMPRESSED_RGBA`
+  levels, `pzopt.TexCompress.upload` creates them with `glCompressedTexImage2D` from the worker's blocks, from the staging
+  buffer through `pzopt.TexBcGpu`, or by copying the levels to the GPU encoder; without S3TC, or with
+  `texCompress=driver`, the stock path runs. The memory counter adds the RGBA size as stock does.

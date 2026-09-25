@@ -32,3 +32,4 @@ docs/media/hdr-horde-cinematic-jev-1080.mp4
 # async-profiler library for run.sh --asprof (third-party binary, fetched locally)
 harness/asprof/
 harness/presentprobe
+/harness/texprobe/classes/

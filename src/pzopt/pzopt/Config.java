@@ -686,6 +686,17 @@ public final class Config {
     * whole wait (a core at full clock for nothing: at a 120 fps cap half of the game thread's time on the flip). Default on
     * except on Windows, where a park wakes on the 1 ms timer tick.
     */
+   public static final String TEX_COMPRESS = string("texCompress", "auto"); // textureCompression without the driver's CPU compressor (Mesa: the menu at 15-30 fps for up to 30 s after boot): auto = gpu where GL 4.3 compute runs, else worker; worker = file-pool workers encode BC3 (pzopt.TexCompress); gpu = workers build the levels, a compute shader encodes; driver = stock GL_COMPRESSED_RGBA
+   public static final boolean TEX_COMPRESS_GPU = bool("texCompressGpu", true); // worker mode: textures made outside the asset pipeline encoded by the GPU (GL 4.3) instead of the driver
+   public static final boolean TEX_COMPRESS_CACHE = bool("texCompressCache", false); // BC3 of every compressed pack page kept in ~/Zomboid/pzopt/texcache (deflated, ~330 MB): later boots skip PNG decode, mips and encode (pzopt.TexCache); the first boot encodes on the CPU to fill it
+   public static final boolean TEX_COMPRESS_MEASURE_DECODER = bool("texCompressMeasureDecoder", true); // the BC3 encoders fit against this GPU's own decode palette, measured once at the first compressed texture (pzopt.TexBcPalette; GPUs round the interpolated entries their own way)
+   public static final boolean TEX_COMPRESS_EARLY_FREE = bool("texCompressEarlyFree", true); // texCompress gpu: a raw-staged image's pixels freed on the worker right after the copy (the decoded-bytes budget the decoders wait on drops at once)
+   public static final boolean TEX_COMPRESS_GPU_MIPS = bool("texCompressGpuMips", true); // texCompress gpu: workers stage only the raw level 0, the GPU builds ImageData's mip chain (bit-exact) and premultiplies; a pack page skips its stock initMipMaps
+   public static final int TEX_COMPRESS_STAGING_MB = integer("texCompressStagingMb", 128); // texCompress gpu: persistently mapped buffer the workers write the levels into (0 = the render thread copies them); 64 left a tenth of a boot's textures waiting for room on the flip, 128 almost none
+   public static final int TEX_COMPRESS_STAGING_WAIT_MS = integer("texCompressStagingWaitMs", 50); // a worker waits this long for staging room before it builds the levels on the CPU
+   public static final int TEX_COMPRESS_HQ_THRESHOLD = integer("texCompressHqThreshold", 16); // CPU encoder: squared RGB error a pixel above which a block gets the HQ fit (0 = every block)
+   public static final boolean TEX_COMPRESS_HQ = bool("texCompressHq", true); // BC3 fit: principal axis + least squares (true) or the inset bounding box (false, ~5x cheaper, ~2 dB worse)
+   public static final boolean DEV_TEX_COMP_TIMING = bool("devTexCompTiming", false); // console line every 2 s while textures load: worker / render-thread / driver counts and times
    public static final boolean LIMITER_SLEEP = bool("limiterSleep", !System.getProperty("os.name", "").startsWith("Win"));
    /** limiterSleep: how long before the step the park ends; the stock loop spins the rest (the game thread's timer slack is 1 ns on Linux). */
    public static final int LIMITER_SPIN_US = Math.max(0, integer("limiterSpinUs", System.getProperty("os.name", "").startsWith("Win") ? 1500 : 200));

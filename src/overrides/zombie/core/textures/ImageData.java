@@ -46,6 +46,11 @@ public final class ImageData implements Serializable {
    public BooleanGrid mask;
    private static final int BufferSize = 67108864;
    public int id = -1;
+   public transient java.nio.ByteBuffer pzoptBc3; // pzopt: texCompress, the BC3 levels a file-pool worker encoded (pzopt.TexCompress)
+   public transient boolean pzoptBc3Mips; // pzopt: whether they are the whole mip chain or level 0 alone
+   public transient int pzoptStage; // pzopt: texCompress gpu, offset + 1 of the levels in pzopt.TexBcGpu's staging buffer (0 = none)
+   public transient int pzoptStageLen; // pzopt: their byte length
+   public transient int pzoptStageFlags; // pzopt: pzopt.TexCompress.STAGE_* (GPU builds the mips / premultiplies / preserveTransparentColor)
    final ArrayList<ImageDataFrame> frames = new ArrayList<>();
    public static final int MIP_LEVEL_IDX_OFFSET = 0;
    private static final ThreadLocal<ImageData.L_generateMipMaps> TL_generateMipMaps = ThreadLocal.withInitial(ImageData.L_generateMipMaps::new);
@@ -406,6 +411,7 @@ public final class ImageData implements Serializable {
    }
 
    public void dispose() {
+      pzopt.TexCompress.free(this); // pzopt: texCompress blocks not uploaded
       if (this.data != null) {
          this.data.dispose();
          this.data = null;

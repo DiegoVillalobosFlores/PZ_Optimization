@@ -1,0 +1,5 @@
+12 20 driver,cpu-hq,gpu-hq
+UI2.pack
+-Dprobe.game=true -Dprobe.lut=false
+-Dprobe.game=true -Dprobe.lut=true
+-Dprobe.game=true -Dprobe.lut=true -Dprobe.alphadiff=true

@@ -432,6 +432,14 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   Not locked at 240: game-thread bursts (tile rendering + bake preparation, chunk arrivals, lighting). Rigs:
   `harness/frame-causes.py`, `holes.py` (black holes in the picture; a fake 239 fps run baked nothing), `jfr-windows.java`.
   Queue runs of a worktree build need `--install opt`.
+- Texture compression (2026-09-25, `docs/findings-texcompress-2026-09-25.md`): with `textureCompression=true` (low-end
+  preset, stock Steam Deck defaults) Mesa compressed DXT5 on the CPU inside `glTexImage2D` on the render thread (41 ns/px,
+  ~26 s a boot): the flip's menu 25-34 fps for 10-16 s after boot. `texCompress=auto` (default): workers stage the raw
+  level 0 in a persistent 128 MB buffer, the GPU builds ImageData's mip chain (bit-exact) and encodes BC3
+  (`pzopt.TexBcGpu`, fitted to the GPU's measured decode palette, `pzopt.TexBcPalette`); render thread ~0.1 s a boot, menu
+  60 fps from 4 s, quality above both drivers. `worker` = CPU encode (`pzopt.TexBc`, the macOS GL 4.1 path, untested on
+  the Mac); `texCompressCache` (off, ~230 MB). Rigs: `tools/TexCompProbe.java` (+ `harness/texprobe/wrap.sh` via
+  `run.sh --wrap`), `harness/texdiff.py`, `harness/pad/menu-idle.txt`, `devTexCompTiming`.
 - Open plans: `docs/plan-graphics-enhancements.md` (2026-09-25: visual features after AO, sun shadows and per-pixel lighting first), `docs/plan-game-load.md`, `docs/plan-vulkan-renderer.md`, `docs/plan-resource-use.md`,
   `docs/plan-zombie-multithread.md` (2026-09-22: the rest of the zombie simulation on all cores, phased).
   The game-thread optimization plans were dropped on 2026-09-21 at the maintainer's request.

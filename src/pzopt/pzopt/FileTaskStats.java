@@ -24,6 +24,17 @@ public final class FileTaskStats {
       }
    }
 
+   /** One row as "count/seconds" (0/0.0s when it never happened). */
+   public static String summaryOf(String name) {
+      long[] v = byClass.get(name);
+      if (v == null) {
+         return "0/0.0s";
+      }
+      synchronized (v) {
+         return String.format(java.util.Locale.ROOT, "%d/%.1fs", v[0], v[1] / 1e9);
+      }
+   }
+
    public static String summary() {
       ArrayList<Map.Entry<String, long[]>> rows = new ArrayList<>(byClass.entrySet());
       rows.sort((a, b) -> Long.compare(b.getValue()[1], a.getValue()[1]));

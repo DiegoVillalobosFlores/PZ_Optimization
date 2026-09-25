@@ -1,0 +1,4 @@
+# Menu idle (textureCompression A/B): no input, the main menu just draws for 40 s after it accepts input.
+mark idle
+sleep 40
+done

@@ -29,13 +29,19 @@ public final class TextureIDAssetManager extends AssetManager {
       FileSystem fs = this.getOwner().getFileSystem();
       if (textureID.assetParams != null && textureID.assetParams.subTexture != null) {
          SubTexture subTex = textureID.assetParams.subTexture;
-         FileTask fileTask = new FileTask_LoadPackImage(subTex.packName, subTex.pageName, fs, result -> this.onFileTaskFinished(asset, result));
+         zombie.fileSystem.IFileTaskCallback pzoptCb = result -> this.onFileTaskFinished(asset, result); // pzopt: one callback for the task or its texCompress wrapper
+         FileTask fileTask = new FileTask_LoadPackImage(subTex.packName, subTex.pageName, fs, pzoptCb); // pzopt: was an inline lambda
+         FileTask pzoptWrap = pzopt.TexCompress.wrap(fileTask, fs, pzoptCb, textureID.assetParams.flags, subTex.packName, subTex.pageName); // pzopt: texCompress, BC3 encoded (or staged for the GPU) on this worker
+         fileTask = pzoptWrap != null ? pzoptWrap : fileTask; // pzopt
          fileTask.setPriority(7);
          AssetTask assetTask = new AssetTask_RunFileTask(fileTask, asset);
          this.setTask(asset, assetTask);
          assetTask.execute();
       } else {
-         FileTask fileTask = new FileTask_LoadImageData(asset.getPath().getPath(), fs, result -> this.onFileTaskFinished(asset, result));
+         zombie.fileSystem.IFileTaskCallback pzoptCb = result -> this.onFileTaskFinished(asset, result); // pzopt: one callback for the task or its texCompress wrapper
+         FileTask fileTask = new FileTask_LoadImageData(asset.getPath().getPath(), fs, pzoptCb); // pzopt: was an inline lambda
+         FileTask pzoptWrap = pzopt.TexCompress.wrap(fileTask, fs, pzoptCb, textureID.assetParams == null ? (TextureID.useCompressionOption ? 4 : 0) : textureID.assetParams.flags, null, null); // pzopt: texCompress, generateHwId's flag rule
+         fileTask = pzoptWrap != null ? pzoptWrap : fileTask; // pzopt
          fileTask.setPriority(7);
          AssetTask assetTask = new AssetTask_RunFileTask(fileTask, asset);
          this.setTask(asset, assetTask);

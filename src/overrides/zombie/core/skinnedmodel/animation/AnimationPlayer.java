@@ -609,6 +609,7 @@ public final class AnimationPlayer extends PooledObject {
 
    private void updateInternal(float deltaT) {
       this.pzoptShadowValid = false; // pzopt: shadowPrep, the bones are about to move
+      this.pzoptCapsulesValid = false; // pzopt: sunShadows, likewise the capsule end points
       if (this.isReady()) {
          this.updateRagdoll(deltaT);
          this.multiTrack.Update(deltaT);
@@ -658,7 +659,23 @@ public final class AnimationPlayer extends PooledObject {
 
       this.pzoptShadowPacked = pzopt.ShadowPrep.compute(this, head, leftFoot, rightFoot);
       this.pzoptShadowValid = true;
+      if (pzopt.CapsuleShadow.wanted()) { // pzopt: sunShadows, the body's capsule end points for the sun shadow pass (pzopt.CapsuleShadow)
+         this.pzoptCapsulesValid = pzopt.CapsuleShadow.points(this, this.pzoptCapsules); // pzopt
+      } // pzopt
    }
+
+   // pzopt: sunShadows. The capsule end points (pzopt.CapsuleShadow.BONES, relative to the character, metric) computed by the
+   // deferred update with the shadow ellipse; the game thread reads them in the render after the bone batch joined.
+   private final float[] pzoptCapsules = new float[pzopt.CapsuleShadow.POINTS * 3]; // pzopt
+   private volatile boolean pzoptCapsulesValid; // pzopt
+   public int[] pzoptCapsuleBones; // pzopt: skinning bone indices of CapsuleShadow.BONES, for pzoptCapsuleBonesOf
+   public Object pzoptCapsuleBonesOf; // pzopt: the skinning data they were looked up in
+
+   /** pzopt: sunShadows, the capsule end points of the last deferred update, or null when the game thread must compute them. */
+   public float[] pzoptCapsules() { // pzopt
+      if (this.pzoptInFlight) { pzopt.AnimBatch.guard(); } // pzopt: animBatchAsync, join the bone batch before a game-thread touch
+      return this.pzoptCapsulesValid ? this.pzoptCapsules : null; // pzopt
+   } // pzopt
 
    /** pzopt: shadowPrep, the pair computed by the last deferred update, or 0 when the game thread must compute it. */
    public long pzoptShadowParams() {

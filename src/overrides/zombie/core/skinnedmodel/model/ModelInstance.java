@@ -712,6 +712,11 @@ public class ModelInstance extends ReferencedObject {
                   }
                }
 
+               float pzoptSun = pzopt.SunShadow.characterFactor(character); // pzopt: sunShadows, a character in the static world's sun shadow gets darker (1 in the sun, indoors, at night)
+               if (pzoptSun < 1.0F) { // pzopt
+                  this.targetAmbient.set(this.targetAmbient.x * pzoptSun, this.targetAmbient.y * pzoptSun, this.targetAmbient.z * pzoptSun); // pzopt
+               } // pzopt
+
                float multiplier = GameTime.getInstance().getMultiplier();
                this.currentAmbient.x = this.step(
                   this.currentAmbient.x, this.targetAmbient.x, (this.targetAmbient.x - this.currentAmbient.x) / (10.0F * multiplier)

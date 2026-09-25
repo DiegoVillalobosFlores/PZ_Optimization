@@ -278,3 +278,24 @@ flagged brightness step is the building cutaway (the roof hiding / showing) as t
 at the front door, 178.3-178.7 s leaving by the back for the bathroom, and one 0.1 s roof flash at 189.8 s while the
 path grazed the front door outside. Not lighting; whether stock flashes the roof the same way at that spot was not run.
 The lit frames inside (torch beam through the front windows, lamps in the kitchen and break room) are steady.
+
+## One-frame whole-screen flashes at chunk crossings, fixed (2026-09-25 evening, flip)
+
+Maintainer's report on the flip (release dc24455, `pixelLight` on): textures flicker at the top left while walking in
+circles. Rig: `explore=circle` on a copy of the save (`harness/CLAUDE.md`, circle-walk flicker rig), `devCapture` of every
+presented frame, `region-flicker.py` + `region-flicker-judge.py`. The flashes are single frames of the whole screen: the
+static world lit from the wrong squares (hidden rooms lit, lit rooms black; frame 596 of `flip-circle-cap-opt-*`: every
+chunk texture black, only the per-frame sprites left). 7 burst frames in 16 s with `pixelLight`, 0 with it off; `pplMode=pass`
+10 and `pplVariants=false` 5, so neither the composite program nor its variants. They came in pairs once per lap, where the
+circle crossed y = 10312, a chunk boundary.
+
+`devPplTrace` (new dev key: one game-thread line per frame with the lattice packs and the mapping inputs, one render-thread
+line per frame with the uniforms applied and the first chunk draw's `chunkDepth`) showed it: at the crossing the render
+thread renders its last state again while the game thread is late (the chunk-map shift), 72 replays in 16 s. `Frame.render()`
+set `free = true` after its first render, so the game thread had already refilled that Frame with the next frame's camera;
+the replay applied the new origin (`d0` one centre chunk later) to the old list's chunk depths: the reconstructed position 8
+squares (nearly a level in z) off for one frame. Fix: a Frame is freed only in `postRender()` (the state is recycled,
+`GenericSpriteRenderState.clear`, after which it cannot be replayed), and its chunk keys stay until then (a replay found them
+nulled: `chunk=?`). Runs `flip-fl-fix1-*` (trace: 72 replays, 0 depth mismatches) and `flip-fl-final-fix-*`: 0 bursts in 16 s,
+stock control `flip-fl-final-stock-*` 0. Jev: before the fix vs stock `pzopt_flicker` 0.97; after `no_flicker` 0.83.
+The 0.1 s roof flash at 189.8 s of the restaurant walk above may have been the same replay.

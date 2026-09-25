@@ -643,6 +643,25 @@ local ENHANCEMENT_SECTIONS = {
         },
     },
     {
+        title = "Sun shadows (soft shadows of walls, trees, fences and furniture that follow the time of day)", clip = "ao",
+        entries = {
+            { key = "sunShadows", label = "Sun shadows",
+              tip = "By day, walls, trees, fences, cars parked in the world's pictures and furniture outdoors cast soft shadows of the sun onto the ground and onto each other: sharp where they touch the ground, softer further away, like real sunlight. The sun rises in the east, stands in the south at noon and sets in the west, so the shadows turn and lengthen through the day; clouds, rain and fog thin them out and they fade away at dusk. Indoors stays as it is (rooms have a roof). Computed with the ambient occlusion when a chunk's picture is drawn and baked into it, so a still or moving camera costs nothing; when the sun has moved a little (every few in-game minutes) the pictures on screen are updated a few per frame. Windows and Linux (not on macOS, OpenGL 2.1)." },
+            { key = "sunShadowStrengthPct", label = "Sun shadows: strength (%)",
+              choices = { "25", "35", "45", "60", "75" }, note = { ["45"] = "default" },
+              tip = "How much of the daylight a full shadow takes away on a clear day. Clouds, rain and fog lower it further." },
+            { key = "sunShadowCharacters", label = "Sun shadows: characters",
+              tip = "Characters cast the soft shadow of their body (legs, torso, arms, head) onto the ground, walls and furniture around them, drawn every frame, and a character standing in a building's or a tree's shadow is shaded too. Only characters drawn with a model (the ones near enough to animate)." },
+            { key = "sunShadowVehicles", label = "Sun shadows: vehicles",
+              tip = "Cars and trucks outdoors cast a soft sun shadow of their body." },
+            { key = "sunShadowTorches", label = "Shadows from torches and headlights",
+              tip = "At night (and in dark places), characters caught in a torch beam or in headlights cast long soft shadows away from the light. The one holding the torch does not shadow their own beam." },
+            { key = "sunShadowSoftnessPct", label = "Sun shadows: softness (%)",
+              choices = { "25", "50", "100", "200" }, note = { ["100"] = "default" },
+              tip = "How quickly a shadow's edge blurs with the distance from what casts it (the size of the sun's disk). 100 is a softened sun; 25 is close to real sunlight." },
+        },
+    },
+    {
         title = "Per-pixel lighting (smooth light, torch and headlight beams drawn per pixel)", clip = "torch",
         entries = {
             { key = "pixelLight", label = "Per-pixel lighting",
@@ -1075,6 +1094,7 @@ local EFFECTS = {
     weatherFxScalePct = { gpu = -2, render = -1, vram = -1 },
     fogPass = { gpu = -3, render = -2, cpu = -1, vram = 1 },
     ambientOcclusion = { gpu = 1, vram = 1 },
+    sunShadows = { gpu = 1, vram = 1 },
     pixelLight = { cpu = -1, gpu = 1, vram = 1 },
     pplPointLights = { gpu = 1 },
     pplShadows = { gpu = 2 },

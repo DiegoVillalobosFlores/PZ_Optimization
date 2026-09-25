@@ -1,7 +1,7 @@
 # Ambient occlusion at (almost) no cost, 2026-09-24
 
 Keys: `ambientOcclusion` (off by default), `aoMode` (`chunk` | `screen`), `aoScalePct` (50), `aoRadiusPct` (60),
-`aoStrengthPct` (100), `aoThicknessPct` (60), `aoBakeBudget` (4), `aoComputeBudget` (4), `aoSkipSlowFrames` (on),
+`aoStrengthPct` (100), `aoThicknessPct` (60), `aoBakeBudget` (4), `aoArrivalInBake` (on), `aoComputeBudget` (4), `aoSkipSlowFrames` (on),
 `aoSlowFrameComputes` (0); dev: `devAoView`, `devAoTiming`,
 `devAoDumpFrame`, `devAoVariant`, `devAoNoMips`, `aoChunkFlip`, `aoReuse`. Classes: `pzopt.ChunkAo` (chunk mode),
 `pzopt.AmbientOcclusion` (screen mode and the shared constants). Hooks: `docs/override-edits.md`, "Ambient occlusion".
@@ -110,7 +110,7 @@ The computes landed on the slowest frames (streaming bursts). Now, under a cap, 
 last frame's slack fits (~60 us each), none in bakes after a frame that missed the cap, and one deferred compute every
 8 such frames; the deferred queue serves the textures composited this frame first. Trade-off: on this drive most frames
 miss the 240 cap (the game thread), so the queue peaks at ~340 textures and new chunks show their AO late while the
-car races at max zoom; it drains when the player slows down. One compute on every slow frame (`aoSlowFrameComputes=1`)
+car races at max zoom; it drains when the player slows down. (Fixed 2026-09-25, see "Late grass while driving" below: a new texture's first AO is now computed in its bake.) One compute on every slow frame (`aoSlowFrameComputes=1`)
 barely shortened the queue (325) and one of two runs read p99 16.1 ms, so the default stays the trickle. Uncapped play
 keeps the fixed budgets.
 
@@ -146,3 +146,30 @@ from the column, (x + y) 16 - z 96 world px from the row) and looks it up in a p
 side). The mask is only built (and the lookup only runs) when the vegetation strength differs from the objects one.
 Check `enh-aoveg` (vegetation 0, objects 150, `devAoView=1`): bush and tree bodies white, the ground under them and the
 fence shaded; a few twig-tip pixels at bush tops stay shaded (their depth slope reads as floor or wall).
+
+## Late grass while driving (2026-09-25)
+
+Report: "grass rendered late when driving fast with AO on". The AO is what shades the ground under and around grass
+tufts and bushes, and a new chunk texture's first AO went through the same slack gate as every other compute: after a
+frame that missed the cap no in-bake computes and one deferred compute every 8 frames. On `drive-120-south` a third of
+the frames miss the cap, so new textures reached the screen flat and pale and darkened up to seconds later (the grass
+"growing in" behind the road edge). `ChunkAo.latency()` now counts it (`ao_latency=` in `pzopt-bench.out`): per texture
+the time from its first bake to its first AO, and the texture-frames composited without it.
+
+`aoArrivalInBake` (default on): a texture's first AO is computed inside that first bake whatever the slack or
+`aoBakeBudget` (the bake scheduler's arrival quota and hard budget already bound those bakes); changed objects and
+neighbour refreshes keep the slack gate. Same build, `drive-120-south --record`, 240 cap (runs `aog-*`):
+
+| | first AOs in the bake | waited > 1 s | mean wait | texture-frames without AO | frames showing one | fps | p99 | p99.9 |
+|---|---|---|---|---|---|---|---|---|
+| old (`aoArrivalInBake=false`, `aog-old-1/2`) | 1,070 / 2,364, 1,933 / 3,177 | 895, 370 | 786, 240 ms | 569,716, 144,886 | 38 %, 26 % | 187.2, 226.5 | 17.2, 10.5 ms | 25.8, 18.6 ms |
+| fix (`aog-fix-1/2`) | 3,253 / 3,256, 3,277 / 3,280 | 3, 3 | 1.2, 1.3 ms | 282, 284 | 1.1 %, 1.1 % | 225.3, 225.2 | 11.5, 10.8 ms | 18.9, 20.1 ms |
+| AO off (`aog-off-1/2`) | | | | | | 219.5, 228.8 | 12.0, 9.9 ms | 20.4, 18.9 ms |
+
+About 1,600 first AOs a run went past the old budget. Enclosed black (holes.py) 0.87-0.90 % in the fix runs vs 0.89-1.01
+% old and 0.92-0.94 % off; no chunk-ahead stall in any of the six. Jev (`harness/ao-late-judge.py`, numbers only): issue
+in control yes 0.95, fixed in test yes 0.89, tail regressed 0.08, arrival regressed 0.08, verdict fixed (0.89). The three
+textures a run that still wait, and all 282-284 texture-frames without AO, fall in the first 1,800 frames (world
+load, settle, first ~4 s of the route); none after. `aog-old-1` is the slow outlier of the
+six (187 fps); the other old run is at the fix's level, so the fix's frame-time effect is within noise.
+

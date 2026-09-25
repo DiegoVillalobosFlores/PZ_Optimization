@@ -896,6 +896,7 @@ public final class Harness {
                 + "\nsettings=" + Config.describe()
                 + "\nzombie_batches=" + AnimBatch.describe() + " | " + ActionEval.describe() + " | " + AnimParallel.describe() + " | " + LightingBatch.describe() + " | " + FrameBatch.describe()
                 + "\nbake_counters=" + zombie.iso.fboRenderChunk.FBORenderCell.pzoptBakeCounters()
+                + (ChunkAo.enabled() ? "\nao_latency=" + ChunkAo.latency() : "") // pzopt: chunk AO first-AO latency
                 + "\ncore_placement=" + CorePlacement.describe()
                 + "\ngpu_pstate=" + GpuPstate.describe() + "\n"); // pzopt: the per-frame batch and bake counters at route end
       } catch (IOException e) {

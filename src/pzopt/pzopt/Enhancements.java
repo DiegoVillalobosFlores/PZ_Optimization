@@ -12,7 +12,8 @@ package pzopt;
  *   <li>the HDR sliders: {@link Hdr#retune} (read every frame). hdr and hdrAuto are not live: on Linux they pick the
  *       window (a native Wayland FP16 surface) the game is created with.</li>
  *   <li>ambientOcclusion, aoScalePct, aoRadiusPct, the four aoStrength*Pct: {@link ChunkAo#reconfigure} (every loaded
- *       chunk texture bakes again with the new AO, or without it).</li>
+ *       chunk texture bakes again with the new AO, or without it); sunShadows the same, sunShadowStrengthPct and
+ *       sunShadowSoftnessPct through {@link SunShadow#update} (the kept shadows compute again, no re-bake).</li>
  * </ul>
  */
 final class Enhancements {
@@ -22,7 +23,7 @@ final class Enhancements {
    /** Is this key one of the Enhancements tab's (as opposed to the Profiler tab's overlay keys)? */
    static boolean owns(String key) {
       return key.startsWith("upscaler") || key.startsWith("dlss") || key.startsWith("fsr") || key.startsWith("hdr")
-         || key.equals("ambientOcclusion") || key.startsWith("ao");
+         || key.equals("ambientOcclusion") || key.startsWith("ao") || key.startsWith("sunShadow");
    }
 
    /** Game thread, after Config.reloadLive(key) returned true. */
@@ -34,7 +35,11 @@ final class Enhancements {
          case "upscaler", "upscalerQuality", "upscalerScalePct", "dlssPreset", "dlssOutputPct", "dlssOutputFilter", "dlssSharpen" ->
             RenderScale.reconfigure();
          case "ambientOcclusion", "aoScalePct", "aoRadiusPct", "aoStrengthFloorPct", "aoStrengthWallPct", "aoStrengthObjectPct",
-               "aoStrengthVegetationPct" -> ChunkAo.reconfigure();
+               "aoStrengthVegetationPct", "sunShadows" -> ChunkAo.reconfigure();
+         case "sunShadowStrengthPct", "sunShadowSoftnessPct", "sunShadowCharacters", "sunShadowVehicles", "sunShadowTorches" -> {
+            // SunShadow.update sees the new strength / penumbra next frame and recomputes the kept shadows (no re-bake);
+            // the capsule pass reads its three switches every frame
+         }
          default -> {
             if (key.startsWith("hdr")) {
                Hdr.retune();

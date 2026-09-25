@@ -12,8 +12,8 @@
 -- Installed by scripts/pzopt.sh into <game dir>/media/lua/client/pzopt/ (loose game-dir Lua is
 -- loaded like any other, no mod to enable).
 
-local TEXT_SHOW = "SHOW PERFORMANCE OVERLAY"   -- the stock items are capitals (UI_mainscreen_* translations)
-local TEXT_HIDE = "HIDE PERFORMANCE OVERLAY"
+local TEXT_SHOW = PzoptT("menu.overlayShow", "SHOW PERFORMANCE OVERLAY")   -- the stock items are capitals (UI_mainscreen_* translations)
+local TEXT_HIDE = PzoptT("menu.overlayHide", "HIDE PERFORMANCE OVERLAY")
 local BIND = "Toggle performance overlay"      -- pzopt_keybinding.lua
 local PAD_SHORTCUT = "L3 + R3"                 -- pzopt.Overlay's controller chord
 

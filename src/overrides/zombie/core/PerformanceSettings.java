@@ -234,6 +234,12 @@ public final class PerformanceSettings {
       return pzopt.Overlay.isSampling();
    }
 
+   // pzopt: pzopt's UI text in the game's language (pzopt.I18n, media/pzopt/translate/<LANG>.json); the Lua passes
+   // the English text as the fallback and fills %1.. itself.
+   public String getPzoptText(String key, String english) {
+      return pzopt.I18n.text(key, english);
+   }
+
    public void setLightingQuality(int lighting) {
    }
 

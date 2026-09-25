@@ -89,13 +89,15 @@ public final class Vrr {
    /** Overlay suffix for the stats line: what the display does ("" when nothing is known). */
    public static String overlayText() {
       if (MacPresent.active()) {
-         return MacPresent.variableDisplay() ? String.format(Locale.ROOT, "   ProMotion via Metal (%.0f Hz max)", MacPresent.maxHz()) : "   Metal present";
+         return "   " + (MacPresent.variableDisplay() ? I18n.text("overlay.vrrProMotion", "ProMotion via Metal (%1 Hz max)", String.format(Locale.ROOT, "%.0f", MacPresent.maxHz()))
+               : I18n.text("overlay.vrrMetal", "Metal present"));
       }
       if (active()) {
          int m = Pacing.effectiveMode();
-         return String.format(Locale.ROOT, "   VRR on (%.0f Hz)%s", refreshHz(), m == Pacing.GPU || m == Pacing.CPU || m == Pacing.GPU_FINISH ? ", paced" : "");
+         String paced = m == Pacing.GPU || m == Pacing.CPU || m == Pacing.GPU_FINISH ? I18n.text("overlay.vrrPaced", ", paced") : "";
+         return "   " + I18n.text("overlay.vrrOn", "VRR on (%1 Hz)", String.format(Locale.ROOT, "%.0f", refreshHz())) + paced;
       }
-      return capable && !DISABLED ? "   VRR off (display capable)" : "";
+      return capable && !DISABLED ? "   " + I18n.text("overlay.vrrOffCapable", "VRR off (display capable)") : "";
    }
 
    /** Starts the Linux poller once (from Display creation); no-op elsewhere. */

@@ -85,17 +85,14 @@ public final class Overlay {
     * Whether the overlay measures anything: the presented-frame ring, the GL timer queries and the
     * utilization sampler thread. Off unless {@code overlaySampling=true} (the Profiler tab),
     * something that needs the numbers ({@code overlay}, {@code overlayLog}) or a harness run; with
-    * it off the toggle key only shows {@link #NOTICE}. Like every setting of the Profiler tab it follows
+    * it off the toggle key only shows {@link #notice}. Like every setting of the Profiler tab it follows
     * the tab while the game runs ({@link #reconfigure}); the fields below are set by {@link #configure}.
     */
    private static volatile boolean sampling;
    private static volatile boolean logFrames;
    private static final long NOTICE_NS = 8_000_000_000L;
-   private static final String[] NOTICE = {
-      "Performance overlay: sampling is off.",
-      "Tick \"Sample frame times and utilization\" under Options > Profiler > Performance overlay,",
-      "apply, then toggle the overlay again (no restart needed)."
-   };
+   /** The notice lines, resolved when the toggle shows them (the game's language is known by then). */
+   private static String[] notice = new String[0];
    private static long noticeUntilNs;
    private static final long WINDOW_NS = 5_000_000_000L;
    private static long refreshNs;
@@ -445,7 +442,7 @@ public final class Overlay {
       visible = on;
    }
 
-   /** Whether the overlay measures (and so can be shown) now; without it a toggle only shows {@link #NOTICE}. */
+   /** Whether the overlay measures (and so can be shown) now; without it a toggle only shows {@link #notice}. */
    public static boolean isSampling() {
       return sampling;
    }
@@ -464,7 +461,13 @@ public final class Overlay {
          Log.info("overlay: " + (visible ? "shown" : "hidden"));
       } else {
          noticeUntilNs = System.nanoTime() + NOTICE_NS;
-         Log.info("overlay: sampling is off (overlaySampling=false); " + NOTICE[1] + " " + NOTICE[2]);
+         notice = new String[] {
+            I18n.text("overlay.notice1", "Performance overlay: sampling is off."),
+            I18n.text("overlay.notice2", "Tick \"Sample frame times and utilization\" under Options > Profiler > Performance overlay,"),
+            I18n.text("overlay.notice3", "apply, then toggle the overlay again (no restart needed).")
+         };
+         Log.info("overlay: sampling is off (overlaySampling=false); tick \"Sample frame times and utilization\" under Options > Profiler > Performance overlay,"
+               + " apply, then toggle the overlay again (no restart needed).");
       }
    }
 
@@ -701,7 +704,7 @@ public final class Overlay {
          prev = ms;
       }
       if (count == 0) {
-         lines = statsShown == 0 && !Config.OVERLAY_POWER ? new String[0] : new String[] {"performance overlay: waiting for frames"};
+         lines = statsShown == 0 && !Config.OVERLAY_POWER ? new String[0] : new String[] {I18n.text("overlay.waitingForFrames", "performance overlay: waiting for frames")};
          fpsText = "";
          verdict = "";
          return;
@@ -724,15 +727,17 @@ public final class Overlay {
       float heapUsed = (rt.totalMemory() - rt.freeMemory()) / 1073741824f;
       float heapMax = rt.maxMemory() / 1073741824f;
       int cores = Config.CPUS; // the machine's, not the calling thread's affinity mask (corePlacement)
-      String gpu = gpuState < 0 ? "n/a" : String.format(java.util.Locale.ROOT, "%.0f %%", gpuLoad);
-      fpsText = String.format(java.util.Locale.ROOT, "%3.0f fps", fps);
+      java.util.Locale l = java.util.Locale.ROOT;
+      String gpu = gpuState < 0 ? I18n.text("overlay.notAvailable", "n/a") : String.format(l, "%.0f %%", gpuLoad);
+      fpsText = String.format(l, "%3.0f fps", fps);
       fpsColor = fpsColor(fps, cap);
       String[] all = {
-            String.format(java.util.Locale.ROOT, "   %5.2f ms   cap %s%s", mean, cap > 0 ? cap + " fps" : "none", Vrr.overlayText()),
-            String.format(java.util.Locale.ROOT, "p50 %.2f   p99 %.2f   p99.9 %.2f   max %.1f ms   (%d frames / %d s)", p50, p99, p999, max, count, (int)(WINDOW_NS / 1_000_000_000L)),
-            String.format(java.util.Locale.ROOT, "1%%-low %.0f fps   jitter %.2f ms   spikes >2x median %d", p99 > 0 ? 1000f / p99 : 0f, count > 1 ? jitter / (count - 1) : 0f, spikes),
-            String.format(java.util.Locale.ROOT, "GPU %s   game thread %.0f %%   render thread %.0f %%   process %.0f %% of %d cores   machine %.0f %%   heap %.1f/%.1f GB",
-                  gpu, gameLoad, renderLoad, processLoad, cores, systemLoad, heapUsed, heapMax),
+            statsMean(String.format(l, "%5.2f", mean), cap > 0 ? cap + " fps" : I18n.text("overlay.capNone", "none"), Vrr.overlayText()),
+            statsTails(String.format(l, "%.2f", p50), String.format(l, "%.2f", p99), String.format(l, "%.2f", p999), String.format(l, "%.1f", max),
+                  String.valueOf(count), String.valueOf(WINDOW_NS / 1_000_000_000L)),
+            statsLow(String.format(l, "%.0f", p99 > 0 ? 1000f / p99 : 0f), String.format(l, "%.2f", count > 1 ? jitter / (count - 1) : 0f), String.valueOf(spikes)),
+            statsLoad(gpu, String.format(l, "%.0f", gameLoad), String.format(l, "%.0f", renderLoad), String.format(l, "%.0f", processLoad), String.valueOf(cores),
+                  String.format(l, "%.0f", systemLoad), String.format(l, "%.1f", heapUsed), String.format(l, "%.1f", heapMax)),
       };
       lines = Arrays.copyOf(all, statsShown + (Config.OVERLAY_POWER ? 1 : 0));
       if (Config.OVERLAY_POWER) {
@@ -751,20 +756,24 @@ public final class Overlay {
       profileRows = v == null ? java.util.List.of() : v.rows;
       flameBoxes = v == null ? java.util.List.of() : v.flameBoxes;
       flameDepth = Math.max(4, Config.OVERLAY_FLAME_DEPTH); // the configured rows, whatever the deepest stack of this window: a steady panel
-      flameTitle = v == null || v.flame == null ? "" : "flame graph, last " + GameThreadProfile.WINDOW_SECONDS + " s (" + v.flame.count
-            + " stacks): root at the bottom, width = share, biggest first";
+      flameTitle = v == null || v.flame == null ? "" : I18n.text("overlay.flameTitle",
+            "flame graph, last %1 s (%2 stacks): root at the bottom, width = share, biggest first", GameThreadProfile.WINDOW_SECONDS, v.flame.count);
       // verdict against the objective: at the cap, or what is saturated, or nothing is
       String verdictMode = Config.OVERLAY_VERDICT.trim().toLowerCase(java.util.Locale.ROOT);
       if (verdictMode.equals("off")) {
          verdict = "";
       } else if (cap > 0 && fps >= cap * 0.98f) {
-         verdict = "at the cap";
+         verdict = I18n.text("overlay.verdictAtCap", "at the cap");
          verdictColor = GREEN;
       } else {
          float top = Math.max(gameLoad, Math.max(renderLoad, gpuState < 0 ? 0f : gpuLoad));
          if (top >= 90f) {
-            String who = top == gameLoad ? "game thread" : top == renderLoad ? "render thread" : "GPU";
-            verdict = (cap > 0 ? "below cap: " : "") + who + " bound";
+            String who = top == gameLoad ? I18n.text("overlay.gameThread", "game thread")
+                  : top == renderLoad ? I18n.text("overlay.renderThread", "render thread") : "GPU";
+            verdict = I18n.text("overlay.verdictBound", "%1 bound", who);
+            if (cap > 0) {
+               verdict = I18n.text("overlay.verdictBelowCap", "below cap: %1", verdict);
+            }
             if (top == gameLoad && verdictMode.equals("detailed") && world) {
                String detail = v == null ? "" : v.detail; // the two biggest sub-phases, e.g. "chunk bakes 21 %, zombies 9 %"
                if (!detail.isEmpty()) {
@@ -773,10 +782,29 @@ public final class Overlay {
             }
             verdictColor = AMBER;
          } else {
-            verdict = (cap > 0 ? "below cap, " : "") + "nothing saturated: waits or sync";
+            verdict = cap > 0 ? I18n.text("overlay.verdictBelowCapNothing", "below cap, nothing saturated: waits or sync")
+                  : I18n.text("overlay.verdictNothing", "nothing saturated: waits or sync");
             verdictColor = RED;
          }
       }
+   }
+
+   // The stats lines from formatted numbers: refreshStats passes the live values, statsTemplateWidth the widest digits.
+   private static String statsMean(String ms, String cap, String display) {
+      return "   " + I18n.text("overlay.statsMean", "%1 ms   cap %2", ms, cap) + display;
+   }
+
+   private static String statsTails(String p50, String p99, String p999, String max, String frames, String seconds) {
+      return I18n.text("overlay.statsTails", "p50 %1   p99 %2   p99.9 %3   max %4 ms   (%5 frames / %6 s)", p50, p99, p999, max, frames, seconds);
+   }
+
+   private static String statsLow(String low, String jitter, String spikes) {
+      return I18n.text("overlay.statsLow", "1%-low %1 fps   jitter %2 ms   spikes >2x median %3", low, jitter, spikes);
+   }
+
+   private static String statsLoad(String gpu, String game, String render, String process, String cores, String machine, String heapUsed, String heapMax) {
+      return I18n.text("overlay.statsLoad", "GPU %1   game thread %2 %   render thread %3 %   process %4 % of %5 cores   machine %6 %   heap %7/%8 GB",
+            gpu, game, render, process, cores, machine, heapUsed, heapMax);
    }
 
    /**
@@ -841,14 +869,19 @@ public final class Overlay {
    /**
     * The overlay font. {@code overlayFont=auto} (the default) follows the screen height: CodeSmall under
     * 1000 px, CodeMedium under 1800, CodeLarge from there (4K and up), re-picked when the window changes size.
+    * Translated text ({@link I18n#needsUiFont}) takes Small / Medium / Large instead: the Code fonts are ASCII only.
     */
    private static UIFont font() {
       int screenH = Core.getInstance().getScreenHeight();
-      if (font == null || (fontAuto && screenH != fontScreenH)) {
+      boolean ui = I18n.needsUiFont();
+      if (font == null || (fontAuto && (screenH != fontScreenH || ui != fontUi))) {
          fontScreenH = screenH;
+         fontUi = ui;
          String name = Config.OVERLAY_FONT.trim();
          fontAuto = name.equalsIgnoreCase("auto");
-         if (fontAuto) {
+         if (fontAuto && ui) {
+            font = screenH < 1000 ? UIFont.Small : screenH < 1800 ? UIFont.Medium : UIFont.Large;
+         } else if (fontAuto) {
             font = screenH < 1000 ? UIFont.CodeSmall : screenH < 1800 ? UIFont.CodeMedium : UIFont.CodeLarge;
          } else {
             try {
@@ -863,29 +896,29 @@ public final class Overlay {
       return font;
    }
 
-   private static boolean fontAuto;
+   private static boolean fontAuto, fontUi;
    private static int fontScreenH;
 
-   /** The toggle key with sampling off: {@link #NOTICE} in the overlay's corner for {@link #NOTICE_NS}. */
+   /** The toggle key with sampling off: {@link #notice} in the overlay's corner for {@link #NOTICE_NS}. */
    private static void renderNotice() {
       TextManager tm = TextManager.instance;
       UIFont font = font();
       int lineH = tm.getFontHeight(font);
       int pad = 8;
       int textW = 0;
-      for (String line : NOTICE) {
+      for (String line : notice) {
          textW = Math.max(textW, tm.MeasureStringX(font, line));
       }
       int w = textW + pad * 2;
-      int h = NOTICE.length * lineH + pad * 2;
+      int h = notice.length * lineH + pad * 2;
       String corner = Config.OVERLAY_CORNER;
       int x = corner.endsWith("r") ? Core.getInstance().getScreenWidth() - w - 10 : 10;
       int y = corner.startsWith("b") ? Core.getInstance().getScreenHeight() - h - 10 : 10;
       SpriteRenderer.instance.renderi(null, x, y, w, h, 0f, 0f, 0f, 0.65f, null);
       int ty = y + pad;
-      for (int i = 0; i < NOTICE.length; i++) {
+      for (int i = 0; i < notice.length; i++) {
          float[] c = i == 0 ? AMBER : WHITE;
-         tm.DrawString(font, x + pad, ty, NOTICE[i], c[0], c[1], c[2], 1.0);
+         tm.DrawString(font, x + pad, ty, notice[i], c[0], c[1], c[2], 1.0);
          ty += lineH;
       }
    }
@@ -959,15 +992,15 @@ public final class Overlay {
 
    /** The stats lines with every number at its widest, so the width does not follow the live digits. */
    private static int statsTemplateWidth(TextManager tm, UIFont font, int fpsW) {
-      int power = Config.OVERLAY_POWER ? labelWidth(tm, font, Power.TEMPLATE) : 0;
+      int power = Config.OVERLAY_POWER ? labelWidth(tm, font, Power.template()) : 0;
       if (statsShown == 0) {
          return power;
       }
       String[] t = {
-            "   88.88 ms   cap 8888 fps",
-            "p50 88.88   p99 88.88   p99.9 888.88   max 8888.8 ms   (88888 frames / 8 s)",
-            "1%-low 8888 fps   jitter 88.88 ms   spikes >2x median 8888",
-            "GPU 888 %   game thread 888 %   render thread 888 %   process 888 % of 88 cores   machine 888 %   heap 88.8/88.8 GB",
+            statsMean("88.88", "8888 fps", ""),
+            statsTails("88.88", "88.88", "888.88", "8888.8", "88888", "8"),
+            statsLow("8888", "88.88", "8888"),
+            statsLoad("888 %", "888", "888", "888", "88", "888", "88.8", "88.8"),
       };
       int w = 0;
       for (int i = 0; i < Math.min(statsShown, t.length); i++) {
@@ -984,7 +1017,17 @@ public final class Overlay {
    /** The fixed width of a tree row: bar, a 26-character name, share, a wait share and a 44-character hint. */
    private static int treeRowWidth(TextManager tm, UIFont font, int indent, int barW, int pctW, int pad) {
       return indent * 2 + barW + pad + labelWidth(tm, font, "translucent floor objects x") + indent + pctW
-            + labelWidth(tm, font, "  waiting 88 %") + indent + labelWidth(tm, font, "VisibilityPolygon2$Drawer.calculateVisibilityPolygonNew 88 %");
+            + labelWidth(tm, font, treeWaiting("88 %")) + indent + labelWidth(tm, font, "VisibilityPolygon2$Drawer.calculateVisibilityPolygonNew 88 %");
+   }
+
+   /** A tree row's wait share, e.g. "  waiting 12 %". */
+   private static String treeWaiting(String pct) {
+      return "  " + I18n.text("overlay.treeWaiting", "waiting %1", pct);
+   }
+
+   /** The frame graph's x-axis label; layout measures it with the widest numbers as the template. */
+   private static String graphXLabel(String frames, String seconds) {
+      return I18n.text("overlay.graphXLabel", "last %1 frames (%2 s), oldest to newest", frames, seconds);
    }
 
    /** {@code text} cut with "..." so it measures at most {@code maxW}; empty when even a few characters do not fit. */
@@ -1331,7 +1374,7 @@ public final class Overlay {
          GameThreadProfile.Row r = tree.get(i);
          treeName[i] = r.name;
          treePct[i] = String.format(java.util.Locale.ROOT, "%.0f %%", r.pct);
-         treeWait[i] = r.waitPct >= 0.5f ? String.format(java.util.Locale.ROOT, "  waiting %.0f %%", r.waitPct) : "";
+         treeWait[i] = r.waitPct >= 0.5f ? treeWaiting(String.format(java.util.Locale.ROOT, "%.0f %%", r.waitPct)) : "";
          treeX[i] = indent * (r.depth + 1) + barW + pad;
          int used = treeX[i] + tm.MeasureStringX(font, r.name) + indent + pctW + tm.MeasureStringX(font, treeWait[i]);
          treeHint[i] = r.hint.isEmpty() ? "" : fit(tm, font, r.hint, treeRowMax - used - indent);
@@ -1359,20 +1402,22 @@ public final class Overlay {
       }
       // the x-axis label under the graph and the legend on a line of its own (it is long; it wraps to two lines when
       // the graph is narrow), both measured against fixed templates so the panel does not breathe with the numbers
-      String xLabel = String.format(java.util.Locale.ROOT, "last %d frames (%.2f s), oldest to newest", bars, spanMs / 1000f);
-      String legend1 = String.format(java.util.Locale.ROOT, "bars: frame ms, green under 1.1x the %.2f ms budget, amber under 2x, red above; blue: GPU ms; line: the budget", budgetMs);
+      String xLabel = graphXLabel(String.valueOf(bars), String.format(java.util.Locale.ROOT, "%.2f", spanMs / 1000f));
+      String legendBars = I18n.text("overlay.legendBars", "bars: frame ms, green under 1.1x the %1 ms budget, amber under 2x, red above",
+            String.format(java.util.Locale.ROOT, "%.2f", budgetMs));
+      String legendRest = I18n.text("overlay.legendLines", "blue: GPU ms; line: the budget");
+      String legend1 = legendBars + "; " + legendRest;
       String legend2 = "";
       boolean graphOn = graphBars > 0;
       int legendW = graphOn ? tm.MeasureStringX(font, legend1) : 0;
       int graphBlockW = axisW + graphW;
       if (graphOn && legendW > Math.min(Math.max(graphBlockW, textW), maxTextW)) {
-         int cut = legend1.indexOf("; blue");
-         legend2 = legend1.substring(cut + 2);
-         legend1 = legend1.substring(0, cut);
+         legend1 = legendBars;
+         legend2 = legendRest;
          legendW = Math.max(tm.MeasureStringX(font, legend1), tm.MeasureStringX(font, legend2));
       }
       if (graphOn) {
-         textW = Math.max(textW, Math.max(graphBlockW, Math.max(axisW + tm.MeasureStringX(font, "last 9999 frames (99.99 s), oldest to newest"), legendW)));
+         textW = Math.max(textW, Math.max(graphBlockW, Math.max(axisW + labelWidth(tm, font, graphXLabel("9999", "99.99")), legendW)));
       }
       if (flameRows > 0 && !flameRight) {
          textW = Math.max(textW, tm.MeasureStringX(font, fTitle));

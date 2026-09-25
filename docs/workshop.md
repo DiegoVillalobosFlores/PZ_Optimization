@@ -157,7 +157,8 @@ on, strengths 150 %, off) with a label naming the change in force; the table: up
 restart, DLSS switches the next frame, four AO strengths instead of one, seven before / after preview pairs. The AO card
 `27` lost its "New!" heading (its image stays). The HDR card `28` still names Options > Optimizations > HDR output in its
 footer (the section moved to the Enhancements tab); re-render it (`harness/hdr-card-gif.py`) when it next changes.
-`30` the "New! Smooth Operator - Driving" card (`harness/smooth-card-gif.py`; 2026-09-25, the town-drive pass,
+`30` the "New! Smooth Operator - Driving" card (`harness/smooth-card-gif.py`; 2026-09-25, the town-drive pass; re-rendered
+for release f05e11d+ from runs `card3-t-*` (table), `card2-stock-1` / `card2-new240-1` (clips) and `flip-td-*` (laptop row);
 `docs/findings-town-drive-2026-09-24.md`): the left half plays the stock game (run `td-rel-stock-1`) above this release
 (`td-rel-new-1`) on the Rosewood 120 km/h drive at the same route second (the release clip matched to the stock one on
 the picture, the stock run's roughest 5 s) with both runs' frame times scrolling under them; the table: fps, 1 % low, p99,

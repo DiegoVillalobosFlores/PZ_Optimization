@@ -294,3 +294,13 @@ installed build (the same stock path as the Workshop card), alternating pairs; a
 | flip-td-opt-1 / 2 | 116.2 / 116.6 | 15.6 / 15.0 | 25.0 / 26.3 | 48.0 / 37.4 | 64 / 67 | 0.7 / 0.7 | 80 % | 40 % |
 
 The flip stays game-thread bound (80 % of a core with the release), far below the cap; the tail shrinks the most.
+
+## Card numbers after the structural pass (2026-09-25 afternoon)
+
+Desktop state: 5120x2160 at 165 Hz (as in every run this pass), HDR on in KWin, VRR Automatic (not engaged:
+`vrr_enabled=0`). With the HDR desktop the release side measures lower than the morning's runs of the same build
+(GPU 61 % vs 49 %): 234.2 / 234.3 fps, p99 8.5 / 8.3 ms, 1 %-low 118 / 121 (`card3-t-new-*`, after a restart) against
+237.0, 7.0-7.2 ms, 139-142; stock is unchanged (153.5 / 155.8 fps, p99 34.7 / 35.5, 1 %-low 29 / 28, `card3-t-stock-*`).
+The maintainer kept HDR on for the card. Trap found on the way: `~/Zomboid/pzopt/framecap.ini` had `gameFps=300`
+(written by another session at 11:54), which overrides `--option frameRate=240` in optimized runs (`card2-new-*` ran at
+281 fps); pin `--prop frameCapFps=240`.

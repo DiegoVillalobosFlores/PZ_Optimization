@@ -431,19 +431,21 @@ chunk textures are made ahead of need (`renderChunkTopUp`), and the persistent s
 (`persistentVboFrameSync`). Present pacing (`presentPacing=auto`, now on at a fixed refresh too) holds each frame until
 a steady time after the game moment it shows, so frames leave the game evenly.
 
-| Rosewood, 120 km/h, 240 fps cap (desktop, 5120x2160, upscaler off) | stock | previous release | this release |
-|---|---|---|---|
-| Frame rate | 153 fps | 225 fps | 235 fps |
-| 1 % low | 28 fps | 76 fps | 122 fps |
-| p99 / p99.9 frame time | 36.3 / 53.8 ms | 13.2 / 32.9 ms | 8.2 / 14.8 ms |
-| Frames off their 240 Hz slot | 42.8 % | 28 % | 10.9 % |
-| Frame-to-frame jitter | 2.5 ms | 1.6 ms | 0.4 ms |
-| Game thread busy (share of a core) | 97 % | 46 % | 46 % |
+| Rosewood, 120 km/h, 240 fps cap | stock | this release |
+|---|---|---|
+| Desktop (RTX 4090, 5120x2160, HDR desktop): frame rate | 155 fps | 234 fps |
+| Desktop: 1 % low | 29 fps | 120 fps |
+| Desktop: p99 / p99.9 frame time | 35.1 / 50.5 ms | 8.4 / 15.4 ms |
+| Desktop: frames off their 240 Hz slot | 42.1 % | 13.0 % |
+| Desktop: frame-to-frame jitter | 2.4 ms | 0.5 ms |
+| Desktop: game thread busy (share of a core) | 98 % | 45 % |
+| Laptop (the flip, balanced profile): frame rate | 92 fps | 116 fps |
+| Laptop: 1 % low / p99 | 26 fps / 38.5 ms | 66 fps / 15.3 ms |
 
 The cost: present pacing adds ~1.7 ms from the game step to the screen on average (~2.6 ms on a typical frame, less
 than one 240 Hz frame; frames already late go out at once). Options > Optimizations > Variable refresh rate > Even frame
-delivery, `off` for stock timing. The route is still not locked at 240: what is left are bursts of game-thread work
-(tile rendering, chunk arrivals, lighting), the next pass. Every run, including the techniques measured and not
+delivery, `off` for stock timing. A second pass removed the chunk-load stalls (a trashed house's room scan, new chunks lit one per frame, occlusion
+counts on worker threads). The route is still not locked at 240. Every run, including the techniques measured and not
 adopted: [docs/findings-town-drive-2026-09-24.md](docs/findings-town-drive-2026-09-24.md).
 
 ---

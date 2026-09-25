@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Render docs/workshop/images/30-smooth-operator-driving.gif: the Workshop's "New! Smooth Operator - Driving" card in the
 animated New! format (harness/newcard.py). Right half: the Rosewood 120 km/h drive (drive-120-south, 240 cap, upscaler
-off), the stock game against this release (docs/findings-town-drive-2026-09-24.md, runs td-rel-*). Left half: both
+off), the stock game against this release (docs/findings-town-drive-2026-09-24.md, table from runs card3-t-*,
+clips from card2-stock-1 / card2-new240-1, the laptop row from flip-td-*). Left half: both
 recordings at the same route second (stock on top), and under them both runs' frame times scrolling over the last 3 s,
 so the stock game's spikes are visible next to this release's flat line. The clip is the stock run's roughest 5 s.
 
@@ -24,7 +25,7 @@ from newcard import BG, INK, INK2, MUTED, OPT, RULE, STOCK, Card, font, write_gi
 
 OUT = "docs/workshop/images/30-smooth-operator-driving.gif"
 RUNS = Path(os.environ.get("SMOOTH_RUNS", os.path.join(os.path.dirname(os.path.abspath(__file__)), "runs")))
-STOCK_RUN, NEW_RUN = "td-rel-stock-1", "td-rel-new-1"
+STOCK_RUN, NEW_RUN = "card2-stock-1", "card2-new240-1"  # recorded, no MangoHud, 240 cap (the table: card3-t-*)
 FPS = 12
 CLIP = 5.0          # seconds of the route shown
 TRACE = 3.0         # seconds of frame times on screen
@@ -32,25 +33,27 @@ YMAX = 40.0         # ms at the top of the trace
 CROP = (1280, 540, 3840, 1620)  # centre half of the 5120x2160 capture: the car and the streets around it
 
 INTRO = ("Driving through town at 120 km/h: new chunk pictures are baked a few per frame by urgency instead of "
-         "in bursts, and cost less to bake, and each frame leaves the game at an even time after the moment it "
-         "shows (present pacing). Rosewood, fully zoomed out, 240 fps cap.")
+         "in bursts and cost less to bake, chunk loads no longer stall, and each frame leaves the game at an even "
+         "time after the moment it shows (present pacing). Rosewood, fully zoomed out, 240 fps cap.")
 ROWS = [
     ("Frame rate", "mean over the 36 s route, two runs each",
-     (152.9, "153 fps"), (235.3, "235 fps"), "+54 %"),
+     (154.7, "155 fps"), (234.3, "234 fps"), "+51 %"),
     ("1 % low", "the slowest 1 % of frames",
-     (27.5, "28 fps"), (121.5, "122 fps"), "4.4x"),
+     (28.5, "29 fps"), (119.5, "120 fps"), "4.2x"),
     ("p99 frame time", "1 frame in 100 is slower than this",
-     (36.3, "36.3 ms"), (8.2, "8.2 ms"), "-77 %"),
+     (35.1, "35.1 ms"), (8.4, "8.4 ms"), "-76 %"),
     ("Frames off their 240 Hz slot", "later than the cap by more than 10 %",
-     (42.8, "42.8 %"), (10.9, "10.9 %"), "-75 %"),
+     (42.1, "42.1 %"), (13.0, "13.0 %"), "-69 %"),
     ("Game thread busy", "share of one core, the frame-rate limit",
-     (97, "97 %"), (46, "46 %"), "-52 %"),
+     (98, "98 %"), (45, "45 %"), "-54 %"),
+    ("Laptop (the flip): frame rate", "same route, its 1 % low 26 -> 66 fps",
+     (92.3, "92 fps"), (116.4, "116 fps"), "+26 %"),
     ("Delay added by present pacing", "step to screen, on average (~2.6 ms typical)",
      (0, "0"), (1.7, "+1.7 ms"), ("+1.7 ms", "worse")),
 ]
 FOOTER = [
     "Left: the stock game (top) and this release (bottom) at the same route second, and their frame times over "
-    "the last 3 s. The previous release: 225 fps, p99 13 ms, 1 % low 76. Desktop, Linux, RTX 4090, 5120x2160.",
+    "the last 3 s. Desktop: Linux, RTX 4090, 5120x2160 on an HDR desktop; laptop: the flip, balanced power profile.",
     "On by default. Present pacing: Options > Optimizations > Variable refresh rate > Even frame delivery (off = stock timing, no added delay).",
     "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, docs/findings-town-drive-2026-09-24.md.",
 ]
@@ -61,9 +64,18 @@ def run_dir(label):
 
 
 def route(run):
+    """(route start epoch ms, route end epoch ms, route start in the recording, s)."""
     kv = dict(l.split("=", 1) for l in (run / "pzopt-bench.out").read_text().splitlines() if "=" in l)
-    m = re.search(r"route starts at \+(\d+) s", (run / "schedule.log").read_text())
-    return int(kv["route_start_epoch_ms"]), int(kv["route_end_epoch_ms"]), int(m.group(1))
+    a, b = int(kv["route_start_epoch_ms"]), int(kv["route_end_epoch_ms"])
+    sched = run / "schedule.log"
+    m = re.search(r"route starts at \+(\d+) s", sched.read_text()) if sched.exists() else None
+    if m:
+        return a, b, int(m.group(1))
+    # --no-mangohud runs have no schedule.log: the capture runs from launch to exit, so it began at the file's
+    # modification time minus its duration (align() matches the two clips on the picture afterwards)
+    dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
+                                str(run / "recording.mp4")], capture_output=True, text=True).stdout)
+    return a, b, max(0.0, a / 1000.0 - ((run / "recording.mp4").stat().st_mtime - dur))
 
 
 def frametimes(run):

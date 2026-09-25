@@ -164,6 +164,12 @@ for release f05e11d+ from runs `card3-t-*` (table), `card2-stock-1` / `card2-new
 the picture, the stock run's roughest 5 s) with both runs' frame times scrolling under them; the table: fps, 1 % low, p99,
 frames off their 240 Hz slot, game-thread load, and the delay present pacing adds (a cost row). The Enhancements card
 `29` lost its "New!" heading (its image stays).
+`31` the "New! Per-pixel lighting" card (`harness/ppl-card-gif.py`; 2026-09-25, release e1b28ab;
+`docs/findings-per-pixel-lighting-2026-09-25.md`): the left half sweeps between the same frame of the torch-lit house at
+night with per-pixel lighting off and on (desktop `--shot-at` runs `ppl-shot-false` / `ppl-shot-true`, only `pixelLight`
+differs); the table: light between tiles, light through walls, the torch beam, and the GPU cost on the flip laptop from
+the drift-free A/B against the stock chunk program (night street +0.05 ms, torch-lit house +0.15 ms, cost rows). The
+Smooth Operator card `30` lost its "New!" heading (its image stays).
 `description.txt` embeds them with `[img]` from the raw GitHub URL of `master`,
 so they render only after the folder is pushed. The staged page carries da.gd short links instead (2026-09-24,
 `scripts/workshop-shorten.py`, cache `docs/workshop/short-urls.txt`, ~80 characters saved per image; da.gd is the one

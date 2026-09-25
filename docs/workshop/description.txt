@@ -8,7 +8,9 @@ https://github.com/xD3I/PZ_Optimization
 [url=https://github.com/xD3I/PZ_Optimization#readme][img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/00-showcase-thumbnail.gif[/img][/url]
 [i]Uncapped at 5120x2160, the in-game overlay (F9 / L3 + R3) live at the bottom; video on the repository page.[/i]
 
-[h1]New! Smooth Operator - Driving[/h1]
+[h1]New! Per-pixel lighting[/h1]
+[img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/31-per-pixel-lighting.gif[/img]
+
 [img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/30-smooth-operator-driving.gif[/img]
 
 [img]https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/29-enhancements-tab.gif[/img]

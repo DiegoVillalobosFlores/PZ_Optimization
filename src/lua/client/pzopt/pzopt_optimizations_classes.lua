@@ -104,6 +104,7 @@ PzoptOptionClasses = {
     devPplTiming = { "pzopt.PixelLight" },
     devPplTint = { "pzopt.PixelLight" },
     devPplToggleAt = { "pzopt.PixelLight" },
+    devPplTrace = { "pzopt.PixelLight" },
     devPplView = { "pzopt.PixelLight" },
     devProfileLogOff = { "pzopt.GameThreadProfile" },
     devRedrawFrame = { "FBORenderCell" },

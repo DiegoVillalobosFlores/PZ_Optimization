@@ -138,6 +138,12 @@ def main():
                                     "frames_ge_50px": int((s >= 50).sum()), "max": int(s.max()), "world_px": int(area[r, c])}
             g = regions[names[r][c]]
             print(f"{names[r][c]:14s}  {g['mean_px_per_frame']:18.1f}  {g['per_100k_world_px']:17.2f}  {g['frames_ge_50px']:20d}  {g['max']:5d}")
+    share = counts / np.maximum(1, area)[None]
+    burst = share.max(axis=(1, 2)) > 0.04  # a frame where some region blinks over > 4 % of its world pixels
+    bursts = [{"frame": per_frame[i][0], "t": round(a.start + per_frame[i][0] / fps, 2), "region": names[int(np.argmax(share[i]) // 3)][int(np.argmax(share[i]) % 3)],
+               "share_pct": round(100 * float(share[i].max()), 1)} for i in np.nonzero(burst)[0]]
+    print(f"burst frames (a region > 4 % blinks): {len(bursts)} = {10 * len(bursts) / max(1e-6, n / fps):.1f} per 10 s:",
+          " ".join(f"{b['t']}s/{b['region']}/{b['share_pct']}%" for b in bursts[:20]))
     tl = counts[:, 0, 0]
     secs = []
     step = int(round(fps))
@@ -163,7 +169,7 @@ def main():
         print("heat map:", a.heat)
     if a.json:
         with open(a.json, "w") as fh:
-            json.dump({"video": a.video, "window_s": [a.start, a.end], "frames": n, "fps": fps, "capture_gaps": gaps, "size": [w, h], "regions": regions,
+            json.dump({"video": a.video, "window_s": [a.start, a.end], "frames": n, "fps": fps, "capture_gaps": gaps, "size": [w, h], "regions": regions, "bursts": bursts, "bursts_per_10s": round(10 * len(bursts) / max(1e-6, n / fps), 2),
                        "top_left_per_second": secs, "busiest_cells": top,
                        "worst_top_left_frames": [{"frame": p[0], "t": round(a.start + p[0] / fps, 2), "px": p[1][0][0]} for p in worst]}, fh, indent=1)
 

@@ -840,6 +840,7 @@ public final class Config {
    public static final int PPL_SPEC_PCT = integer("pplSpecPct", 60); // pixelLight: strength of the wet glints, %
    public static final boolean PPL_VARIANTS = bool("pplVariants", true); // pixelLight: chunk textures no torch, headlight or lamp reaches are composited by a light-free variant of the shader (half the registers: twice the occupancy on RDNA iGPUs)
    public static final int DEV_PPL_VIEW = integer("devPplView", 0); // dev: 1 = the light alone, 2 = the unlit surfaces, 3 = the owner squares as a checkerboard, 4 = the reconstructed normals
+   public static final boolean DEV_PPL_TRACE = bool("devPplTrace", false); // dev: one log line per frame of pixelLight's lattice packs and camera mapping inputs (pzopt.PixelLight), for lining frames up with a devCapture sequence
    public static final boolean DEV_PPL_TIMING = bool("devPplTiming", false); // dev: GPU time of the pixel-light pass and the lattice uploads in the log every 1000 frames
    public static final String DEV_PPL_TOGGLE_AT = string("devPplToggleAt", ""); // dev: seconds after the world is up at which pixelLight flips on / off (every texture re-baked), for A/Bs of one scene in one run
    public static final String DEV_CAPTURE = string("devCapture", ""); // dev: start,seconds,fps,scalePct: the presented frames read back to ~/Zomboid/pzopt-capture/ (pzopt.FrameCapture), a recorder-free video rig

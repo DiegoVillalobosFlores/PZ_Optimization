@@ -3491,7 +3491,7 @@ the one-row depth steps tile edges have, a 4x4 Bayer rotation of two slices and 
 - At the end of a chunk-level bake (top level, after the tree pass, before `endRenderChunkLevel(..., true)`):
   `pzopt.ChunkAo.bakeEnd(renderChunk, c, playerIndex, zoom, geometryDirty)`, while the texture's framebuffer is still
   bound. A new texture, or a bake whose dirty flags change the depth (all but lighting, blood and redraw), computes its
-  AO there (up to `aoBakeBudget` a frame) and multiplies it in; a lighting-only re-bake multiplies the kept R8 AO in.
+  AO there (a new texture always, `aoArrivalInBake`; a changed one up to `aoBakeBudget` a frame) and multiplies it in; a lighting-only re-bake multiplies the kept R8 AO in.
   The kernel reads the texture's depth and its eight neighbours' of the same level pair and zoom (each at its composite
   offset and chunk depth offset). The stock mipmap build at the bake's end then carries the AO into every level.
 - Before the composite, after the tree appends: `pzopt.ChunkAo.flush(playerIndex)` runs at most `aoComputeBudget` (4)

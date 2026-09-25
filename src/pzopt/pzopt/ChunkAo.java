@@ -45,7 +45,8 @@ import zombie.iso.fboRenderChunk.FBORenderLevels;
  *   <li>Every bake ends (its framebuffer still bound, before the stock mipmap build) with one multiply of the AO the
  *       texture has. The AO depends on the depth alone, so the frequent lighting-only re-bakes cost that multiply and
  *       nothing else; a texture whose AO is 1 everywhere (an occlusion query on its first multiply) skips it.</li>
- *   <li>A new texture, or a bake that changes objects, cutaways or trees, computes its AO inside the bake, up to
+ *   <li>A new texture computes its AO inside its first bake (aoArrivalInBake: whatever the frame's slack, the bake
+ *       scheduler bounds those bakes); a bake that changes objects, cutaways or trees does too, up to
  *       {@code aoBakeBudget} a frame; the rest wait for {@code aoComputeBudget} deferred computes a frame (before the
  *       composite), each applied onto the texture as a ratio new / old (blend DST_COLOR, SRC_COLOR = 2 src dst, so it
  *       darkens and lightens) with the mip levels the current zoom samples.</li>
@@ -85,6 +86,17 @@ public final class ChunkAo {
    private static long bareSkipped;
    private static long heavyFrames;
    private static long sunRequeued;
+   private static long pendingPeakAll; // deferredPeak since launch (stats() restarts that one)
+   private static long arrivalsOverBudget; // first AOs computed in their bake past aoBakeBudget / the slack (aoArrivalInBake)
+   // latency of a texture's first AO from its first bake: count, sum, max, and buckets 0 (in the bake) / <=10 / <=50 /
+   // <=100 / <=250 / <=500 / <=1000 / >1000 ms; texture-frames composited without it, frames with at least one
+   private static long firstAos;
+   private static double firstAoMsSum;
+   private static double firstAoMsMax;
+   private static final long[] FIRST_AO_MS = new long[8];
+   private static final int[] FIRST_AO_EDGES = {0, 10, 50, 100, 250, 500, 1000};
+   private static long shownWithoutAo;
+   private static long framesShowingWithoutAo;
    private static int lastMipLevels;
    private static int budgetLeft = 4; // game thread: computes left this frame (bakes first, then flush)
    private static volatile long frames; // game thread: frames rendered (flush runs once a frame)
@@ -133,7 +145,9 @@ public final class ChunkAo {
 
    public static String stats() {
       String s = "chunk ao: computed=" + computed + " (in bakes " + computedInBake + ") multiplied=" + multiplied + " skipped (no occlusion)=" + skippedEmpty + " neighbour refreshes=" + refreshes + " (skipped, bare border " + refreshesSkipped + ") bare textures=" + bareSkipped + " slow frames without computes=" + heavyFrames + " zoom-out re-bakes=" + mipRebakes + " pending=" + PENDING.size()
-         + " pending peak=" + deferredPeak + (SunShadow.enabled() ? " sun requeued=" + sunRequeued + " roof columns=" + roofColumnsFound + " | " + SunShadow.stats() : "") + (failed ? " FAILED" : "");
+         + " pending peak=" + deferredPeak + " first AO: " + firstAos + " (in bakes " + FIRST_AO_MS[0] + ", over budget " + arrivalsOverBudget + ", >100 ms "
+         + (FIRST_AO_MS[4] + FIRST_AO_MS[5] + FIRST_AO_MS[6] + FIRST_AO_MS[7]) + String.format(java.util.Locale.ROOT, ", max %.0f ms)", firstAoMsMax)
+         + " shown without AO=" + shownWithoutAo + (SunShadow.enabled() ? " sun requeued=" + sunRequeued + " roof columns=" + roofColumnsFound + " | " + SunShadow.stats() : "") + (failed ? " FAILED" : "");
       if (Config.DEV_AO_TIMING) {
          StringBuilder sb = new StringBuilder(s).append(" | geometry bakes by flag:");
          for (int b = 0; b < 15; b++) {
@@ -176,6 +190,8 @@ public final class ChunkAo {
       boolean sunStale; // queued only because the sun moved: computes on sunComputeBudget, a trickle
       int mipLevels; // mip levels 1.. that carry the AO (a bake's stock mipmap build after the in-bake multiply: all)
       long readyFrame; // a neighbour refresh waits a few frames: one refresh for a whole streaming wave
+      long bornNs; // the first bake of this owner (latency counters)
+      boolean landed; // its first AO was issued (or it is bare): shown without AO until then
       IsoChunk chunk;
       FBORenderChunk rc;
       int minLevel;
@@ -216,6 +232,8 @@ public final class ChunkAo {
          info.has = false;
          info.mask = 0;
          info.bare = false;
+         info.bornNs = System.nanoTime();
+         info.landed = false;
       }
       info.chunk = c;
       info.rc = rc;
@@ -233,12 +251,20 @@ public final class ChunkAo {
             info.pending = false;
             PENDING.remove(info);
          }
+         info.landed = true;
          bareSkipped++;
          return;
       }
-      if ((geometry || !info.has) && budgetLeft > 0 && rc.fbo != null) {
-         // within this frame's budget: compute now, inside the bake (no ratio, no mipmap passes)
-         budgetLeft--;
+      // a texture's first AO goes into its first bake whatever the slack: queued, a new chunk showed its ground and grass
+      // without the AO shading for up to a second at 120 km/h, then darkened (the bake scheduler bounds these bakes)
+      boolean arrival = !info.has && Config.AO_ARRIVAL_IN_BAKE;
+      if ((geometry || !info.has) && (budgetLeft > 0 || arrival) && rc.fbo != null) {
+         // within this frame's budget, or a first AO: compute now, inside the bake (no ratio, no mipmap passes)
+         if (budgetLeft > 0) {
+            budgetLeft--;
+         } else {
+            arrivalsOverBudget++;
+         }
          Job job = obtain();
          job.kind = Job.COMPUTE_IN_BAKE;
          job.fresh = true; // the bake just drew the colour
@@ -252,6 +278,7 @@ public final class ChunkAo {
          job.mipmaps = false;
          info.mask = context(job, rc, c, playerIndex, zoom, true);
          info.has = true;
+         landed(info, true);
          info.mipLevels = 3;
          info.sunStale = false;
          if (info.pending) {
@@ -281,6 +308,7 @@ public final class ChunkAo {
          info.readyFrame = 0L; // (a settle for new textures did not reduce the neighbour refreshes: 2,239 vs 2,272)
          PENDING.add(info);
          deferredPeak = Math.max(deferredPeak, PENDING.size());
+         pendingPeakAll = Math.max(pendingPeakAll, PENDING.size());
       }
    }
 
@@ -342,8 +370,17 @@ public final class ChunkAo {
       }
       VISIBLE.clear();
       java.util.ArrayList<FBORenderChunk> shown = zombie.iso.fboRenderChunk.FBORenderChunkManager.instance.toRenderThisFrame;
+      int withoutAo = 0;
       for (int i = 0; i < shown.size(); i++) {
          VISIBLE.add(shown.get(i).index);
+         Info si = INFOS.get(shown.get(i).index);
+         if (si != null && !si.landed) {
+            withoutAo++; // on screen without its first AO (every one waiting is in PENDING)
+         }
+      }
+      shownWithoutAo += withoutAo;
+      if (withoutAo > 0) {
+         framesShowingWithoutAo++;
       }
       int sunBudget = heavy ? 0 : Math.max(0, Config.SUN_COMPUTE_BUDGET); // sun-step recomputes: a trickle (a step would otherwise burst every texture's compute into a few frames)
       for (int pass = 0; pass < 2 && budget > 0; pass++) { // the textures composited this frame first
@@ -386,6 +423,7 @@ public final class ChunkAo {
             info.mipLevels = job.mipLevels;
             info.mask = context(job, rc, info.chunk, playerIndex, info.zoom, true);
             info.has = true;
+            landed(info, false);
             info.pending = false;
             if (info.sunStale) {
                info.sunStale = false;
@@ -397,6 +435,38 @@ public final class ChunkAo {
             SpriteRenderer.instance.drawGeneric(job);
          }
       }
+   }
+
+   /** Latency counters: the texture's first AO was issued now (inside its bake, or deferred). */
+   private static void landed(Info info, boolean inBake) {
+      if (info.landed) {
+         return;
+      }
+      info.landed = true;
+      double ms = inBake ? 0.0 : (System.nanoTime() - info.bornNs) / 1.0e6;
+      int b = 0;
+      if (!inBake) {
+         b = FIRST_AO_EDGES.length;
+         for (int i = 1; i < FIRST_AO_EDGES.length; i++) {
+            if (ms <= FIRST_AO_EDGES[i]) {
+               b = i;
+               break;
+            }
+         }
+      }
+      FIRST_AO_MS[b]++;
+      firstAos++;
+      firstAoMsSum += ms;
+      firstAoMsMax = Math.max(firstAoMsMax, ms);
+   }
+
+   /** The first-AO latency counters since launch, for the harness summary (ao_latency=). */
+   public static String latency() {
+      return "first_aos=" + firstAos + " in_bake=" + FIRST_AO_MS[0] + " le10ms=" + FIRST_AO_MS[1] + " le50ms=" + FIRST_AO_MS[2] + " le100ms=" + FIRST_AO_MS[3]
+         + " le250ms=" + FIRST_AO_MS[4] + " le500ms=" + FIRST_AO_MS[5] + " le1000ms=" + FIRST_AO_MS[6] + " gt1000ms=" + FIRST_AO_MS[7]
+         + String.format(java.util.Locale.ROOT, " mean_ms=%.1f max_ms=%.1f", firstAos > 0 ? firstAoMsSum / firstAos : 0.0, firstAoMsMax)
+         + " shown_without_ao=" + shownWithoutAo + " frames_showing_without_ao=" + framesShowingWithoutAo + " frames=" + frames
+         + " arrivals_over_budget=" + arrivalsOverBudget + " heavy_frames=" + heavyFrames + " pending_peak=" + pendingPeakAll;
    }
 
    /**

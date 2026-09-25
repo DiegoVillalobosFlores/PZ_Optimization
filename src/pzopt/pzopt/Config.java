@@ -785,6 +785,7 @@ public final class Config {
    public static final boolean AO_SKIP_SLOW_FRAMES = bool("aoSkipSlowFrames", true); // chunk AO: under a cap, computes per frame follow the slack the last frame left (after a frame that missed the cap: aoSlowFrameComputes)
    public static final int AO_SLOW_FRAME_COMPUTES = integer("aoSlowFrameComputes", 0); // chunk AO: deferred computes after a frame that missed the cap (0 = one every 8 such frames)
    public static final int AO_BAKE_BUDGET = integer("aoBakeBudget", 4); // chunk AO: textures whose AO is computed inside their bake per frame at most (new ones, changed objects); cheaper than a deferred one
+   public static final boolean AO_ARRIVAL_IN_BAKE = bool("aoArrivalInBake", true); // chunk AO: a texture's first AO is computed inside its bake whatever the frame's slack or aoBakeBudget (the bake scheduler bounds those bakes); false = it queues like the rest (driving fast, grass showed its AO shading late)
    public static final int AO_COMPUTE_BUDGET = integer("aoComputeBudget", 4); // chunk AO: deferred computes per frame at most (under a cap: fewer, by the last frame's slack) (over the bake budget, neighbour refreshes); the rest wait
    public static final boolean AO_CHUNK_FLIP = bool("aoChunkFlip", true); // chunk AO: the bake writes texture rows top-down (FlipY); false = bottom-up
    public static final boolean AO_REUSE = bool("aoReuse", true); // the AO buffer is kept while the camera, zoom and chunk textures stay the same (no AO work on such frames)

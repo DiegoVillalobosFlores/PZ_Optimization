@@ -11,6 +11,7 @@ PzoptOptionClasses = {
     animBatchAsync = { "pzopt.AnimBatch" },
     animBonesParallel = { "pzopt.AnimBatch" },
     animClipCache = { "pzopt.AnimClipCache" },
+    aoArrivalInBake = { "pzopt.ChunkAo" },
     aoBakeBudget = { "pzopt.ChunkAo" },
     aoChunkFlip = { "pzopt.ChunkAo" },
     aoComputeBudget = { "pzopt.ChunkAo" },

@@ -422,6 +422,14 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   (storm route, 120 km/h drive at max zoom). The per-frame screen mode (`aoMode=screen`) cost 90-140 us/frame: fixed
   per-pass cost dominates on NVIDIA (~8 us for an empty pass, `glGenerateMipmap` of a 1024 chunk texture ~65 us).
   macOS (GL 2.1 context) rejects GLSL 1.40: AO switches itself off there. Rigs: `devAoView=1`, `devAoTiming`, `devAoDumpFrame`.
+- Reflections (2026-09-26, `docs/findings-reflections-2026-09-25.md`, off by default, tab section "Reflections", applies
+  at the next launch): `pzopt.Ssr`, pixel-projected. The iso mirror is a 1D problem (a surface h levels up mirrors 2h
+  below itself in its column), so the chunk composite scatters each fragment into its mirror pixel (imageAtomicMax keys,
+  two alternating R32UI hashes, per-square water / puddle map, per-texture gating) and the water / puddle shaders read one
+  key. Characters: a box pass after the water, for the next frame. Desktop: 0 us without water, +11..15 us at a river
+  (the stock water pass alone is 1.4 ms), +27..30 us in rain with puddles. Never `glGet` per draw on the render thread
+  (NVIDIA's threaded driver syncs). Follow-up list: `docs/plan-reflections-followup.md`. Rigs: `harness/ssr/`,
+  `devSsrAlternate`, `devSsrTiming`, `devSsrView=1`, `devSsrDumpAt`.
 - Town drive pass (2026-09-24/25, `docs/findings-town-drive-2026-09-24.md`): Rosewood 120 km/h drive at the 240 cap,
   stock 153 fps / p99 36 ms -> 235 fps / p99 8.2 ms / 1 %-low 122. On by default: `bakeScheduler` + `bakeBudgetAdaptive`
   (one prioritized per-frame bake budget, `pzopt.BakeScheduler`), `occlusionGrantedOnly`, `bakeMipLevels=3`,

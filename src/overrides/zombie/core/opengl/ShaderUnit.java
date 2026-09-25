@@ -102,7 +102,7 @@ public final class ShaderUnit {
             DebugType.Shader.error(this.getFileName() + "> Failed to generate shaderID. Shader code:\n" + processedCode);
             return false;
          } else {
-            GL20.glShaderSource(shaderID, pzopt.PixelLight.patchShader(this.fileName, pzopt.Hdr.patchShader(this.fileName, processedCode))); // pzopt: HDR output, the world composite shader gets its expansion appended; pixelLight, the chunk composite shader lights each pixel
+            GL20.glShaderSource(shaderID, pzopt.Ssr.patchShader(this.fileName, pzopt.PixelLight.patchShader(this.fileName, pzopt.Hdr.patchShader(this.fileName, processedCode)))); // pzopt: HDR output, the world composite shader gets its expansion appended; pixelLight, the chunk composite shader lights each pixel; reflections, the water shaders look up the scene
             GL20.glCompileShader(shaderID);
             ShaderProgram.printLogInfo(shaderID);
             this.glId = shaderID;

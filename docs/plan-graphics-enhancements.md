@@ -122,6 +122,10 @@ for the standard vertex sway.
 
 ### 4. Screen-space reflections on water and puddles
 
+**Done 2026-09-26** (`reflections`, pzopt.Ssr): pixel-projected reflections fused into the chunk composite, see
+`docs/findings-reflections-2026-09-25.md`; what is left: `docs/plan-reflections-followup.md`. The text below is the
+original plan.
+
 The scene mirrored into rivers, lakes and puddles, on top of the HDR glints.
 
 - How: water is a flat plane at a known height; in an isometric view a reflection is the baked texture sampled

@@ -859,6 +859,13 @@ public final class Config {
    public static final String DEV_PPL_TOGGLE_AT = string("devPplToggleAt", ""); // dev: seconds after the world is up at which pixelLight flips on / off (every texture re-baked), for A/Bs of one scene in one run
    public static final String DEV_CAPTURE = string("devCapture", ""); // dev: start,seconds,fps,scalePct: the presented frames read back to ~/Zomboid/pzopt-capture/ (pzopt.FrameCapture), a recorder-free video rig
    public static final String DEV_PPL_DUMP_AT = string("devPplDumpAt", ""); // dev: seconds after the world is up at which the per-square lighting, the light sources and the scene depth + colour go to ~/Zomboid/pzopt-ppl/ (pzopt.PixelLight)
+   public static final boolean DEV_SSR_TIMING = bool("devSsrTiming", false); // dev: GPU time of the water pass in the log every 600 frames, apart for reflections on / off (devSsrAlternate)
+   public static final int DEV_SSR_ALTERNATE = integer("devSsrAlternate", 0); // dev: the reflections flip on / off every N ms (same-run A/B of their cost)
+   public static final boolean DEV_SSR_BARRIER_OFF = bool("devSsrBarrierOff", false); // dev: devSsrAlternate's off frames still issue the texture barrier
+   public static final int DEV_SSR_SKIP = integer("devSsrSkip", 0); // dev: cost probes, bits: 1 no moving-object scatter, 2 no water resolve (strength 0), 4 no barriers before the water, 8 no composite scatter
+   public static final int DEV_SSR_VIEW = integer("devSsrView", 0); // dev: 1 = water and puddles show the reflection term alone
+   public static final boolean DEV_SSR_NO_PATCH = bool("devSsrNoPatch", false); // dev: the shaders stay stock (cost of the patched programs with the reflections off)
+   public static final String DEV_SSR_DUMP_AT = string("devSsrDumpAt", ""); // dev: seconds after the world is up at which the world colour + depth before and after the puddles and the water go to ~/Zomboid/pzopt-ssr/ (pzopt.Ssr)
    public static final int DEV_AO_DUMP_FRAME = integer("devAoDumpFrame", 0); // dev: on this AO frame the scene depth + colour go to ~/Zomboid/pzopt-ao-*.bin
    public static final boolean DEV_AO_NO_MIPS = bool("devAoNoMips", false); // dev: a deferred chunk AO does not rebuild the texture's mipmaps (cost probe)
    public static final boolean DEV_AO_TIMING = bool("devAoTiming", false); // dev: GPU time of each AO stage in the log every 1000 frames
@@ -867,6 +874,16 @@ public final class Config {
    public static final boolean HDR = bool("hdr", false); // HDR output (pzopt.Hdr): FP16 window on Wayland tagged with the output's HDR image description, world highlights expanded, UI at the desktop's white
    public static final boolean HDR_AUTO = bool("hdrAuto", true); // HDR output whenever the screen is HDR (Linux: a Wayland output in HDR mode; macOS: an EDR display), even with hdr=false; hdr=true forces it
    public static final String HDR_ENCODE = string("hdrEncode", "auto").toLowerCase(java.util.Locale.ROOT); // on: ext_linear description + encode pass at the swap (standard, exact roll-off); off: no description, the compositor's own SDR decode shows the FP16 values above 1.0 (KWin; ~0.3 ms a frame cheaper at 4K); auto: off on KDE Plasma, on elsewhere
+   public static volatile boolean SSR; // screen-space reflections of the scene in the water and the puddles (pzopt.Ssr)
+   public static volatile int SSR_STRENGTH_PCT; // how strongly the water mirrors the scene, % (a deep river at the camera's angle reflects ~6 % physically)
+   public static volatile boolean SSR_PUDDLES; // reflections in the puddles too (once they are big enough to reflect)
+   public static final String SSR_MODE = string("ssrMode", "ppr"); // reflections: ppr = pixel-projected (the chunk composite writes each surface into the pixel it mirrors to; the water reads one texel), march = a ray march up the column in the water shader
+   public static final int SSR_REACH_PCT = integer("ssrReachPct", 150); // reflections: the reflection fades out between half and all of this height above the water, % of a level
+   public static final int SSR_STRIDE = integer("ssrStride", 8); // reflections: px between the march's depth taps up the column
+   public static final int SSR_STEPS = integer("ssrSteps", 48); // reflections: taps before the ray gives up (reach = stride x steps px)
+   public static final int SSR_REFINE = integer("ssrRefine", 3); // reflections: binary refinements between the last miss and the hit
+   public static final int SSR_THICKNESS_PCT = integer("ssrThicknessPct", 150); // reflections: how far behind a surface the ray may pass and still count it as hit, % of a square
+   public static final int SSR_DISTORT_PCT = integer("ssrDistortPct", 100); // reflections: how far the waves displace the reflected image
    public static volatile int HDR_UI_NITS; // UI / SDR white on the panel in cd/m², 0 = the desktop's reference white
    public static volatile int HDR_PAPER_PCT; // world paper white, % of the UI white (lower = more room for highlights)
    public static volatile int HDR_PEAK_NITS; // brightest highlight in cd/m², 0 = the panel's peak
@@ -945,6 +962,9 @@ public final class Config {
       AO_STRENGTH_WALL_PCT = aoStrength("aoStrengthWallPct");
       AO_STRENGTH_OBJECT_PCT = aoStrength("aoStrengthObjectPct");
       AO_STRENGTH_VEGETATION_PCT = aoStrength("aoStrengthVegetationPct");
+      SSR = bool("reflections", false);
+      SSR_STRENGTH_PCT = Math.max(0, Math.min(100, integer("reflectionStrengthPct", 45)));
+      SSR_PUDDLES = bool("reflectionPuddles", true);
       SUN_SHADOWS = bool("sunShadows", false);
       SUN_SHADOW_STRENGTH_PCT = integer("sunShadowStrengthPct", 45);
       SUN_SHADOW_SOFTNESS_PCT = integer("sunShadowSoftnessPct", 100);

@@ -3805,3 +3805,37 @@ Write-up: `docs/findings-contact-shadows-2026-09-25.md`. Off by default (a chang
 - After the target ambient is taken from the square, it is multiplied by `SunShadow.characterFactor(character)`: 1 in
   the sun, indoors, at night; 1 - strength for a character in the static world's sun shadow (a cached grid march from
   its chest towards the sun). The game's own easing of the ambient smooths the change.
+
+## Reflections on water and puddles (`reflections`, `reflectionStrengthPct`, `reflectionPuddles`, 2026-09-25; pzopt.Ssr)
+
+Write-up: `docs/findings-reflections-2026-09-25.md`. Off by default (a change of the picture).
+
+### zombie.iso.fboRenderChunk.FBORenderCell
+- Right before the chunk composite (next to `PixelLight.beforeComposite`), `Ssr.beforeComposite(playerIndex,
+  onScreenChunks)`: the water / puddle square map of the on-screen chunks and the frame's scatter setup (a GenericDrawer).
+  Right after the composite, `Ssr.afterComposite()` (dev timing only).
+- Around the puddles' and the water's draw: `Ssr.devDump` (dev frame dump, `devSsrDumpAt`), `Ssr.beforeWater` (this frame's
+  camera for the water shader) and `Ssr.afterWater` (the moving objects' scatter for the next frame, the world textures off
+  their units).
+- `renderPlayer` and `pzoptRenderOnScreenObject`: `Ssr.addMoving` puts a character, animal or vehicle standing near water
+  or a puddle into the frame's moving-object scatter. Nothing else changes.
+
+### zombie.core.opengl.ShaderUnit
+- The source handed to `glShaderSource` passes through `Ssr.patchShader` after the HDR and pixel-light patches: the water
+  shaders get the reflection lookup at the end of `mainImage`, the puddles' common unit gets it where the reflective colour
+  is taken, the chunk composite programs (stock and pixelLight's) get the scatter after their own `main`. Every patch is
+  test-compiled; a unit that does not compile stays as it came.
+
+### zombie.iso.WaterShader, zombie.iso.PuddlesShader
+- `updateWaterParams` / `updatePuddlesParams`: `Ssr.surfaceUniforms()` / `Ssr.puddleUniforms(z)` after the HDR glint
+  uniforms (the world colour + depth on units 13 / 14, the camera mapping, the hash on image unit 6, the tile map on 5).
+
+### zombie.viewCone.ChunkRenderShader
+- `startRenderThread`: `Ssr.chunkDraw(texd)` after `PixelLight.chunkDraw`: the scatter's uniforms once per program per
+  frame, then only its on / off switch per chunk texture (on for textures with water within reflection reach).
+
+### pzopt.FogPass.sceneDepthAsTexture
+- The world framebuffer's depth becomes a texture also when `reflections` is on (the water reads it in place).
+
+### pzopt.HdrGlint
+- `glintOnlyNow()`: the water / puddle draw of the glint-only pass skips the reflection lookups.

@@ -1602,6 +1602,7 @@ public final class FBORenderCell {
       this.pzoptFlushTreeAppends(playerIndex, Core.getInstance().getZoom(playerIndex)); // pzopt: treeAppend, before the textures are composited
       pzopt.PixelLight.bakeEnd(); // pzopt: pixelLight, no square stays white past the bakes
       pzopt.ChunkAo.flush(playerIndex); // pzopt: ambient occlusion, this frame's budget of AO computes, before the textures are composited
+      pzopt.Ssr.beforeComposite(playerIndex, this.perPlayerData[playerIndex].onScreenChunks); // pzopt: reflections, the water square map and the scatter's frame, ahead of the chunk composite
       pzopt.PixelLight.beforeComposite(playerIndex, this.perPlayerData[playerIndex].onScreenChunks); // pzopt: pixelLight, the lattice uploads and the camera, ahead of the chunk composite that lights each pixel
       pzopt.GpuSections.begin("composite"); /* pzopt: GPU section: chunk textures into the combined FBO and onto the screen */
       if (pzopt.Config.COMPOSITE_SHADER_RUN && pzopt.Overrides.enabled() && !DebugOptions.instance.fboRenderChunk.combinedFbo.getValue()
@@ -1611,6 +1612,7 @@ public final class FBORenderCell {
          FBORenderChunkManager.instance.endFrame();
       } // pzopt
       pzopt.GpuSections.end("composite");
+      pzopt.Ssr.afterComposite(); // pzopt: reflections, dev timing of the composite with its scatter
       pzopt.AmbientOcclusion.queue(playerIndex); // pzopt: ambient occlusion on the static world, before anything else is drawn over it
       pzopt.PixelLight.afterComposite(playerIndex); // pzopt: pixelLight, the per-pixel light pass (pass mode) and the dev dumps, before anything else is drawn over the static world
       pzopt.CapsuleShadow.queue(playerIndex); // pzopt: sunShadows, the characters' sun shadows onto the static world (they add themselves below)
@@ -1637,7 +1639,9 @@ public final class FBORenderCell {
          AbstractPerformanceProfileProbe var29 = puddles.profile();
 
          try {
+            pzopt.Ssr.devDump(playerIndex, "puddles", false); // pzopt: reflections, dev frame dump
             pzopt.GpuSections.begin("puddles"); /* pzopt: GPU section */ this.renderPuddles(playerIndex); pzopt.GpuSections.end("puddles");
+            pzopt.Ssr.devDump(playerIndex, "puddles", true); // pzopt: reflections, dev frame dump
          } catch (Throwable var27) {
             if (var29 != null) {
                try {
@@ -1664,7 +1668,11 @@ public final class FBORenderCell {
       AbstractPerformanceProfileProbe var30 = water.profile();
 
       try {
+         pzopt.Ssr.devDump(playerIndex, "water", false); // pzopt: reflections, dev frame dump
+         pzopt.Ssr.beforeWater(playerIndex); // pzopt: reflections, this frame's camera for the water shader
          pzopt.GpuSections.begin("water"); /* pzopt: GPU section */ this.renderWater(playerIndex); pzopt.GpuSections.end("water");
+         pzopt.Ssr.afterWater(); // pzopt: reflections
+         pzopt.Ssr.devDump(playerIndex, "water", true); // pzopt: reflections, dev frame dump
          if (pzopt.HdrGlint.queueGlintOnly()) { // pzopt: HDR output, water + puddle glints after everything that can stand on them
             this.pzoptWaterOnly = true; // pzopt: HDR output, only the water shader draws in the glint-only pass
             this.renderWater(playerIndex); // pzopt: HDR output
@@ -6383,6 +6391,7 @@ public final class FBORenderCell {
                   if (FBORenderCutaways.getInstance().shouldRenderBuildingSquare(playerIndex, player.getCurrentSquare())) {
                      if (DebugOptions.instance.terrain.renderTiles.shadows.getValue()) {
                         pzopt.CapsuleShadow.add(player); // pzopt: sunShadows, the player's body in this frame's capsule shadow pass
+                        pzopt.Ssr.addMoving(player); // pzopt: reflections, the player near water in the frame's moving scatter
                         player.renderShadow(player.getX(), player.getY(), player.getZ());
                      }
 
@@ -6457,6 +6466,7 @@ public final class FBORenderCell {
     */
    private void pzoptRenderOnScreenObject(IsoMovingObject isoMovingObject, int playerIndex) {
       IsoGridSquare square = isoMovingObject.getCurrentSquare();
+      pzopt.Ssr.addMoving(isoMovingObject); // pzopt: reflections, a moving object near water joins the frame's moving scatter
       // pzopt: charDrawPrep. A zombie whose draw data the pre-pass built passed these two square tests on the game
       // thread this frame already (CharDraw.start, nothing changed them since), so they are not asked again.
       boolean pzoptPrepared = isoMovingObject.getClass() == IsoZombie.class

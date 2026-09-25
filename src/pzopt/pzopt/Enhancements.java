@@ -14,6 +14,7 @@ package pzopt;
  *   <li>ambientOcclusion, aoScalePct, aoRadiusPct, the four aoStrength*Pct: {@link ChunkAo#reconfigure} (every loaded
  *       chunk texture bakes again with the new AO, or without it); sunShadows the same, sunShadowStrengthPct and
  *       sunShadowSoftnessPct through {@link SunShadow#update} (the kept shadows compute again, no re-bake).</li>
+ *   <li>reflections, reflectionStrengthPct, reflectionPuddles: read every frame by {@link Ssr}.</li>
  * </ul>
  */
 final class Enhancements {
@@ -23,13 +24,13 @@ final class Enhancements {
    /** Is this key one of the Enhancements tab's (as opposed to the Profiler tab's overlay keys)? */
    static boolean owns(String key) {
       return key.startsWith("upscaler") || key.startsWith("dlss") || key.startsWith("fsr") || key.startsWith("hdr")
-         || key.equals("ambientOcclusion") || key.startsWith("ao") || key.startsWith("sunShadow");
+         || key.equals("ambientOcclusion") || key.startsWith("ao") || key.startsWith("sunShadow") || key.startsWith("reflection");
    }
 
    /** Game thread, after Config.reloadLive(key) returned true. */
    static void apply(String key) {
       switch (key) {
-         case "fsrSharpnessPct", "upscalerObjectMv", "dlssWaterCurrent", "dlssWaterHistoryPct" -> {
+         case "fsrSharpnessPct", "upscalerObjectMv", "dlssWaterCurrent", "dlssWaterHistoryPct", "reflections", "reflectionStrengthPct", "reflectionPuddles" -> {
             // read every frame
          }
          case "upscaler", "upscalerQuality", "upscalerScalePct", "dlssPreset", "dlssOutputPct", "dlssOutputFilter", "dlssSharpen" ->

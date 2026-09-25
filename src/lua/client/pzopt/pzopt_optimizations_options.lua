@@ -666,6 +666,18 @@ local ENHANCEMENT_SECTIONS = {
         },
     },
     {
+        title = "Reflections (the scene mirrored in rivers, lakes and puddles)", clip = "hdr",
+        entries = {
+            { key = "reflections", label = "Reflections",
+              tip = "Buildings, fences, trees, lamp posts, cars and characters are mirrored in rivers, lakes and puddles, rippled by the waves and the rain, sharp where they meet the water and softer further out, stronger at grazing angles of the waves. Every surface picture the game already draws writes itself where its mirror image lands, so the water only looks up one value: nothing extra is drawn where there is no water or puddle on screen. Characters' reflections are one frame behind. Windows and Linux (not on macOS, OpenGL 2.1). Turning it on applies on the next launch (the game's water and chunk shaders are only patched when it starts with reflections on; off, they stay exactly the game's own)." },
+            { key = "reflectionStrengthPct", label = "Reflections: strength (%)",
+              choices = { "25", "45", "70", "100" }, note = { ["45"] = "default" },
+              tip = "How strongly the water mirrors the scene. Real water seen from the game's camera angle reflects little (a few percent, more on the side of a wave); higher is more of a mirror." },
+            { key = "reflectionPuddles", label = "Reflections: in puddles",
+              tip = "Puddles mirror the scene too once the rain has made them big enough (the rain's rings blur them)." },
+        },
+    },
+    {
         title = "Per-pixel lighting (smooth light, torch and headlight beams drawn per pixel)", clip = "torch",
         entries = {
             { key = "pixelLight", label = "Per-pixel lighting",
@@ -697,7 +709,10 @@ local ENHANCEMENT_SECTIONS = {
 local NEXT_LAUNCH_ONLY = { hdr = true, hdrAuto = true,
     -- per-pixel lighting: read once at start-up (the chunk composite shader is patched when the game loads it)
     pixelLight = true, pplAnalytic = true, pplPointLights = true, pplNormals = true, pplWrapPct = true, pplSmooth = true,
-    pplWetSpecular = true, pplSpecPct = true, pplShadows = true }
+    pplWetSpecular = true, pplSpecPct = true, pplShadows = true,
+    -- reflections: the water, puddle and chunk composite shaders are patched when the game loads them (only then);
+    -- strength and puddles apply at once
+    reflections = true }
 for _, section in ipairs(ENHANCEMENT_SECTIONS) do
     for _, entry in ipairs(section.entries) do
         entry.live = not NEXT_LAUNCH_ONLY[entry.key]
@@ -1099,6 +1114,7 @@ local EFFECTS = {
     fogPass = { gpu = -3, render = -2, cpu = -1, vram = 1 },
     ambientOcclusion = { gpu = 1, vram = 1 },
     sunShadows = { gpu = 1, vram = 1 },
+    reflections = { gpu = 1, vram = 1 },
     pixelLight = { cpu = -1, gpu = 1, vram = 1 },
     pplPointLights = { gpu = 1 },
     pplShadows = { gpu = 2 },

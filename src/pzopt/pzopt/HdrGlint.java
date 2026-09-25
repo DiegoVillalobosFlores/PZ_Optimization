@@ -138,6 +138,11 @@ public final class HdrGlint {
    };
 
    private static boolean glintOnly;
+
+   /** Render thread: is the water / puddle draw now the glint-only pass (Ssr skips its lookups there)? */
+   static boolean glintOnlyNow() {
+      return glintOnly;
+   }
    /** the unit the surface shaders read the world colour from in the glint-only pass (free in the water / puddle shaders) */
    static final int NOW_UNIT = 8;
    private static final float[] nowInv = new float[2];

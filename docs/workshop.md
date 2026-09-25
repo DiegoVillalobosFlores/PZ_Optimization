@@ -182,6 +182,12 @@ The per-pixel lighting card `31` lost its "New!" heading (its image stays).
 `cs-card-horde`), labelled from the console's toggle lines; 7 fps, temporally denoised (8.4 MB); the table: sun shadows,
 characters' and cars' shadows, torch / headlight shadows, the GPU cost and the p99 of the capped 120 km/h drive. The
 texture-compression card `32` lost its "New!" heading (its image stays).
+`34` the "New! Faster local updates" card (`harness/updater-fast-card-gif.py`; 2026-09-26, the near-instant updater,
+`docs/findings-updater-2026-09-26.md`): no recording behind it; the left half replays pressing Update now in real time
+from the times measured on the MacBook (the previous updater's 2,164 ms download-and-unpack against this release's 4.7 ms
+write of the prefetched files, then Restart game), drawn as two copies of the update dialog; 20 fps, 0.19 MB; the table:
+click to installed on the Mac and the desktop, bytes per update, the check, the Workshop copy (issue #16). The
+Let There Be Light card `33` lost its "New!" heading (its image stays).
 `description.txt` embeds them with `[img]` from the raw GitHub URL of `master`,
 so they render only after the folder is pushed. The staged page carries da.gd short links instead (2026-09-24,
 `scripts/workshop-shorten.py`, cache `docs/workshop/short-urls.txt`, ~80 characters saved per image; da.gd is the one

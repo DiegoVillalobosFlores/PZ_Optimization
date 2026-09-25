@@ -1613,6 +1613,7 @@ public final class FBORenderCell {
       pzopt.GpuSections.end("composite");
       pzopt.AmbientOcclusion.queue(playerIndex); // pzopt: ambient occlusion on the static world, before anything else is drawn over it
       pzopt.PixelLight.afterComposite(playerIndex); // pzopt: pixelLight, the per-pixel light pass (pass mode) and the dev dumps, before anything else is drawn over the static world
+      pzopt.CapsuleShadow.queue(playerIndex); // pzopt: sunShadows, the characters' sun shadows onto the static world (they add themselves below)
       FBORenderShadows.getInstance().clear();
       boolean pzoptFloorOnly = pzopt.ResumeShot.noMoving; // pzopt: resumeShot's exit capture (below "full"): no players, shadows, corpses
       if (!pzoptFloorOnly) {
@@ -6381,6 +6382,7 @@ public final class FBORenderCell {
                if (player.getCurrentSquare().getLightInfo(playerIndex) != null) {
                   if (FBORenderCutaways.getInstance().shouldRenderBuildingSquare(playerIndex, player.getCurrentSquare())) {
                      if (DebugOptions.instance.terrain.renderTiles.shadows.getValue()) {
+                        pzopt.CapsuleShadow.add(player); // pzopt: sunShadows, the player's body in this frame's capsule shadow pass
                         player.renderShadow(player.getX(), player.getY(), player.getZ());
                      }
 
@@ -6466,10 +6468,14 @@ public final class FBORenderCell {
                if (chr != null && chr.getCurrentSquare() != null && chr.getCurrentSquare().HasStairs() && chr.isRagdoll()) {
                   boolean vehicle = true;
                } else if (chr != null && !pzoptShadowIsNoOp(chr)) { // pzopt: charDrawPrep, the culled atlas zombies' call returns before drawing
+                  pzopt.CapsuleShadow.add(chr); // pzopt: sunShadows, this character's body in the frame's capsule shadow pass
                   chr.renderShadow(isoMovingObject.getX(), isoMovingObject.getY(), isoMovingObject.getZ());
+               } else if (chr != null) { // pzopt: sunShadows, an atlas zombie (no model, no stock shadow): one upright capsule
+                  pzopt.CapsuleShadow.addAtlas(chr); // pzopt
                }
 
                if (isoMovingObject instanceof BaseVehicle vehicle) {
+                  pzopt.CapsuleShadow.addVehicle(vehicle); // pzopt: sunShadows, the vehicle's body in the frame's capsule shadow pass
                   vehicle.renderShadow();
                }
             }

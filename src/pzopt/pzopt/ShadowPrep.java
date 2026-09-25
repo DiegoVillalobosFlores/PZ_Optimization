@@ -105,6 +105,28 @@ public final class ShadowPrep {
       return ((long)Float.floatToRawIntBits(fm) << 32) | (Float.floatToRawIntBits(bm) & 0xffffffffL);
    }
 
+   /**
+    * sunShadows (pzopt.CapsuleShadow): the positions of {@code bones} (skinning bone indices, -1 = absent) relative to the
+    * character, in the capsule pass's metric world space (x, y in squares; z up in squares of height: a level is
+    * sqrt(6) = 2.449 of them), three floats each. Model units are 1.5 squares (boneToWorld's x, y factor; its z factor
+    * 0.61237 = 1.5 / sqrt(6) gives levels). Returns false when a bone is out of range.
+    */
+   public static boolean capsulePoints(AnimationPlayer player, int[] bones, float[] out) {
+      Vector3 v = SCRATCH.get().vector3;
+      int count = player.getModelTransformsCount();
+      for (int i = 0; i < bones.length; i++) {
+         int b = bones[i];
+         if (b < 0 || b >= count) {
+            return false;
+         }
+         boneToWorld(player, b, v);
+         out[i * 3] = v.x;
+         out[i * 3 + 1] = v.y;
+         out[i * 3 + 2] = v.z * 2.4494897F;
+      }
+      return true;
+   }
+
    public static float fm(long packed) {
       return Float.intBitsToFloat((int)(packed >>> 32));
    }

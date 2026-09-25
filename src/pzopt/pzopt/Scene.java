@@ -248,6 +248,54 @@ public final class Scene {
       }
    }
 
+   private static int crowd = -1;
+   private static long crowdAtNs;
+
+   /**
+    * crowd=N (2026-09-25, the sun shadow rig): N zombies spawned once, 3 s after the first tick, on dry outdoor squares
+    * 4-14 squares around the player (who is a ghost in bench runs: they stand and wander, a steady crowd on screen).
+    */
+   private static void crowdTick(IsoPlayer p, long nowNs) {
+      if (crowd < 0) {
+         crowd = Integer.parseInt(HarnessFlags.get("crowd", "0").trim());
+         crowdAtNs = nowNs + 3_000_000_000L;
+      }
+      if (crowd <= 0 || nowNs < crowdAtNs) {
+         return;
+      }
+      int want = crowd;
+      crowd = 0;
+      // the crowd must not end the run: cs-shade1 / cs-shade2 (2026-09-25) died to it on foot (setGodMod and the cheat flag
+      // leave the player mortal outside debug mode); the zombies are made useless below
+      p.getCheats().set(zombie.characters.CheatType.GOD_MODE, true);
+      p.setInvisible(true, true);
+      zombie.iso.IsoCell cell = zombie.iso.IsoWorld.instance.currentCell;
+      java.util.ArrayList<zombie.iso.IsoGridSquare> ground = new java.util.ArrayList<>();
+      int px = (int)Math.floor(p.getX()), py = (int)Math.floor(p.getY());
+      for (int y = py - 14; y <= py + 14; y++) {
+         for (int x = px - 14; x <= px + 14; x++) {
+            int d2 = (x - px) * (x - px) + (y - py) * (y - py);
+            zombie.iso.IsoGridSquare sq = cell.getGridSquare(x, y, 0);
+            if (d2 >= 16 && d2 <= 196 && sq != null && sq.isOutside() && sq.isFree(false) && !sq.isWaterSquare()) {
+               ground.add(sq);
+            }
+         }
+      }
+      java.util.Collections.shuffle(ground, new java.util.Random(42));
+      int spawned = 0;
+      for (int i = 0; i < ground.size() && spawned < want; i++) {
+         zombie.iso.IsoGridSquare sq = ground.get(i);
+         java.util.ArrayList<zombie.characters.IsoZombie> list = zombie.Lua.LuaManager.GlobalObject.addZombiesInOutfit(sq.x, sq.y, 0, 1, null, 50);
+         if (list != null) {
+            for (zombie.characters.IsoZombie z : list) {
+               z.setUseless(true); // never targets anyone (IsoZombie spotted / RespondToSound): stands and idles, still animated
+            }
+            spawned += list.size();
+         }
+      }
+      Log.info("harness: crowd: " + spawned + " zombies spawned around " + px + "," + py + " (" + ground.size() + " outdoor squares)");
+   }
+
    /** Per-frame upkeep while the run is live: keep the overrides pinned and fire the scheduled lightning. */
    static void tick(IsoPlayer p, long nowNs) {
       if (headlights && p.getVehicle() != null && p.getVehicle().hasHeadlights() && !p.getVehicle().getHeadlightsOn()) {
@@ -259,6 +307,7 @@ public final class Scene {
       Showcase.tick(p, nowNs); // showcase=horde: aim, fire, keep the lights on
       Explore.tick(p, nowNs); // explore=restaurant: walk, look around
       ThumpRig.tick(p, nowNs); // thump=N: zombies thumping a door off-screen (the thump-burst repro)
+      crowdTick(p, nowNs); // crowd=N: a crowd around the player (the capsule shadow rig)
       if (zombiesOff) {
          removeZombies();
       }

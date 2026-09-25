@@ -3756,3 +3756,25 @@ buffer; the render thread issues a few GL calls a texture.
   levels, `pzopt.TexCompress.upload` creates them with `glCompressedTexImage2D` from the worker's blocks, from the staging
   buffer through `pzopt.TexBcGpu`, or by copying the levels to the GPU encoder; without S3TC, or with
   `texCompress=driver`, the stock path runs. The memory counter adds the RGBA size as stock does.
+## Soft sun shadows (`sunShadows`, `sunShadow*`, 2026-09-25; pzopt.SunShadow, pzopt.CapsuleShadow, the sun term in pzopt.ChunkAo)
+
+Write-up: `docs/findings-contact-shadows-2026-09-25.md`. Off by default (a change of the picture).
+
+### zombie.iso.fboRenderChunk.FBORenderCell
+- After the chunk composite (`PixelLight.afterComposite`), `CapsuleShadow.queue(playerIndex)` queues this frame's
+  capsule shadow pass (a GenericDrawer placed before every character draw).
+- `renderPlayer` and `pzoptRenderOnScreenObject`: right before a character's stock `renderShadow`, `CapsuleShadow.add`
+  puts its bone capsules into the pass; before a vehicle's, `CapsuleShadow.addVehicle`; a zombie drawn as an atlas
+  sprite (whose stock shadow call charDrawPrep skips) gets `CapsuleShadow.addAtlas` (one upright capsule). Nothing else
+  changes.
+
+### zombie.core.skinnedmodel.animation.AnimationPlayer
+- `pzoptPrecomputeShadow` (the bone worker, shadowPrep): when `CapsuleShadow.wanted()`, the fifteen capsule end points
+  (`ShadowPrep.capsulePoints`, stock's boneToWorld arithmetic) into `pzoptCapsules`, read by the game thread through
+  `pzoptCapsules()` (joins the batch like `pzoptShadowParams`); `updateInternal` invalidates them with the ellipse pair.
+  Two public fields cache the bone indices per skinning data.
+
+### zombie.core.skinnedmodel.model.ModelInstance (PlayerData.updateLights)
+- After the target ambient is taken from the square, it is multiplied by `SunShadow.characterFactor(character)`: 1 in
+  the sun, indoors, at night; 1 - strength for a character in the static world's sun shadow (a cached grid march from
+  its chest towards the sun). The game's own easing of the ambient smooths the change.

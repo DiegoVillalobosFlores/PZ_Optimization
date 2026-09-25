@@ -422,6 +422,16 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   (storm route, 120 km/h drive at max zoom). The per-frame screen mode (`aoMode=screen`) cost 90-140 us/frame: fixed
   per-pass cost dominates on NVIDIA (~8 us for an empty pass, `glGenerateMipmap` of a 1024 chunk texture ~65 us).
   macOS (GL 2.1 context) rejects GLSL 1.40: AO switches itself off there. Rigs: `devAoView=1`, `devAoTiming`, `devAoDumpFrame`.
+- Town drive pass (2026-09-24/25, `docs/findings-town-drive-2026-09-24.md`): Rosewood 120 km/h drive at the 240 cap,
+  stock 153 fps / p99 36 ms -> 235 fps / p99 8.2 ms / 1 %-low 122. On by default: `bakeScheduler` + `bakeBudgetAdaptive`
+  (one prioritized per-frame bake budget, `pzopt.BakeScheduler`), `occlusionGrantedOnly`, `bakeMipLevels=3`,
+  `renderChunkTopUp=32`, `persistentVboFrameSync` + `persistentVboSlots=4`, `fliesToggleFix` (new `FliesSound` override),
+  and `presentPacing=auto` now paces at a fixed refresh too (maintainer's choice: +1.7 ms step-to-screen on average for
+  frames off their slot 28 -> 11 %). Measured and off: `bakeSmooth`, `glNoSync` (`TextureID` / `TextureFBO` /
+  `DeadBodyAtlas` overrides), `bakeDeadlinePct`, `uniformCache`, `compositeShaderRun`, `seamSpread`, `occlusionRetain`.
+  Not locked at 240: game-thread bursts (tile rendering + bake preparation, chunk arrivals, lighting). Rigs:
+  `harness/frame-causes.py`, `holes.py` (black holes in the picture; a fake 239 fps run baked nothing), `jfr-windows.java`.
+  Queue runs of a worktree build need `--install opt`.
 - Open plans: `docs/plan-graphics-enhancements.md` (2026-09-25: visual features after AO, sun shadows and per-pixel lighting first), `docs/plan-game-load.md`, `docs/plan-vulkan-renderer.md`, `docs/plan-resource-use.md`,
   `docs/plan-zombie-multithread.md` (2026-09-22: the rest of the zombie simulation on all cores, phased).
   The game-thread optimization plans were dropped on 2026-09-21 at the maintainer's request.

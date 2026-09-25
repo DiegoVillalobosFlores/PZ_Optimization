@@ -221,3 +221,22 @@ across frames), or rendering decoupled from the world update.
 With `presentPacing=gpu` on the new defaults (`td-g-pace-1/2`, upscaler off, no profiler): 235.6 / 235.6 fps, p99 8.4 /
 7.9 ms, p99.9 13.7 / 15.9 ms, jitter 0.4 ms (1.3 without), 1 %-low 120 / 126 fps, frames below the cap 11.0 / 10.8 %
 (~28 % without); render thread 40 % of a core (the hold), GPU 48 %.
+
+## Release (2026-09-25): present pacing on by default, stock vs this release
+
+The maintainer took the pacing trade: `presentPacing=auto` now resolves to gpu wherever the GL has timestamp queries
+(fixed refresh included), cpu only while VRR is active, off under the macOS Metal bridge. Its cost from the pacing logs
+(`td-g-pace-*` vs `td-f-base-*` / `td-e-base-1`): the swap is held 2.95 ms on average, but without pacing the flip waits
+for the GPU anyway, so step-to-screen goes ~5.0 -> ~6.7 ms on average (+1.7), 3.5 -> ~6.1 ms at the median (+2.6), and
+the p99 is unchanged (~16-20 ms: late frames go at once). The render thread's share of a core rises 24 -> 40 % (the hold).
+
+Stock game (`--prop enabled=false`) against the release build, drive-120-south, 240 cap, upscaler off, recorded
+(`td-rel-*`; `pacing: presentPacing=auto -> auto (gpu)` in the release runs' console):
+
+| run | fps | p99 | p99.9 | 1 %-low | below cap | jitter | game thread |
+|---|---|---|---|---|---|---|---|
+| td-rel-stock-1 / 2 | 152.8 / 152.9 | 37.0 / 35.6 | 56.5 / 51.0 | 27 / 28 | 42.0 / 43.6 % | 2.6 / 2.4 | 97 % |
+| td-rel-new-1 / 2 | 235.2 / 235.4 | 8.2 / 8.2 | 13.8 / 15.8 | 122 / 121 | 11.1 / 10.6 % | 0.4 / 0.4 | 45-46 % |
+
+The Workshop card (`docs/workshop/images/30-smooth-operator-driving.gif`, `harness/smooth-card-gif.py`) plays
+td-rel-stock-1 above td-rel-new-1 at the same route second with both frame-time traces.

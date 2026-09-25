@@ -157,6 +157,12 @@ on, strengths 150 %, off) with a label naming the change in force; the table: up
 restart, DLSS switches the next frame, four AO strengths instead of one, seven before / after preview pairs. The AO card
 `27` lost its "New!" heading (its image stays). The HDR card `28` still names Options > Optimizations > HDR output in its
 footer (the section moved to the Enhancements tab); re-render it (`harness/hdr-card-gif.py`) when it next changes.
+`30` the "New! Smooth Operator - Driving" card (`harness/smooth-card-gif.py`; 2026-09-25, the town-drive pass,
+`docs/findings-town-drive-2026-09-24.md`): the left half plays the stock game (run `td-rel-stock-1`) above this release
+(`td-rel-new-1`) on the Rosewood 120 km/h drive at the same route second (the release clip matched to the stock one on
+the picture, the stock run's roughest 5 s) with both runs' frame times scrolling under them; the table: fps, 1 % low, p99,
+frames off their 240 Hz slot, game-thread load, and the delay present pacing adds (a cost row). The Enhancements card
+`29` lost its "New!" heading (its image stays).
 `description.txt` embeds them with `[img]` from the raw GitHub URL of `master`,
 so they render only after the folder is pushed. The staged page carries da.gd short links instead (2026-09-24,
 `scripts/workshop-shorten.py`, cache `docs/workshop/short-urls.txt`, ~80 characters saved per image; da.gd is the one

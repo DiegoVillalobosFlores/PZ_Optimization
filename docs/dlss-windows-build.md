@@ -1,7 +1,7 @@
 # Building the DLSS shim on Windows (`pzopt_ngx64.dll`)
 
 Written 2026-09-24 for the maintainer's Windows boot (the desktop: RTX 4090). Goal: build the Windows DLSS shim with
-MSVC, check that DLSS starts in the game, publish it as a `dlss-windows-<commit>` release so the Optimizations tab's
+MSVC, check that DLSS starts in the game, publish it as a `dlss-windows-<commit>` release so the Enhancements tab's
 **Install DLSS files** button works on Windows, and record what happened. Claude Code on Windows can follow this file
 top to bottom; every step says what success looks like.
 
@@ -78,7 +78,7 @@ cl /nologo /O2 /EHsc /std:c++17 /MT /LD /DNDEBUG /DWIN32_LEAN_AND_MEAN /DNOMINMA
    `C:\pz\PZ_Optimization\build\pzopt_ngx64.dll` and `C:\pz\dlss-sdk\lib\Windows_x86_64\rel\nvngx_dlss.dll`.
    (`pzopt.Dlss` opens `natives\pzopt_ngx64.dll` relative to the game's working folder, which is the game folder,
    and NGX finds `nvngx_dlss.dll` in the same folder.)
-3. Game > Options > Optimizations: **Upscaler** = `dlss`, **Upscaler quality** = `quality`; leave the DLSS entries at
+3. Game > Options > Enhancements: **Upscaler** = `dlss`, **Upscaler quality** = `quality`; leave the DLSS entries at
    their defaults (preset E, output 67 %, RCAS finish). Accept, quit, start the game again, load a save.
 4. `%UserProfile%\Zomboid\console.txt` must contain `[pzopt] dlss: ready, 3413x1440 -> 3413x1440 (quality, preset e, ...)`
    (the sizes follow your screen). Anything else is the reason DLSS did not start, e.g.
@@ -112,7 +112,7 @@ the button downloads it from `https://github.com/NVIDIA/DLSS/raw/v310.9.1/lib/Wi
 ## 6. Test the button on Windows
 
 1. Delete `pzopt_ngx64.dll` and `nvngx_dlss.dll` from the game's `natives` folder.
-2. Options > Optimizations: the button reads **Install DLSS files**; its tooltip says what it will download.
+2. Options > Enhancements: the button reads **Install DLSS files**; its tooltip says what it will download.
    (`DLSS files: not available here` = the NVIDIA driver or `vulkan-1.dll` was not found: the tooltip says which.)
 3. Click it: **Downloading the DLSS files N %** (about 60 MB, mostly NVIDIA's DLL), then
    **DLSS files installed: restart the game**. `console.txt`: `[pzopt] upscaler deps: installed pzopt_ngx64.dll,

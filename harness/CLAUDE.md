@@ -153,6 +153,13 @@ position and shot included, hard-linked into `<run>/save`), run B `--resume-from
 save, so Continue loads at X,Y). Submit both as queue `run` jobs, B after A. Real-save copies are a poor source: a
 player indoors, underground or at night leaves a mostly black shot (the capture is ground-level floors as last seen).
 
+`--flag live_set=<key>=<value>@<s>[,...]` (bench, 2026-09-25): at `s` seconds into the route the harness does what the
+options screen's Apply does, `UserOptions.set(key, value)`, for the live keys (Profiler and Enhancements tabs). Give the
+run its own options file (`--vmarg -Dpzopt.userOptionsFile=/tmp/<x>.ini`, the player's `~/Zomboid/pzopt/options.ini`
+stays untouched) and do not `--prop` the key (a pinned key wins over the file). Each change is a `live-<key>` mark in
+the frame log. Runs `enh-live-ao2` (AO on / floor 0 / off) and `enh-live-up2` (upscaler off → fsr1 → dlss → preset k →
+off) with `--record` are the check that nothing freezes or goes black at a switch.
+
 `--flag hold=N` (bench): after the last route leg the player stays on the end square N s before
 the run ends; `turn` keeps spinning the facing, so the camera is still while cutaways, fades and
 the obscuring set keep changing. The flicker rig (2026-09-20 evening, runs `flick-*`):

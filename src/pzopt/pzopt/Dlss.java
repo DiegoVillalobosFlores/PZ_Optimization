@@ -50,6 +50,7 @@ final class Dlss {
 
    private static boolean tried;
    private static boolean ready;
+   private static boolean featureGone; // the Enhancements tab changed the settings: the feature was released, build it at the next frame
    private static MethodHandle init, error, optimal, create, imageFd, imageBytes, semaphoreFd, evaluate, evaluateSet, destroy, gpuUs, times;
    // devDlssGaps: GL timestamps at the hand-over and after the wait, matched with the evaluation's Vulkan start / end
    private static final int GAP_RING = 16;
@@ -130,9 +131,19 @@ final class Dlss {
          return;
       }
       if (!ready && !setUp()) {
+         if (tried) {
+            RenderScale.fallback("fsr1", "dlss: not available here"); // settings changed after a failed set-up: keep resolving as fsr1
+         }
          return;
       }
       try {
+         if (featureGone) {
+            featureGone = false;
+            if (!createFeature()) {
+               return;
+            }
+            Log.info("dlss: rebuilt, " + inW + "x" + inH + " -> " + outW + "x" + outH + " (" + Config.UPSCALER_QUALITY + ", preset " + Config.DLSS_PRESET + ")");
+         }
          frame(objects);
       } catch (Throwable t) {
          RenderScale.disable("dlss frame failed: " + t);
@@ -696,6 +707,25 @@ final class Dlss {
          return 0;
       }
       return GL30.glGetFramebufferAttachmentParameteri(GL30.GL_READ_FRAMEBUFFER, GL30.GL_DEPTH_ATTACHMENT, GL30.GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
+   }
+
+   /**
+    * The upscaler settings changed on the Enhancements tab (render thread, RenderScale.afterStartFrame): the world draws
+    * into its own texture again, and the feature (preset, sharpening, quality, output size are fixed at its creation)
+    * is released; it is built again at its next frame when DLSS is still the mode, else its images and memory are freed.
+    */
+   static void reconfigure() {
+      detachDirectColor();
+      if (!ready || featureGone) {
+         return;
+      }
+      try {
+         destroy.invokeExact();
+      } catch (Throwable t) {
+         Log.warn("dlss: release failed: " + t);
+      }
+      releaseGl();
+      featureGone = true;
    }
 
    private static void releaseGl() {

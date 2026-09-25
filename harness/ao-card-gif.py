@@ -48,7 +48,7 @@ ROWS = [
 ]
 FOOTER = [
     "Left: the same frame with AO off and on (Rosewood, zoom 1, noon). Desktop, Linux, RTX 4090, 5120x2160.",
-    "Off by default (it changes the picture): Options > Optimizations > Ambient occlusion, applies on the next launch. "
+    "Off by default (it changes the picture): Options > Enhancements > Ambient occlusion, applies on the next launch. "
     "Windows and Linux; macOS runs OpenGL 2.1, where it stays off.",
     "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, docs/findings-ambient-occlusion-2026-09-24.md.",
 ]

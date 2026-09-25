@@ -19,8 +19,13 @@ import zombie.core.opengl.GLStateRenderThread;
 import zombie.core.textures.TextureDraw;
 import zombie.iso.IsoChunk;
 import zombie.iso.IsoDepthHelper;
+import zombie.iso.IsoGridSquare;
+import zombie.iso.IsoObject;
 import zombie.iso.IsoUtils;
 import zombie.iso.IsoWorld;
+import zombie.iso.SpriteDetails.IsoFlagType;
+import zombie.iso.objects.IsoTree;
+import zombie.iso.sprite.IsoSprite;
 import zombie.iso.fboRenderChunk.FBORenderChunk;
 import zombie.iso.fboRenderChunk.FBORenderLevels;
 
@@ -63,6 +68,8 @@ public final class ChunkAo {
     */
    private static final long GEOMETRY_FLAGS = 0x7FFFL & ~(32L | 1L | 1024L);
    private static final int SETTLE_FRAMES = 8;
+   /** Chunk-texture depth per unit of (x + y + 2z) within the chunk: IsoDepthHelper.calculateDepth's 0.023093667 / 16. */
+   private static final float SQUARE_DEPTH_HALF = 0.023093667F / 16.0F;
    private static final double COMPUTE_NS_ESTIMATE = 60_000.0; // a compute's GPU time with its pass overheads (desktop, 50 %)
 
    private static volatile boolean failed;
@@ -82,6 +89,41 @@ public final class ChunkAo {
 
    private ChunkAo() {
    }
+
+   /**
+    * An AO key changed on the Enhancements tab (game thread, after Config's live reload). A texture's colour has its AO
+    * multiplied in, so every loaded chunk texture bakes again (flagged as an object change: the bake budgets spread it over
+    * the next frames), computing its AO with the new settings, or none when AO is now off. The per-texture state is
+    * dropped here; the render thread drops the kept AO textures at its first job of the new generation and skips the
+    * jobs queued under the old one (a draw queued from the options screen's Apply can miss the frame's list).
+    */
+   static void reconfigure() {
+      failed = false;
+      INFOS.clear();
+      PENDING.clear();
+      VISIBLE.clear();
+      generation++;
+      zombie.iso.IsoCell cell = IsoWorld.instance.currentCell;
+      int chunks = 0;
+      if (cell != null) {
+         for (int p = 0; p < 4; p++) {
+            zombie.iso.IsoChunkMap cm = cell.getChunkMap(p);
+            if (cm == null || cm.ignore || cm.getChunks() == null) {
+               continue;
+            }
+            for (IsoChunk c : cm.getChunks()) {
+               if (c != null) {
+                  c.getRenderLevels(p).invalidateAll(FBORenderChunk.DIRTY_OBJECT_MODIFY);
+                  chunks++;
+               }
+            }
+         }
+      }
+      Log.info("chunk ao: settings applied (" + (enabled() ? "on" : "off") + "), " + chunks + " chunks bake again");
+   }
+
+   private static volatile int generation; // bumped by reconfigure (game thread); jobs carry the one they were queued in
+   private static int appliedGeneration; // render thread
 
    public static boolean enabled() {
       return Overrides.enabled() && Config.AO && "chunk".equals(Config.AO_MODE) && !failed;
@@ -337,6 +379,11 @@ public final class ChunkAo {
       int minLevel = rc.getMinLevel();
       job.ppu = AmbientOcclusion.PX_PER_UNIT * Core.tileScale * s;
       job.n = 0;
+      job.isoHalfW = rc.w * 0.5F;
+      job.isoInvSA = 1.0F / (s * 32.0F * Core.tileScale);
+      job.isoS = s;
+      job.isoTop = FBORenderChunk.PIXELS_PER_LEVEL * (rc.getTopLevel() - minLevel + 1) + FBORenderLevels.extraHeightForJumboTrees(minLevel, rc.getTopLevel());
+      job.vegetation = vegetationMask(job.veg, c, minLevel, rc.getTopLevel());
       job.addSource(rc.depth.getID(), 0.0F, 0.0F, rc.w, rc.h, 0.0F);
       float ox = originX(c, minLevel, rc.w, s);
       float oy = originY(c, minLevel, rc.getTopLevel());
@@ -471,6 +518,71 @@ public final class ChunkAo {
       return mask;
    }
 
+   /** The vegetation mask covers the chunk and this many squares around it (neighbours' tree crowns reach in). */
+   private static final int VEG_MARGIN = 4;
+   private static final int VEG_SIDE = 8 + 2 * VEG_MARGIN; // 16: 256 bits, 8 ints a plane
+   private static final int TREE_REACH = 3; // a baked tree's crown spans up to 7 squares along its screen row
+
+   /**
+    * aoStrengthVegetationPct: which squares around the chunk hold vegetation, as bits (row-major, 16 x 16 from VEG_MARGIN
+    * squares before the chunk's corner): planes 0-2 for the texture's first three levels (bushes, grass, flowers: sprites
+    * flagged isBush / canBeRemoved / vegitation), plane 3 for tree crowns at any height (the tree's square and the squares
+    * its crown covers along its screen row, x + k, y - k). The kernel reconstructs each "object" pixel's square from its
+    * depth and texture position and looks it up. Nothing to build (false) when vegetation and objects share a strength.
+    */
+   private static boolean vegetationMask(int[] veg, IsoChunk c, int minLevel, int topLevel) {
+      java.util.Arrays.fill(veg, 0);
+      if (Config.AO_STRENGTH_VEGETATION_PCT == Config.AO_STRENGTH_OBJECT_PCT) {
+         return false;
+      }
+      zombie.iso.IsoCell cell = IsoWorld.instance.currentCell;
+      if (cell == null) {
+         return false;
+      }
+      int x0 = c.wx * 8 - VEG_MARGIN;
+      int y0 = c.wy * 8 - VEG_MARGIN;
+      boolean any = false;
+      for (int z = minLevel; z <= topLevel; z++) {
+         int plane = Math.min(2, z - minLevel);
+         for (int y = y0 - TREE_REACH; y < y0 + VEG_SIDE + TREE_REACH; y++) {
+            for (int x = x0 - TREE_REACH; x < x0 + VEG_SIDE + TREE_REACH; x++) {
+               IsoGridSquare sq = cell.getGridSquare(x, y, z);
+               if (sq == null) {
+                  continue;
+               }
+               IsoObject[] objects = (IsoObject[])sq.getObjects().getElements();
+               int count = sq.getObjects().size();
+               for (int i = 0; i < count; i++) {
+                  IsoObject o = objects[i];
+                  if (o instanceof IsoTree) {
+                     for (int k = -TREE_REACH; k <= TREE_REACH; k++) {
+                        any |= markVegetation(veg, 3, x + k - x0, y - k - y0);
+                        any |= markVegetation(veg, 3, x + k + 1 - x0, y - k - y0);
+                     }
+                  } else if (isVegetation(o.getSprite())) {
+                     any |= markVegetation(veg, plane, x - x0, y - y0);
+                  }
+               }
+            }
+         }
+      }
+      return any;
+   }
+
+   private static boolean isVegetation(IsoSprite sprite) {
+      return sprite != null && !sprite.solidfloor
+         && (sprite.isBush || sprite.canBeRemoved || sprite.getProperties().has(IsoFlagType.vegitation));
+   }
+
+   private static boolean markVegetation(int[] veg, int plane, int lx, int ly) {
+      if (lx < 0 || ly < 0 || lx >= VEG_SIDE || ly >= VEG_SIDE) {
+         return false;
+      }
+      int bit = ly * VEG_SIDE + lx;
+      veg[plane * 8 + (bit >> 5)] |= 1 << (bit & 31);
+      return true;
+   }
+
    private static int slot(int dx, int dy) {
       return 1 << ((dy + 1) * 3 + dx + 1);
    }
@@ -491,10 +603,15 @@ public final class ChunkAo {
    private static final ArrayDeque<Job> POOL = new ArrayDeque<>();
 
    private static Job obtain() {
+      Job j;
       synchronized (POOL) {
-         Job j = POOL.poll();
-         return j != null ? j : new Job();
+         j = POOL.poll();
       }
+      if (j == null) {
+         j = new Job();
+      }
+      j.generation = generation;
+      return j;
    }
 
    /** A multiply inside a bake, or a compute with its context sources (index 0 = the texture itself). */
@@ -503,6 +620,7 @@ public final class ChunkAo {
       static final int COMPUTE = 1;
       static final int COMPUTE_IN_BAKE = 2; // inside the bake: the colour was just drawn, so compute and multiply, no ratio
       int kind;
+      int generation; // ChunkAo.generation when it was queued: a job of older settings is skipped
       boolean fresh;
       int index;
       long key;
@@ -520,6 +638,12 @@ public final class ChunkAo {
       final int[] srcW = new int[9];
       final int[] srcH = new int[9];
       final float[] srcDepth = new float[9]; // added to the source's depth to put it in this texture's depth
+      final int[] veg = new int[32]; // vegetation squares, 4 planes of 16 x 16 bits (vegetationMask)
+      boolean vegetation; // the mask has a square set
+      float isoHalfW; // texels from the texture's left edge to the chunk corner's screen x
+      float isoInvSA; // units of (x - y) per texel
+      float isoS; // texels per world pixel
+      float isoTop; // world pixels from the texture's top edge to the chunk corner at the lowest level
 
       void addSource(int tex, float x, float y, int sw, int sh, float depth) {
          this.srcTex[this.n] = tex;
@@ -534,6 +658,13 @@ public final class ChunkAo {
       @Override
       public void render() {
          try {
+            if (this.generation != ChunkAo.generation) {
+               return; // queued before the AO settings changed: its texture bakes again under the new ones
+            }
+            if (appliedGeneration != ChunkAo.generation) {
+               appliedGeneration = ChunkAo.generation;
+               GL.clear(); // the kept AO of the old settings
+            }
             if (this.kind == MULTIPLY) {
                GL.multiply(this);
             } else { // COMPUTE, COMPUTE_IN_BAKE
@@ -598,7 +729,7 @@ public final class ChunkAo {
       private int rawW;
       private int rawH;
       private final int[] viewport = new int[4];
-      private final int[] uAo = new int[5];
+      private final int[] uAo = new int[9];
       private final int[] uBlur = new int[2];
       private final int[] uMul = new int[2];
       private final int[] uRatio = new int[4];
@@ -685,7 +816,7 @@ public final class ChunkAo {
          GL11.glViewport(0, 0, job.w, job.h);
          GL20.glUseProgram(this.mulProgram);
          GL20.glUniform1i(this.uMul[0], 0);
-         GL20.glUniform4f(this.uMul[1], sc / aw, sc / ah, strength(), Config.DEV_AO_VIEW);
+         GL20.glUniform4f(this.uMul[1], sc / aw, sc / ah, 1.0F, Config.DEV_AO_VIEW);
          GL11.glBindTexture(GL11.GL_TEXTURE_2D, e.tex);
          GL11.glEnable(GL11.GL_BLEND);
          if (Config.DEV_AO_VIEW > 0) {
@@ -712,8 +843,8 @@ public final class ChunkAo {
          multiplied++;
       }
 
-      private static float strength() {
-         return Math.max(0.0F, Config.AO_STRENGTH_PCT / 100.0F);
+      private static float strength(int pct) {
+         return Math.max(0.0F, pct / 100.0F);
       }
 
       /** Outside the bakes: the texture's AO from its context, applied onto its colour as new / old, then kept. */
@@ -769,6 +900,14 @@ public final class ChunkAo {
          float radius = Math.max(0.05F, Config.AO_RADIUS_PCT / 100.0F);
          GL20.glUniform4f(this.uAo[2], 1.0F / sc, job.ppu, Config.AO_CHUNK_FLIP ? -1.0F : 1.0F, 0.0F);
          GL20.glUniform4f(this.uAo[3], radius * job.ppu, Math.max(0.01F, Config.AO_THICKNESS_PCT / 100.0F), AmbientOcclusion.UNITS_PER_DEPTH, radius);
+         if (job.vegetation) {
+            GL30.glUniform1uiv(this.uAo[6], job.veg);
+            GL20.glUniform4f(this.uAo[7], job.isoHalfW, job.isoInvSA, job.isoS, job.isoTop);
+         }
+         GL20.glUniform4f(this.uAo[8], 16.0F * Core.tileScale, 96.0F * Core.tileScale, SQUARE_DEPTH_HALF, job.vegetation ? 1.0F : 0.0F);
+         // the strengths go into the kept AO (so the multiply / ratio passes run at 1); read per compute: the Enhancements tab changes them live
+         GL20.glUniform4f(this.uAo[5], strength(Config.AO_STRENGTH_FLOOR_PCT), strength(Config.AO_STRENGTH_WALL_PCT), strength(Config.AO_STRENGTH_OBJECT_PCT),
+            strength(Config.AO_STRENGTH_VEGETATION_PCT));
          GL11.glDrawArrays(GL11.GL_TRIANGLE_FAN, 0, 4);
          for (int i = 8; i >= 1; i--) {
             GL13.glActiveTexture(GL13.GL_TEXTURE0 + i);
@@ -811,7 +950,7 @@ public final class ChunkAo {
          GL20.glUseProgram(this.ratioProgram);
          GL20.glUniform1i(this.uRatio[0], 0);
          GL20.glUniform1i(this.uRatio[1], 1);
-         GL20.glUniform4f(this.uRatio[2], sc / aw, sc / ah, strength(), hadOld ? 1.0F : 0.0F);
+         GL20.glUniform4f(this.uRatio[2], sc / aw, sc / ah, 1.0F, hadOld ? 1.0F : 0.0F);
          GL20.glUniform4f(this.uRatio[3], direct ? 1.0F : (float)aw / this.rawW, direct ? 1.0F : (float)ah / this.rawH, Config.DEV_AO_VIEW, 0.0F);
          GL13.glActiveTexture(GL13.GL_TEXTURE1);
          GL11.glBindTexture(GL11.GL_TEXTURE_2D, e.tex);
@@ -839,7 +978,7 @@ public final class ChunkAo {
             for (int k = 1; k < levels; k++) {
                GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, job.colorTex, k);
                GL11.glViewport(0, 0, Math.max(1, job.w >> k), Math.max(1, job.h >> k));
-               GL20.glUniform4f(this.uRatio[2], sc / aw * (1 << k), sc / ah * (1 << k), strength(), hadOld ? 1.0F : 0.0F);
+               GL20.glUniform4f(this.uRatio[2], sc / aw * (1 << k), sc / ah * (1 << k), 1.0F, hadOld ? 1.0F : 0.0F);
                GL11.glDrawArrays(GL11.GL_TRIANGLE_FAN, 0, 4);
             }
             GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, 0, 0);
@@ -1064,6 +1203,10 @@ public final class ChunkAo {
          this.uAo[2] = GL20.glGetUniformLocation(this.aoProgram, "geo");
          this.uAo[3] = GL20.glGetUniformLocation(this.aoProgram, "params");
          this.uAo[4] = GL20.glGetUniformLocation(this.aoProgram, "nSrc");
+         this.uAo[5] = GL20.glGetUniformLocation(this.aoProgram, "strength");
+         this.uAo[6] = GL20.glGetUniformLocation(this.aoProgram, "veg");
+         this.uAo[7] = GL20.glGetUniformLocation(this.aoProgram, "iso0");
+         this.uAo[8] = GL20.glGetUniformLocation(this.aoProgram, "iso1");
          GL20.glUseProgram(this.aoProgram);
          for (int i = 0; i < 9; i++) {
             GL20.glUniform1i(GL20.glGetUniformLocation(this.aoProgram, "Src" + i), i); // texture unit i = source i, fixed
@@ -1113,6 +1256,10 @@ public final class ChunkAo {
       "uniform int nSrc;",
       "uniform vec4 geo;", // texture texels per AO texel, texture texels per square, row sign
       "uniform vec4 params;", // radius in texture texels, thickness in squares, squares per unit depth, radius in squares
+      "uniform vec4 strength;", // darkening strength on floors, walls, objects, vegetation (aoStrength*Pct / 100)
+      "uniform uint veg[32];", // vegetation squares: planes 0-2 = the texture's levels, 3 = tree crowns; 16 x 16 bits from 4 squares before the chunk
+      "uniform vec4 iso0;", // texels to the chunk corner's screen x, units of (x - y) per texel, texels per world pixel, world px from the top edge to the corner
+      "uniform vec4 iso1;", // world px per unit of (x + y), per level, depth per unit of (x + y + 2z), 1 = test vegetation
       "out vec4 result;",
       "const float HALF_PI = 1.5707963;",
       "const float BAYER[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);",
@@ -1137,6 +1284,21 @@ public final class ChunkAo {
       "      if (s0 < 0.99999) return s0;",
       "   }",
       "   return nSrc > 1 ? depthAt(p) : 1.0;",
+      "}",
+      // the square under a texel from its own depth (calculateDepth: k (20 - (x + y) - 2 z) within the chunk) and its screen
+      // position (x - y from the column, (x + y) 16 - z 96 world px from the row), looked up in the vegetation mask
+      "bool vegetationAt(vec2 c, float ys) {",
+      "   float u = 20.0 - texelFetch(Src0, ivec2(c), 0).r / iso1.z;",
+      "   float p = (c.x - iso0.x) * iso0.y;",
+      "   float q = (ys < 0.0 ? c.y : rect[0].w - c.y) / iso0.z - iso0.w;",
+      "   float zl = (u * iso1.x - q) / (2.0 * iso1.x + iso1.y);",
+      "   float sum = u - 2.0 * zl;",
+      "   ivec2 sq = ivec2(floor(vec2(sum + p, sum - p) * 0.5)) + 4;",
+      "   if (sq.x < 0 || sq.y < 0 || sq.x >= 16 || sq.y >= 16) return false;",
+      "   int bit = sq.y * 16 + sq.x;",
+      "   int lvl = clamp(int(floor(zl + 0.05)), 0, 2);",
+      "   uint m = veg[lvl * 8 + (bit >> 5)] | veg[24 + (bit >> 5)];",
+      "   return ((m >> uint(bit & 31)) & 1u) != 0u;",
       "}",
       "uint popc(uint v) {",
       "   v = v - ((v >> 1u) & 0x55555555u);",
@@ -1181,6 +1343,7 @@ public final class ChunkAo {
       "   const vec3 NS = vec3(-0.7071068, -0.3535534, -0.6123724);",
       "   float g = dot(N, NG), e = dot(N, NE), so = dot(N, NS);",
       "   if (g > 0.94) N = NG; else if (e > 0.94) N = NE; else if (so > 0.94) N = NS;",
+      "   float sk = g > 0.94 ? strength.x : (e > 0.94 || so > 0.94 ? strength.y : (iso1.w > 0.5 && vegetationAt(c, ys) ? strength.w : strength.z));", // floors, walls, vegetation, the rest
       "   const vec3 V = vec3(0.0, 0.0, -1.0);",
       "   float bayer = BAYER[(t.x & 3) + 4 * (t.y & 3)];",
       "   float jitter = fract(bayer * 0.618034 + 0.5 * float((t.x ^ t.y) & 1));",
@@ -1221,7 +1384,7 @@ public final class ChunkAo {
       "      vis += (1.0 - float(popc(mask)) / 32.0) * pnl;",
       "      wsum += pnl;",
       "   }",
-      "   result = vec4(wsum > 0.0 ? vis / wsum : 1.0, d, 0.0, 1.0);",
+      "   result = vec4(clamp(1.0 - (1.0 - (wsum > 0.0 ? vis / wsum : 1.0)) * sk, 0.0, 1.0), d, 0.0, 1.0);",
       "}");
 
    /** 4x4 depth-aware box over one period of the rotation pattern, into the texture's R8 AO. */

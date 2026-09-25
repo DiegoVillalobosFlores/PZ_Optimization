@@ -189,7 +189,10 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   (`src/lua/client/pzopt/pzopt_optimizations_options.lua`, Java side `pzopt.UserOptions` +
   `PerformanceSettings` forwards), saved to `~/Zomboid/pzopt/options.ini`, applied on the next
   launch; `-Dpzopt.*` and the game dir's `pzopt.properties` (harness `--prop`) still win, so runs
-  never depend on menu choices.
+  never depend on menu choices. Since 2026-09-25 upscaling, HDR output and ambient occlusion sit on their own
+  Options > Enhancements tab (between Optimizations and Profiler), each with off / on preview clips (runs `enh-*`), and
+  apply on Apply without a restart (`pzopt.Enhancements`: RenderScale / Dlss / Hdr / ChunkAo reconfigure through
+  render-thread generation counters) except `hdr` / `hdrAuto` (on Linux they pick the window). Rig: `--flag live_set=`.
   Master switch `enabled` (2026-09-20 evening): `enabled=false` folds into `Overrides.enabled()`,
   i.e. the build-mismatch stock path everywhere; tab buttons "Disable all (stock game)" /
   "Enable all (recommended defaults)". `--prop enabled=false` is a stock run without a reinstall.

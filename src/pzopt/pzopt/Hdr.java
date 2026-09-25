@@ -212,6 +212,17 @@ public final class Hdr {
 
    static Tune tune = defaults();
 
+   /**
+    * An HDR slider changed on the Enhancements tab (game thread, after Config's live reload): the next frames use it. A
+    * dev tune file (hdrTune) is read over the new defaults again.
+    */
+   static void retune() {
+      tune = defaults();
+      tuneStamp = 0L;
+      tuneCheckedMs = 0L;
+      Log.info("hdr: settings applied: " + tune);
+   }
+
    private static Tune defaults() {
       Tune t = new Tune();
       t.uiNits = Config.HDR_UI_NITS;
@@ -411,13 +422,14 @@ public final class Hdr {
          return code; // macOS: alpha-gain path (GLSL 1.20 context), the composite stays stock
       }
       String f = fileName.replace('\\', '/');
-      if ((f.endsWith("/water.frag") || f.endsWith("/water_hq.frag")) && Config.HDR_GLINT_PCT > 0) {
+      // the glint patches go in whatever hdrGlintPct says at launch: the slider applies live (0 = the glint-only pass skips)
+      if (f.endsWith("/water.frag") || f.endsWith("/water_hq.frag")) {
          return patchChecked(fileName, code, patchWater(code));
       }
-      if ((f.endsWith("/vehicle.frag") || f.endsWith("/vehicle_multiuv.frag") || f.endsWith("/vehicle_norandom_multiuv.frag")) && Config.HDR_GLINT_PCT > 0) {
+      if (f.endsWith("/vehicle.frag") || f.endsWith("/vehicle_multiuv.frag") || f.endsWith("/vehicle_norandom_multiuv.frag")) {
          return patchChecked(fileName, code, patchVehicle(code));
       }
-      if (f.endsWith("puddles_common.frag.glsl") && Config.HDR_GLINT_PCT > 0) {
+      if (f.endsWith("puddles_common.frag.glsl")) {
          return patchChecked(fileName, code, patchPuddles(code));
       }
       if (!f.endsWith("/screen.frag") || !code.contains("void main()")) {

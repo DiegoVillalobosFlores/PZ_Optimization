@@ -46,7 +46,7 @@ def text(x, y, s, size=15, color=INK, weight="normal", ha="left", va="center", f
 X0 = PAD + 48
 text(X0, 86, "New! Upscaler: FSR 1.0 and DLSS", 30, OPT, "bold")
 text(W - X0, 86, DATE, 16, MUTED, ha="right", family=MONO)
-text(X0, 134, "Options > Optimizations > Upscaling draws the world at a fraction of the screen size and scales it back up before the "
+text(X0, 134, "Options > Enhancements > Upscaling draws the world at a fraction of the screen size and scales it back up before the "
      "UI, the text, the cursor and the game's", 14, INK2)
 text(X0, 158, "own screen shader, which stay at full resolution. FSR 1.0 runs on every GPU (Windows, Linux, macOS). DLSS Super "
      "Resolution runs on RTX cards with the shim built from the", 14, INK2)
@@ -90,7 +90,7 @@ text(X0, H - PAD - 108, "DLSS 4's transformer model costs ~2.5 ms per frame at 5
      "slower than native; at 1440p and below the cost is a third or less, and it brings back", 12.5, INK2)
 text(X0, H - PAD - 84, "1-px detail (power lines, car lettering) that a 50 % spatial upscale loses. Spinning walk through Rosewood, same "
      "build: off 592 fps, FSR 1.0 50 % 802, DLSS 50 % 281, DLSS 67 % 301.", 12.5, INK2)
-text(X0, H - PAD - 60, "Options > Optimizations > Upscaling: Upscaler, Upscaler quality (67 / 58 / 50 / 33 / 100 %), Upscaler render scale of your own, "
+text(X0, H - PAD - 60, "Options > Enhancements > Upscaling: Upscaler, Upscaler quality (67 / 58 / 50 / 33 / 100 %), Upscaler render scale of your own, "
      "the AMD FSR 1.0 sharpening, the NVIDIA DLSS model preset and sharpening, the temporal motion vectors. Applies on the next launch.", 12.5, INK2)
 text(X0, H - PAD - 30, "Every number and the runs behind them: github.com/xD3I/PZ_Optimization, README \"Upscaling: FSR 1.0 and DLSS\" "
      "and docs/plan-upscalers.md, " + DATE + ".", 11.5, MUTED)

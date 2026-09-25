@@ -4,7 +4,8 @@
 --  PerformanceSettings forwards to pzopt.Config (what is in force since boot) and pzopt.UserOptions
 --  (Zomboid/pzopt/options.ini, what the next launch will read). The Optimizations tab applies on the
 --  next launch, so a change away from the boot value raises the stock "restart required" dialog; the
---  Profiler tab's keys (entry.live) apply at once when saved (pzopt.Config.reloadLive, pzopt.Overlay.reconfigure).
+--  Profiler tab's keys and the Enhancements tab's (entry.live) apply at once when saved (pzopt.Config.reloadLive, then
+--  pzopt.Overlay.reconfigure / pzopt.Enhancements.apply).
 --  A key set in the install dir's pzopt.properties or as -Dpzopt.<key> (harness runs) wins over the
 --  file; its control shows that value, is disabled, and the tooltip says what pins it.
 --  The top of the tab is the master switch (key `enabled`): off = every override takes its stock
@@ -18,12 +19,14 @@
 --  one bar per resource (game thread, render thread, other cores, GPU, VRAM, RAM, disk, load time, chunk
 --  arrival) from the EFFECTS table below: left = less work / sooner, right = more. Which clip a setting
 --  shows is its section's `clip`, overridden per key in KEY_CLIP.
---  The performance overlay and its game-thread profiler (PROFILER_SECTIONS) have their own "Profiler" tab right after
---  it, built the same way (buildSettingsPage) without the master switch and the profile buttons.
+--  Upscaling, HDR output and ambient occlusion (ENHANCEMENT_SECTIONS) have their own "Enhancements" tab right after
+--  it, and the performance overlay and its game-thread profiler (PROFILER_SECTIONS) a "Profiler" tab after that, both
+--  built the same way (buildSettingsPage) without the master switch and the profile buttons.
 -- Installed by scripts/pzopt.sh into <game dir>/media/lua/client/pzopt/ (loose game-dir Lua is
 -- loaded like any other, no mod to enable).
 
 local TAB = "Optimizations"
+local ENHANCEMENTS_TAB = "Enhancements"
 local PROFILER_TAB = "Profiler"
 local RESTART_NOTE = "Takes effect on the next launch."
 local LIVE_NOTE = "Applies as soon as you press Apply; no restart needed."
@@ -271,93 +274,6 @@ local SECTIONS = {
         },
     },
     {
-        title = "Upscaling (render the world smaller, resolve to the screen)", clip = "drive",
-        entries = {
-            { key = "upscaler", label = "Upscaler",
-              choices = { "off", "bicubic", "fsr1", "dlss", "xess" },
-              note = { off = "stock: the world renders at the screen size", bicubic = "the stock screen filter, any GPU", fsr1 = "AMD FidelityFX Super Resolution 1.0, any GPU", dlss = "NVIDIA DLSS Super Resolution (RTX; needs the shim built from the repository under natives/, not in the release); else runs as fsr1", xess = "Intel XeSS: not available yet, runs as fsr1" },
-              tip = "The world is rendered at a fraction of the screen size (see \"Upscaler quality\") and scaled back up before the UI, text and the stock screen shader, which stay at full resolution. GPU-bound scenes (fog, storms, big towns, 4K, laptops) gain roughly the pixel ratio. fsr1 is a sharp spatial upscaler that works on every GPU; dlss accumulates detail over frames on an RTX card; bicubic is the plain stretch. Applies on the next launch." },
-            { key = "upscalerQuality", label = "Upscaler quality (render size)",
-              choices = { "quality", "balanced", "performance", "ultra", "native" },
-              note = { quality = "67 % per axis (44 % of the pixels)", balanced = "58 %", performance = "50 % (a quarter of the pixels)", ultra = "33 %", native = "100 % (dlss: DLAA anti-aliasing only)" },
-              tip = "The render size per axis. Quality keeps most of the detail; performance halves the axes for a quarter of the world-pass GPU work." },
-            { key = "upscalerScalePct", label = "Upscaler render scale of your own (%)",
-              choices = { "0", "40", "50", "60", "67", "75", "85" }, note = { ["0"] = "use the quality preset" },
-              tip = "A render scale of your own in percent per axis instead of the quality preset (10-100)." },
-            { key = "fsrSharpnessPct", label = "Upscaler, AMD FSR 1.0: sharpening (%)",
-              choices = { "0", "40", "60", "80", "100" }, note = { ["0"] = "none", ["100"] = "the sharpest" },
-              tip = "The contrast-adaptive sharpening (RCAS) after the FSR 1.0 upsample; 80 is AMD's usual default." },
-            { key = "dlssPreset", label = "Upscaler, NVIDIA DLSS: model preset",
-              choices = { "e", "default", "f", "k", "j", "m", "l" },
-              note = { default = "NVIDIA's choice: the transformer models K / M / L", f = "older convolutional model: ~1.5 ms cheaper a frame at 4K, a little softer", e = "recommended: the older convolutional model, half the cost of K and no trails in this game", k = "transformer, best quality", j = "transformer, less ghosting, more flicker", m = "transformer, the performance-mode default", l = "transformer, the ultra-performance default" },
-              tip = "Which DLSS network runs. The transformer models (DLSS 4) reconstruct the most detail but cost ~2.5 ms a frame at 5120x2160 on an RTX 4090 (231 fps on the 120 km/h drive vs 377 with preset F and 619 with FSR 1.0); at 1440p and below the cost is a third or less." },
-            { key = "dlssOutputPct", label = "Upscaler, NVIDIA DLSS: output size (%)",
-              choices = { "67", "75", "0" },
-              note = { ["0"] = "the screen size: full DLSS super resolution", ["75"] = "DLSS writes 75 % of the screen, the finish below does the rest", ["67"] = "recommended: DLSS anti-aliases at the render size (quality), the finish does the upscale" },
-              tip = "DLSS costs time per pixel it writes, not per pixel it reads. Writing less than the screen and letting a cheap filter finish the upscale is what makes DLSS faster than no upscaler on a 4K screen: on an RTX 4090 at 5120x2160 in a heavy storm with fog, DLSS at quality with preset E gains +22 % at 67 % with the sharpen finish (and a sharper image than full-size DLSS with the default model), +17 % at 75 %, +10 % at the full size. At DLAA (native) the output is always the screen size." },
-            { key = "dlssOutputFilter", label = "Upscaler, NVIDIA DLSS: output finish",
-              choices = { "rcas", "bicubic", "fsr1" },
-              note = { rcas = "recommended: FSR 1.0's sharpen at the DLSS size, then the bicubic", bicubic = "the stock screen shader's bicubic, free but soft", fsr1 = "FSR 1.0 EASU + RCAS: the sharpest, ~0.2 ms a frame at 4K" },
-              tip = "How a DLSS output smaller than the screen (the size above) is brought to the screen." },
-            { key = "dlssSharpen", label = "Upscaler, NVIDIA DLSS: sharpening",
-              tip = "Asks DLSS for its mild extra sharpening pass on top of the super resolution; off is the plain reconstruction." },
-            { key = "upscalerObjectMv", label = "Upscaler, temporal: character and vehicle motion vectors",
-              tip = "The temporal upscalers get each character's and vehicle's own motion on top of the camera's, so moving zombies and cars do not ghost or smear. Off = camera motion only (an A/B)." },
-        },
-    },
-    {
-        title = "HDR output (Linux with HDR on under Wayland, macOS)", clip = "nightdrive",
-        entries = {
-            { key = "hdrAuto", label = "HDR output: automatic",
-              tip = "On by default: when the game starts on an HDR screen it is shown as HDR by itself (Linux: a Wayland desktop with HDR switched on; macOS: a display with HDR headroom, e.g. a MacBook Pro's XDR screen), on an SDR screen nothing changes. Untick it to keep the SDR picture on an HDR screen. Applies on the next launch." },
-            { key = "hdr", label = "HDR output: always on",
-              tip = "Turns HDR on even when the automatic check finds no HDR screen. The game is shown as HDR: the menus and the HUD stay at your desktop's white, lamps, torches, headlights, fires and lightning go above it up to your screen's peak. Needs an HDR screen with HDR switched on in the desktop settings; on Linux the game then runs as a native Wayland window. On a Mac the lights and lightning go above the screen's white (the other HDR settings below are Linux only for now); an XDR display (MacBook Pro 14/16, Pro Display XDR) has the most room above it. Without an HDR screen, or on Windows for now, nothing changes. Applies on the next launch." },
-            { key = "hdrLightPct", label = "HDR: how bright light sources make things (%)",
-              choices = { "0", "50", "100", "150", "200" }, note = { ["0"] = "off: the SDR picture in an HDR container", ["100"] = "recommended (default)" },
-              tip = "What makes it HDR: every square the game lights with a lamp, a torch, a headlight or a fire is shown brighter in proportion to how much light falls on it, up to the screen's peak, with its colours intact; the dark stays dark." },
-            { key = "hdrBloomPct", label = "HDR: glow around bright light (%)",
-              choices = { "0", "30", "50", "100" }, note = { ["0"] = "none", ["30"] = "default" },
-              tip = "The light the HDR highlights add also spills a little into the dark around them, the way a bright lamp glows in the eye. Costs about 0.2 ms a frame at 4K. Linux only for now." },
-            { key = "hdrSunPct", label = "HDR: sunlight (%)",
-              choices = { "0", "30", "60", "100" }, note = { ["0"] = "daylight as in the SDR game", ["60"] = "default" },
-              tip = "On a clear day the sunlit outdoors is shown brighter than the SDR picture by this much, less with the sun low or behind clouds; shade and interiors stay as they are. Linux only for now." },
-            { key = "hdrGlintPct", label = "HDR: sparkle on water and puddles (%)",
-              choices = { "0", "50", "100", "200" }, note = { ["0"] = "off (the water and puddle shaders stay stock)", ["100"] = "default" },
-              tip = "The sun glitters on rivers, lakes and puddles above the desktop's white, the sky reflects in them, and at night lamps, torches and headlights glint on the water. Linux only for now." },
-            { key = "hdrPaperPct", label = "HDR: world brightness (% of the desktop's white)",
-              choices = { "60", "70", "80", "90", "100" }, note = { ["100"] = "the same brightness as the SDR game" },
-              tip = "The brightness of the world's ordinary (unlit by lamps) surfaces relative to your desktop's white. Lower leaves more room above it for the highlights: they look brighter by contrast. Linux only for now." },
-            { key = "hdrItmPct", label = "HDR: bright pixels at night become highlights (%)",
-              choices = { "0", "25", "50", "100" }, note = { ["0"] = "off" },
-              tip = "At night, pixels that are already near white (lit windows, bright signs) are also pushed above the desktop's white. Off in daylight. Linux only for now." },
-            { key = "hdrSaturationPct", label = "HDR: extra colour (%)",
-              choices = { "0", "5", "10", "20" }, note = { ["0"] = "the game's colours" },
-              tip = "A little more colour saturation, using the wider colour range of HDR screens. Linux only for now." },
-            { key = "hdrPeakNits", label = "HDR: brightest highlight (nits)",
-              choices = { "0", "400", "600", "800", "1000", "1500" }, note = { ["0"] = "your screen's peak (what the desktop reports)" },
-              tip = "Caps the brightest highlight below what the screen can do, if the peaks are too much. Linux only (macOS gives no nits)." },
-            { key = "hdrUiNits", label = "HDR: menu and HUD white (nits)",
-              choices = { "0", "100", "200", "300", "400" }, note = { ["0"] = "your desktop's white (what the desktop reports)" },
-              tip = "The brightness of the menus and the HUD. By default the desktop's own white, so switching windows does not change brightness. Linux only (on a Mac the screen brightness sets it)." },
-        },
-    },
-    {
-        title = "Ambient occlusion (soft shading in corners, along wall bases and under furniture)", clip = "drive",
-        entries = {
-            { key = "ambientOcclusion", label = "Ambient occlusion",
-              tip = "Soft shading where surfaces meet: floors darken a little along the base of walls, in room corners, under and around furniture, fences, stairs and bushes, so buildings and objects sit on the ground instead of floating on it. Computed from the game's own depth when a chunk's picture is drawn and baked into it, so it costs nothing on frames that draw no new chunk picture and nothing while the camera moves. Characters and vehicles keep their own shadows. Windows and Linux (the macOS game runs on OpenGL 2.1, which lacks the shader features; there it stays off). Applies on the next launch." },
-            { key = "aoStrengthPct", label = "Ambient occlusion: strength (%)",
-              choices = { "50", "75", "100", "150" }, note = { ["100"] = "default" },
-              tip = "How dark the shading gets where it is strongest." },
-            { key = "aoRadiusPct", label = "Ambient occlusion: reach (% of a tile)",
-              choices = { "40", "60", "80", "100" }, note = { ["60"] = "default" },
-              tip = "How far from a wall or an object the shading reaches, in tiles. Longer reach is softer and wider." },
-            { key = "aoScalePct", label = "Ambient occlusion: detail (% of the chunk picture)",
-              choices = { "25", "50", "100" }, note = { ["50"] = "default" },
-              tip = "The resolution the shading is computed at. Lower costs less when a chunk's picture is redrawn with new objects, and is softer." },
-        },
-    },
-    {
         title = "Sprite buffers", clip = "drive",
         entries = {
             { key = "persistentVbo", label = "Persistently mapped sprite buffers",
@@ -598,6 +514,118 @@ local SECTIONS = {
     },
 }
 
+-- The Enhancements tab (2026-09-25): what changes the picture rather than the frame time: upscaling, HDR output and
+-- ambient occlusion, on a page of their own; same controls, preview and search as the Optimizations tab. They are part
+-- of the overrides, so they need the Optimizations tab's master switch on. `profiles` marks the section whose keys the
+-- Optimizations tab's profile buttons set (the low-end + FSR set picks the upscaler; HDR and AO stay as they are).
+local ENHANCEMENT_SECTIONS = {
+    {
+        title = "Upscaling (render the world smaller, resolve to the screen)", clip = "upscale", profiles = true,
+        entries = {
+            { key = "upscaler", label = "Upscaler",
+              choices = { "off", "bicubic", "fsr1", "dlss", "xess" },
+              note = { off = "stock: the world renders at the screen size", bicubic = "the stock screen filter, any GPU", fsr1 = "AMD FidelityFX Super Resolution 1.0, any GPU", dlss = "NVIDIA DLSS Super Resolution (RTX; needs the shim built from the repository under natives/, not in the release); else runs as fsr1", xess = "Intel XeSS: not available yet, runs as fsr1" },
+              tip = "The world is rendered at a fraction of the screen size (see \"Upscaler quality\") and scaled back up before the UI, text and the stock screen shader, which stay at full resolution. GPU-bound scenes (fog, storms, big towns, 4K, laptops) gain roughly the pixel ratio. fsr1 is a sharp spatial upscaler that works on every GPU; dlss accumulates detail over frames on an RTX card; bicubic is the plain stretch." },
+            { key = "upscalerQuality", label = "Upscaler quality (render size)",
+              choices = { "quality", "balanced", "performance", "ultra", "native" },
+              note = { quality = "67 % per axis (44 % of the pixels)", balanced = "58 %", performance = "50 % (a quarter of the pixels)", ultra = "33 %", native = "100 % (dlss: DLAA anti-aliasing only)" },
+              tip = "The render size per axis. Quality keeps most of the detail; performance halves the axes for a quarter of the world-pass GPU work." },
+            { key = "upscalerScalePct", label = "Upscaler render scale of your own (%)",
+              choices = { "0", "40", "50", "60", "67", "75", "85" }, note = { ["0"] = "use the quality preset" },
+              tip = "A render scale of your own in percent per axis instead of the quality preset (10-100)." },
+            { key = "fsrSharpnessPct", label = "Upscaler, AMD FSR 1.0: sharpening (%)",
+              choices = { "0", "40", "60", "80", "100" }, note = { ["0"] = "none", ["100"] = "the sharpest" },
+              tip = "The contrast-adaptive sharpening (RCAS) after the FSR 1.0 upsample; 80 is AMD's usual default." },
+            { key = "dlssPreset", label = "Upscaler, NVIDIA DLSS: model preset",
+              choices = { "e", "default", "f", "k", "j", "m", "l" },
+              note = { default = "NVIDIA's choice: the transformer models K / M / L", f = "older convolutional model: ~1.5 ms cheaper a frame at 4K, a little softer", e = "recommended: the older convolutional model, half the cost of K and no trails in this game", k = "transformer, best quality", j = "transformer, less ghosting, more flicker", m = "transformer, the performance-mode default", l = "transformer, the ultra-performance default" },
+              tip = "Which DLSS network runs. The transformer models (DLSS 4) reconstruct the most detail but cost ~2.5 ms a frame at 5120x2160 on an RTX 4090 (231 fps on the 120 km/h drive vs 377 with preset F and 619 with FSR 1.0); at 1440p and below the cost is a third or less." },
+            { key = "dlssOutputPct", label = "Upscaler, NVIDIA DLSS: output size (%)",
+              choices = { "67", "75", "0" },
+              note = { ["0"] = "the screen size: full DLSS super resolution", ["75"] = "DLSS writes 75 % of the screen, the finish below does the rest", ["67"] = "recommended: DLSS anti-aliases at the render size (quality), the finish does the upscale" },
+              tip = "DLSS costs time per pixel it writes, not per pixel it reads. Writing less than the screen and letting a cheap filter finish the upscale is what makes DLSS faster than no upscaler on a 4K screen: on an RTX 4090 at 5120x2160 in a heavy storm with fog, DLSS at quality with preset E gains +22 % at 67 % with the sharpen finish (and a sharper image than full-size DLSS with the default model), +17 % at 75 %, +10 % at the full size. At DLAA (native) the output is always the screen size." },
+            { key = "dlssOutputFilter", label = "Upscaler, NVIDIA DLSS: output finish",
+              choices = { "rcas", "bicubic", "fsr1" },
+              note = { rcas = "recommended: FSR 1.0's sharpen at the DLSS size, then the bicubic", bicubic = "the stock screen shader's bicubic, free but soft", fsr1 = "FSR 1.0 EASU + RCAS: the sharpest, ~0.2 ms a frame at 4K" },
+              tip = "How a DLSS output smaller than the screen (the size above) is brought to the screen." },
+            { key = "dlssSharpen", label = "Upscaler, NVIDIA DLSS: sharpening",
+              tip = "Asks DLSS for its mild extra sharpening pass on top of the super resolution; off is the plain reconstruction." },
+            { key = "upscalerObjectMv", label = "Upscaler, temporal: character and vehicle motion vectors",
+              tip = "The temporal upscalers get each character's and vehicle's own motion on top of the camera's, so moving zombies and cars do not ghost or smear. Off = camera motion only (an A/B)." },
+        },
+    },
+    {
+        title = "HDR output (Linux with HDR on under Wayland, macOS)", clip = "hdr",
+        entries = {
+            { key = "hdrAuto", label = "HDR output: automatic",
+              tip = "On by default: when the game starts on an HDR screen it is shown as HDR by itself (Linux: a Wayland desktop with HDR switched on; macOS: a display with HDR headroom, e.g. a MacBook Pro's XDR screen), on an SDR screen nothing changes. Untick it to keep the SDR picture on an HDR screen. Applies on the next launch." },
+            { key = "hdr", label = "HDR output: always on",
+              tip = "Turns HDR on even when the automatic check finds no HDR screen. The game is shown as HDR: the menus and the HUD stay at your desktop's white, lamps, torches, headlights, fires and lightning go above it up to your screen's peak. Needs an HDR screen with HDR switched on in the desktop settings; on Linux the game then runs as a native Wayland window. On a Mac the lights and lightning go above the screen's white (the other HDR settings below are Linux only for now); an XDR display (MacBook Pro 14/16, Pro Display XDR) has the most room above it. Without an HDR screen, or on Windows for now, nothing changes. Applies on the next launch." },
+            { key = "hdrLightPct", label = "HDR: how bright light sources make things (%)",
+              choices = { "0", "50", "100", "150", "200" }, note = { ["0"] = "off: the SDR picture in an HDR container", ["100"] = "recommended (default)" },
+              tip = "What makes it HDR: every square the game lights with a lamp, a torch, a headlight or a fire is shown brighter in proportion to how much light falls on it, up to the screen's peak, with its colours intact; the dark stays dark." },
+            { key = "hdrBloomPct", label = "HDR: glow around bright light (%)",
+              choices = { "0", "30", "50", "100" }, note = { ["0"] = "none", ["30"] = "default" },
+              tip = "The light the HDR highlights add also spills a little into the dark around them, the way a bright lamp glows in the eye. Costs about 0.2 ms a frame at 4K. Linux only for now." },
+            { key = "hdrSunPct", label = "HDR: sunlight (%)",
+              choices = { "0", "30", "60", "100" }, note = { ["0"] = "daylight as in the SDR game", ["60"] = "default" },
+              tip = "On a clear day the sunlit outdoors is shown brighter than the SDR picture by this much, less with the sun low or behind clouds; shade and interiors stay as they are. Linux only for now." },
+            { key = "hdrGlintPct", label = "HDR: sparkle on water and puddles (%)",
+              choices = { "0", "50", "100", "200" }, note = { ["0"] = "off (the water and puddle shaders stay stock)", ["100"] = "default" },
+              tip = "The sun glitters on rivers, lakes and puddles above the desktop's white, the sky reflects in them, and at night lamps, torches and headlights glint on the water. Linux only for now." },
+            { key = "hdrPaperPct", label = "HDR: world brightness (% of the desktop's white)",
+              choices = { "60", "70", "80", "90", "100" }, note = { ["100"] = "the same brightness as the SDR game" },
+              tip = "The brightness of the world's ordinary (unlit by lamps) surfaces relative to your desktop's white. Lower leaves more room above it for the highlights: they look brighter by contrast. Linux only for now." },
+            { key = "hdrItmPct", label = "HDR: bright pixels at night become highlights (%)",
+              choices = { "0", "25", "50", "100" }, note = { ["0"] = "off" },
+              tip = "At night, pixels that are already near white (lit windows, bright signs) are also pushed above the desktop's white. Off in daylight. Linux only for now." },
+            { key = "hdrSaturationPct", label = "HDR: extra colour (%)",
+              choices = { "0", "5", "10", "20" }, note = { ["0"] = "the game's colours" },
+              tip = "A little more colour saturation, using the wider colour range of HDR screens. Linux only for now." },
+            { key = "hdrPeakNits", label = "HDR: brightest highlight (nits)",
+              choices = { "0", "400", "600", "800", "1000", "1500" }, note = { ["0"] = "your screen's peak (what the desktop reports)" },
+              tip = "Caps the brightest highlight below what the screen can do, if the peaks are too much. Linux only (macOS gives no nits)." },
+            { key = "hdrUiNits", label = "HDR: menu and HUD white (nits)",
+              choices = { "0", "100", "200", "300", "400" }, note = { ["0"] = "your desktop's white (what the desktop reports)" },
+              tip = "The brightness of the menus and the HUD. By default the desktop's own white, so switching windows does not change brightness. Linux only (on a Mac the screen brightness sets it)." },
+        },
+    },
+    {
+        title = "Ambient occlusion (soft shading in corners, along wall bases and under furniture)", clip = "ao",
+        entries = {
+            { key = "ambientOcclusion", label = "Ambient occlusion",
+              tip = "Soft shading where surfaces meet: floors darken a little along the base of walls, in room corners, under and around furniture, fences, stairs and bushes, so buildings and objects sit on the ground instead of floating on it. Computed from the game's own depth when a chunk's picture is drawn and baked into it, so it costs nothing on frames that draw no new chunk picture and nothing while the camera moves. Characters and vehicles keep their own shadows. Windows and Linux (the macOS game runs on OpenGL 2.1, which lacks the shader features; there it stays off). Changing an ambient occlusion setting redraws every chunk picture over the next few frames." },
+            { key = "aoStrengthFloorPct", label = "Ambient occlusion: strength on floors (%)",
+              choices = { "0", "50", "75", "100", "150" }, note = { ["0"] = "no shading on floors", ["100"] = "default" },
+              tip = "How dark the shading gets on floors and flat ground where it is strongest: along the base of walls, in room corners, under furniture and around what stands on them. 0 leaves floors unshaded. The three strengths replace the single strength of earlier versions, whose value they take until you set them." },
+            { key = "aoStrengthWallPct", label = "Ambient occlusion: strength on walls (%)",
+              choices = { "0", "50", "75", "100", "150" }, note = { ["0"] = "no shading on walls", ["100"] = "default" },
+              tip = "How dark the shading gets on walls: where they meet the floor and each other, and behind furniture standing against them. 0 leaves walls unshaded." },
+            { key = "aoStrengthObjectPct", label = "Ambient occlusion: strength on objects (%)",
+              choices = { "0", "50", "75", "100", "150" }, note = { ["0"] = "no shading on objects", ["100"] = "default" },
+              tip = "How dark the shading gets on everything that is neither floor nor wall nor vegetation: furniture, counters, fences, stairs, crates. 0 leaves them unshaded." },
+            { key = "aoStrengthVegetationPct", label = "Ambient occlusion: strength on vegetation (%)",
+              choices = { "0", "50", "75", "100", "150" }, note = { ["0"] = "no shading on trees, bushes and grass", ["100"] = "default" },
+              tip = "How dark the shading gets on trees, bushes, tall grass and flowers themselves (the ground under them follows the floor strength). 0 leaves them unshaded, which keeps foliage bright." },
+            { key = "aoRadiusPct", label = "Ambient occlusion: reach (% of a tile)",
+              choices = { "40", "60", "80", "100" }, note = { ["60"] = "default" },
+              tip = "How far from a wall or an object the shading reaches, in tiles. Longer reach is softer and wider." },
+            { key = "aoScalePct", label = "Ambient occlusion: detail (% of the chunk picture)",
+              choices = { "25", "50", "100" }, note = { ["50"] = "default" },
+              tip = "The resolution the shading is computed at. Lower costs less when a chunk's picture is redrawn with new objects, and is softer." },
+        },
+    },
+}
+
+-- The Enhancements tab's keys apply as soon as Apply is pressed (Java: Config's live reload, pzopt.Enhancements), except
+-- the two HDR output switches: on Linux they pick the window the game is started with.
+local NEXT_LAUNCH_ONLY = { hdr = true, hdrAuto = true }
+for _, section in ipairs(ENHANCEMENT_SECTIONS) do
+    for _, entry in ipairs(section.entries) do
+        entry.live = not NEXT_LAUNCH_ONLY[entry.key]
+    end
+end
+
 -- The Profiler tab (2026-09-24): the performance overlay and the game-thread profiler it draws, on a page of their
 -- own; same controls, preview and search as the Optimizations tab.
 local PROFILER_SECTIONS = {
@@ -789,9 +817,17 @@ local CLIP_TITLES = {
     player = "Downtown Louisville horde: stock vs stock + only the player line-of-sight settings",
     zgt = "Downtown Louisville horde: every optimization on, without vs with the zombie game-thread settings (on their own over stock they gain nothing: the stock frame waits on other work)",
     grid = "Rosewood, camera spinning, uncapped, every optimization on: the vanilla chunk grid (19x19) vs 15x15",
+    -- the Enhancements tab: every optimization on in both runs, only the enhancement differs (2026-09-25, runs enh-*)
+    upscale = "Rosewood, camera spinning, uncapped, max zoom, RTX 4090 at 5120x2160: the world at the screen size vs rendered at 67 % and upscaled with FSR 1.0",
+    fsrzoom = "A furnished Rosewood house at noon, zoom 1, still camera, a 1:1 pixel crop around the player: FSR 1.0 at quality (67 %, sharpening 80) against the native picture",
+    dlss = "Rosewood, camera spinning, uncapped, max zoom, RTX 4090 at 5120x2160: the world at the screen size vs DLSS at the defaults (preset E, 67 % output, RCAS finish)",
+    dlsszoom = "A furnished Rosewood house at noon, zoom 1, still camera, a 1:1 pixel crop around the player: DLSS at the defaults against the native picture",
+    hdr = "Night, fires beside a police car with its light bar: the HDR side is tone-mapped to fit this SDR preview, so its lights look brighter, not as bright as on an HDR screen",
+    hdrday = "River shore at 15:00, clear sky, a crop of the pier and the water: the sun glitter on the water, tone-mapped to fit this SDR preview",
+    ao = "Rosewood houses at noon, walking south at zoom 1: a crop around the player, ambient occlusion off vs on",
 }
 -- Clips whose stock side is a shared GIF (one stock run for several group clips): <STOCK_FILE[clip]>-stock.gif.
-local STOCK_FILE = { zombies = "lou", player = "lou" }
+local STOCK_FILE = { zombies = "lou", player = "lou", upscale = "native", dlss = "native", fsrzoom = "nativezoom", dlsszoom = "nativezoom" }
 -- The captions over the two clips; the overlay clips are "off" / "on" rather than stock / optimized.
 local CLIP_SIDES = {
     default = { "STOCK GAME", "OPTIMIZED (every optimization on)" },
@@ -799,12 +835,27 @@ local CLIP_SIDES = {
     alone = { "STOCK GAME", "STOCK + THESE SETTINGS ONLY" },
     without = { "EVERYTHING ON EXCEPT THESE", "EVERYTHING ON" },
     grid = { "VANILLA GRID (19x19)", "15x15 GRID" },
+    upscale = { "NO UPSCALER (NATIVE)", "FSR 1.0, QUALITY" },
+    fsrzoom = { "NATIVE, 1:1 PIXELS", "FSR 1.0 QUALITY, 1:1 PIXELS" },
+    dlss = { "NO UPSCALER (NATIVE)", "NVIDIA DLSS (DEFAULTS)" },
+    dlsszoom = { "NATIVE, 1:1 PIXELS", "DLSS, 1:1 PIXELS" },
+    hdr = { "SDR (HDR OFF)", "HDR ON" },
+    hdrday = { "SDR (HDR OFF)", "HDR ON" },
+    ao = { "AMBIENT OCCLUSION OFF", "AMBIENT OCCLUSION ON" },
+}
+-- The line under the clips: what is the same in both, and what the burned-in number is (clips without one say so).
+local CLIP_NOTES = {
+    fsrzoom = ". Same save, spot and machine; the picture is the point, no counter.",
+    dlsszoom = ". Same save, spot and machine; the picture is the point, no counter.",
+    hdr = ". Same save, spot and machine; no counter.",
+    hdrday = ". Same save, spot and machine; no counter.",
+    ao = ". Same save, route and machine; no counter.",
 }
 local function clipSides(clip)
+    if CLIP_SIDES[clip] then return CLIP_SIDES[clip] end
     if string.sub(clip, 1, 2) == "ov" then return CLIP_SIDES.overlay end
     if STOCK_FILE[clip] then return CLIP_SIDES.alone end
     if clip == "zgt" then return CLIP_SIDES.without end
-    if clip == "grid" then return CLIP_SIDES.grid end
     return CLIP_SIDES.default
 end
 local KEY_CLIP = {
@@ -812,8 +863,8 @@ local KEY_CLIP = {
     puddleCacheFrames = "storm", weatherMaskIdleSkip = "storm", weatherFxScalePct = "storm", vboBatchKb = "storm",
     vboFastQuads = "storm", lightingRebakeBudget = "storm", lightingRebakeMaxFrames = "storm",
     fogPass = "fog", fogScalePct = "fog", fogMaskFrames = "fog",
-    ambientOcclusion = "drive", aoStrengthPct = "drive", aoRadiusPct = "drive", aoScalePct = "drive",
-    upscaler = "drive", upscalerQuality = "drive", upscalerScalePct = "drive", fsrSharpnessPct = "drive", upscalerObjectMv = "drive", dlssPreset = "drive", dlssSharpen = "drive", dlssOutputPct = "drive", dlssOutputFilter = "drive",
+    fsrSharpnessPct = "fsrzoom", dlssPreset = "dlss", dlssOutputPct = "dlss", dlssOutputFilter = "dlsszoom", dlssSharpen = "dlsszoom",
+    hdrSunPct = "hdrday", hdrGlintPct = "hdrday",
     lightingStrongDelta = "torch", lightingStrongBudget = "horde", lightingStrongFrameMs = "horde", lightingFlush = "torch", lightingBudget = "torch",
     audioLimiter = "horde", audioLimiterCeilingDb = "horde", audioLimiterStereoFold = "horde", soundTickHz = "horde", emitterIdleSkip = "horde", worldSoundCleanupFast = "horde", hearingHoist = "horde",
     lightSwitchCheckFrames = "horde", soundZoneCache = "horde", worldSoundFast = "horde", gridStackInterval = "horde",
@@ -1283,7 +1334,7 @@ function PzoptPreview:prerender()
     self:drawClip(cx, y, iw, ih, sides[1], clipPath(row.clip, "stock"), now, C_STOCK)
     y = self:drawClip(cx + iw + gap, y, iw, ih, sides[2], clipPath(row.clip, "opt"), now, C_OPT) + 4
     local same = sides == CLIP_SIDES.overlay and ". Same save, route and machine, a crop of the top-left corner at the Large overlay font."
-        or ". Same save, route and machine; the number is that run's live frame rate."
+        or CLIP_NOTES[row.clip] or ". Same save, route and machine; the number is that run's live frame rate."
     self:text(getTextManager():WrapText(self.fontS, (CLIP_TITLES[row.clip] or row.clip) .. same, w, 1, "..."), x, y, C_DIM)
     y = y + self.hS + 8
     -- what it does, in a slot tall enough for the longest description
@@ -1496,7 +1547,7 @@ end
 
 local COLLAPSED = {}
 -- The "Sort by" choice, kept for the session like the folds: "natural", "alpha" or an AXES id.
-local SORT = { [TAB] = "alpha", [PROFILER_TAB] = "natural" }
+local SORT = { [TAB] = "alpha", [ENHANCEMENTS_TAB] = "natural", [PROFILER_TAB] = "natural" }
 -- What the three headings of a resource sort say, per axis id (default: load).
 local LESS_WORDS = { load = "shorter", chunks = "sooner" }
 local MORE_WORDS = { load = "longer", chunks = "later", cores = "more work for idle cores" }
@@ -2193,6 +2244,9 @@ local PROFILES = {
     },
 }
 
+-- Builds a lazily built settings page now (set below, after buildSettingsPage).
+local ensurePageBuilt
+
 local function applyProfile(self, profile)
     local master = self.pzoptMaster
     if master and master.control.enable then
@@ -2202,6 +2256,14 @@ local function applyProfile(self, profile)
     for _, option in ipairs(self.pzoptOptions) do
         option:pzoptSet(profile.values[option.pzoptKey])
         option:invokeOnChangeEvent()
+    end
+    -- the upscaler keys live on the Enhancements tab: build it if it was never shown, then set them the same way
+    ensurePageBuilt(self, ENHANCEMENTS_TAB)
+    for _, option in ipairs(self.pzoptEnhancementOptions or {}) do
+        if option.pzoptProfile then
+            option:pzoptSet(profile.values[option.pzoptKey])
+            option:invokeOnChangeEvent()
+        end
     end
     for name, index in pairs(profile.stock or {}) do
         local option = self.gameOptions:get(name)
@@ -2249,19 +2311,23 @@ local function addAllButtons(self, splitpoint, y)
     end
 end
 
--- The Profiler tab's one button: its own settings back to the build's defaults (the Optimizations tab's buttons
--- leave this tab alone).
-local PROFILER_RESET = "Reset to defaults"
-local function addProfilerButtons(self, splitpoint, y)
-    local b = self:addButton(splitpoint, y, PROFILER_RESET)
-    b.tooltip = "Puts every setting on this tab back to the build's default. " .. LIVE_NOTE
+-- The Enhancements and Profiler tabs' reset button: that tab's settings back to the build's defaults (the
+-- Optimizations tab's Enable all leaves them alone). `options` names the MainOptions field holding the page's options.
+local PAGE_RESET = "Reset to defaults"
+local function addResetButton(self, splitpoint, y, options, note)
+    local b = self:addButton(splitpoint, y, PAGE_RESET)
+    b.tooltip = "Puts every setting on this tab back to the build's default. " .. note
     b.target = self
     b.onclick = function(target)
-        for _, option in ipairs(target.pzoptProfilerOptions or {}) do
+        for _, option in ipairs(target[options] or {}) do
             option:pzoptReset()
             option:invokeOnChangeEvent()
         end
     end
+    return b
+end
+local function addProfilerButtons(self, splitpoint, y)
+    addResetButton(self, splitpoint, y, "pzoptProfilerOptions", LIVE_NOTE)
 end
 
 -- "Install DLSS files": the natives DLSS needs that a release does not carry (pzopt.UpscalerDeps, Linux x86-64 with
@@ -2274,7 +2340,7 @@ local DEPS_TITLES = {
 }
 local DEPS_TIP = "Downloads the two native files NVIDIA DLSS needs into the game's natives folder (the pzopt shim and NVIDIA's "
     .. "DLSS library; releases do not carry them) and checks each one's checksum. Linux or Windows with an NVIDIA RTX card; "
-    .. "FSR 1.0 needs no files. Then pick Upscaler: dlss above and restart the game."
+    .. "FSR 1.0 needs no files. Then pick \"Upscaler\": dlss and restart the game."
 
 local function addUpscalerDepsButton(self, splitpoint, y)
     local b = self:addButton(splitpoint, y, DEPS_TITLES.checking)
@@ -2323,12 +2389,12 @@ local function addSectionLine(self, y, text, x0, width)
 end
 
 -- Layout: the label column (right-aligned labels) and the controls at the left margin, the fixed preview panel
--- filling the rest of the page's width and height. Measured over both tabs, so the preview does not move between them.
+-- filling the rest of the page's width and height. Measured over every tab, so the preview does not move between them.
 local function layout(self, comboWidth)
     local W = self:getWidth()
     local gap, margin, sbar = 40, 16, 13
     local labelW = getTextManager():MeasureStringX(UIFont.Small, MASTER.label)
-    for _, sections in ipairs({ SECTIONS, PROFILER_SECTIONS }) do
+    for _, sections in ipairs({ SECTIONS, ENHANCEMENT_SECTIONS, PROFILER_SECTIONS }) do
         for _, section in ipairs(sections) do
             for _, entry in ipairs(section.entries) do
                 labelW = math.max(labelW, getTextManager():MeasureStringX(UIFont.Small, entry.label))
@@ -2337,7 +2403,7 @@ local function layout(self, comboWidth)
     end
     labelW = labelW + 8
     local controlW = comboWidth
-    for _, title in ipairs({ "Enable all (recommended defaults)", "Disable all (stock game)", PROFILER_RESET }) do
+    for _, title in ipairs({ "Enable all (recommended defaults)", "Disable all (stock game)", PAGE_RESET }) do
         controlW = math.max(controlW, getTextManager():MeasureStringX(UIFont.Small, title) + 24)
     end
     for _, title in pairs(DEPS_TITLES) do
@@ -2355,15 +2421,31 @@ local function layout(self, comboWidth)
              lineW = controlsW + gap / 2, margin = margin, controlW = controlW }
 end
 
--- The two pages: the Optimizations tab (master switch, profiles) and the Profiler tab (the overlay's settings).
+-- The three pages: the Optimizations tab (master switch, profiles), the Enhancements tab (upscaling, HDR, ambient
+-- occlusion) and the Profiler tab (the overlay's settings).
 -- `panel` / `options` / `search` / `preview` name the MainOptions fields that hold the page's parts.
 local PAGES = {
     {
-        tab = TAB, sections = SECTIONS, master = MASTER, buttons = function(o, splitpoint, y) addAllButtons(o, splitpoint, y); addUpscalerDepsButton(o, splitpoint, y) end,
+        tab = TAB, sections = SECTIONS, master = MASTER, buttons = addAllButtons,
         panel = "pzoptPanel", options = "pzoptOptions", search = "pzoptSearch", preview = "pzoptPreview",
         footer = "Changes take effect on the next launch. File: Zomboid/pzopt/options.ini",
         headline = function(p)
             return "All optimizations (since this boot: " .. (p:isPzoptEnabled() and "on" or "OFF: the game is running stock") .. ")"
+        end,
+    },
+    {
+        tab = ENHANCEMENTS_TAB, sections = ENHANCEMENT_SECTIONS,
+        buttons = function(o, splitpoint, y)
+            addResetButton(o, splitpoint, y, "pzoptEnhancementOptions", "Applies as soon as you press Apply; the two HDR output switches on the next launch.")
+            addUpscalerDepsButton(o, splitpoint, y)
+        end,
+        panel = "pzoptEnhancementPanel", options = "pzoptEnhancementOptions", search = "pzoptEnhancementSearch",
+        preview = "pzoptEnhancementPreview",
+        footer = "Changes apply as soon as you press Apply (the two HDR output switches on the next launch). File: Zomboid/pzopt/options.ini",
+        -- part of the overrides: with the Optimizations tab's master switch off they are off too
+        headline = function(p)
+            return "Graphics enhancements" .. (p:isPzoptEnabled() and ""
+                or " (off since this boot: they need the Optimizations tab's master switch on)")
         end,
     },
     {
@@ -2460,6 +2542,7 @@ local function buildSettingsPage(self, page)
                     end
                     return addBoolOption(self, entry, splitpoint, y, BUTTON_HGT)
                 end)
+                option.pzoptProfile = section.profiles
                 table.insert(options, option)
                 addRow(entry, option, KEY_CLIP[entry.key] or section.clip or "drive")
                 local r = rows[#rows]
@@ -2537,6 +2620,18 @@ local function buildSettingsPage(self, page)
         .. ", built in " .. (getTimestampMs() - pzoptT0) .. " ms")
 end
 
+ensurePageBuilt = function(self, tab)
+    for _, page in ipairs(PAGES) do
+        if page.tab == tab and self.pzoptBuilt and self[page.panel] and not self.pzoptBuilt[tab] then
+            self.pzoptBuilt[tab] = true
+            local ok, err = pcall(buildSettingsPage, self, page)
+            if not ok then
+                print("[pzopt] options tab " .. tab .. ": build failed: " .. tostring(err))
+            end
+        end
+    end
+end
+
 local function install()
     if not MainOptions or MainOptions.pzoptOptimizationsTab then return end
     local ok, has = pcall(function() return getPerformance():hasPzoptOptions() end)
@@ -2545,7 +2640,7 @@ local function install()
         return
     end
     MainOptions.pzoptOptimizationsTab = true
-    -- The tabs go right after Display (Optimizations, then Profiler): create() adds the pages in order, so hook
+    -- The tabs go right after Display (Optimizations, Enhancements, then Profiler): create() adds the pages in order, so hook
     -- the Display page.
     -- the whole options screen's build time, for the load trace (the in-game menu builds it while the world is entered)
     local stockCreate = MainOptions.create
@@ -2556,19 +2651,15 @@ local function install()
         local t0 = getTimestampMs()
         local r = stockCreate(self, ...)
         print("[pzopt] options screen: MainOptions:create took " .. (getTimestampMs() - t0) .. " ms")
-        -- build the Optimizations / Profiler tab when it is first shown (pzoptAddOptimizationsPanel added them empty)
+        -- build each of our tabs when it is first shown (pzoptAddOptimizationsPanel added them empty)
         local tabs = self.tabs
         if tabs and self.pzoptPanel then
             local stockOnActivate = tabs.onActivateView
             tabs.onActivateView = function(target, tabPanel)
                 for _, page in ipairs(PAGES) do
                     local pagePanel = target and target[page.panel]
-                    if pagePanel and not target.pzoptBuilt[page.tab] and tabPanel:getActiveView() == pagePanel then
-                        target.pzoptBuilt[page.tab] = true
-                        local ok, err = pcall(buildSettingsPage, target, page)
-                        if not ok then
-                            print("[pzopt] options tab " .. page.tab .. ": build failed: " .. tostring(err))
-                        end
+                    if pagePanel and tabPanel:getActiveView() == pagePanel then
+                        ensurePageBuilt(target, page.tab)
                     end
                 end
                 if stockOnActivate then

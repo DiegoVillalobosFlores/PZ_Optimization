@@ -48,7 +48,7 @@ text(X0, 134, "On an HDR screen the menus and the HUD stay at your desktop's whi
 text(X0, 158, "go above it up to the screen's peak, each in its own colour. The game already knows where its lights are: the brightness"
      " comes from them, not from guessing.", 14, INK2)
 text(X0, 196, "Stock SDR vs HDR at the defaults, same save and camera. RTX 4090, 5120x2160 HDR panel (1307 nits peak), KDE Plasma 6."
-     " Options > Optimizations > HDR output.", 13, MUTED)
+     " Options > Enhancements > HDR output.", 13, MUTED)
 
 X_IN = X0
 X_S, X_P = X0 + 760, X0 + 1240

@@ -124,3 +124,25 @@ A GLSL 1.20 kernel would need the bitmask without integer operations. The flip (
 
 Off: a deliberate change of the picture (peers' visual-parity judges compare stock and optimized pictures), one tick
 box in Options > Optimizations > "Ambient occlusion" to turn on.
+
+## Strength per surface (2026-09-25)
+
+The single `aoStrengthPct` became three keys (four since the vegetation one below) on the Options > Enhancements tab: `aoStrengthFloorPct`,
+`aoStrengthWallPct`, `aoStrengthObjectPct` (0 / 50 / 75 / 100 / 150, default 100). The AO kernel already snaps the
+reconstructed normal to the ground or one of the two wall planes (dot > 0.94); that class picks the strength, applied
+to the computed occlusion before the blur (`1 - (1 - vis) * s`), so the kept R8 AO carries it and the multiply / ratio
+passes run at 1. Everything that is neither floor nor wall (furniture, fences, stairs, bushes) is "objects". An unset
+key takes `aoStrengthPct`, so options files from before keep their look. Same in `aoMode=screen`. No cost: one select
+per computed texel. Check (runs `enh-aosplit-default` / `enh-aosplit-floor`, `devAoView=1`, `--shot-at 3` at the
+Rosewood spot): floors 150 / walls 0 / objects 0 leaves walls, chairs, shelves and bushes white and darkens only the
+floor under and around them.
+
+A fourth, `aoStrengthVegetationPct` (chunk mode only; screen mode counts vegetation as objects): the chunk depth has no
+stencil or spare channel to tag vegetation in the bake, so the kernel reconstructs an "object" pixel's square from its own
+depth (`calculateDepth` is k (20 - (x + y) - 2z) within the chunk, k = 0.023093667 / 16) and its texture position (x - y
+from the column, (x + y) 16 - z 96 world px from the row) and looks it up in a per-compute mask built on the game thread:
+16 x 16 squares (the chunk and 4 around it), one plane per level for bushes / grass / flowers (`isBush`, `canBeRemoved`,
+`vegitation`), one for tree crowns at any height (a tree marks the squares its crown spans along its screen row, 3 each
+side). The mask is only built (and the lookup only runs) when the vegetation strength differs from the objects one.
+Check `enh-aoveg` (vegetation 0, objects 150, `devAoView=1`): bush and tree bodies white, the ground under them and the
+fence shaded; a few twig-tip pixels at bush tops stay shaded (their depth slope reads as floor or wall).

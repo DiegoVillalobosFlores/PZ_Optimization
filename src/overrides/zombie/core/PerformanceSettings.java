@@ -78,7 +78,7 @@ public final class PerformanceSettings {
    // pzopt: the "Optimizations" options tab (media/lua/client/pzopt/pzopt_optimizations_options.lua)
    // reads and writes the pzopt.Config keys through these; values are strings as in pzopt.properties.
    // Choices go to Zomboid/pzopt/options.ini (pzopt.UserOptions) and apply on the next launch; the
-   // Profiler tab's keys apply at once (pzopt.Config.reloadLive).
+   // Profiler and Enhancements tabs' keys apply at once (pzopt.Config.reloadLive, pzopt.Enhancements).
    // The tab is offered whenever the build matches, also when the player switched every optimization
    // off (Config.enabled=false), so it can switch them back on.
    public boolean hasPzoptOptions() {
@@ -197,7 +197,7 @@ public final class PerformanceSettings {
       return pzopt.Updater.install();
    }
 
-   // pzopt: the Optimizations tab's "Install DLSS files" button polls pzopt.UpscalerDeps through these: one check
+   // pzopt: the Enhancements tab's "Install DLSS files" button polls pzopt.UpscalerDeps through these: one check
    // of what this machine needs, then the download into natives/ on a daemon thread; states in UpscalerDeps.State.
    public void pzoptUpscalerDepsCheck() {
       pzopt.UpscalerDeps.check();

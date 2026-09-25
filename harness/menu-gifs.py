@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stock-vs-optimized preview clips for the Optimizations tab (src/media/ui/pzopt/compare/<clip>-{stock,opt}.gif).
+"""Before-and-after preview clips for the Optimizations and Enhancements tabs (src/media/ui/pzopt/compare/<clip>-{stock,opt}.gif).
 
 Each clip is a pair of GIFs cut from two harness recordings of the same route, stock and optimized, starting
 the same number of seconds after the route's motion onset (found by frame differencing, showcase-times.py),
@@ -92,6 +92,37 @@ for name, crop, title in (
         ('ovflame', '1640:0:1000:1000', 'Flame graph: the last 5 s of game-thread stacks, root at the bottom')):
     CLIPS[name] = dict(stock=OVERLAY_RUNS[0], opt=OVERLAY_RUNS[1], after=6.0, dur=3.0, fps=16, crop=crop, counter=False,
                        title=title)
+# The Enhancements tab (2026-09-25, runs enh-*): every optimization on in both runs of a pair, only the enhancement differs
+# (the maintainer's tab file sets upscaler=dlss and overlay=true, so every run pins upscaler / hdr / ambientOcclusion /
+# overlay). Upscalers, each at the screen size (native), with FSR 1.0 at quality and with DLSS at its defaults: the full-frame
+# clips with the fps counter are the uncapped Rosewood spin on a clear day (spin-uncapped bench, runs enh-native / -fsr1 /
+# -dlss); the *zoom clips are a 1:1 pixel crop around the player in a furnished Rosewood house at zoom 1, still camera, the
+# character turning in place (runs enh-still-*: a crop of the moving spin landed on different pixels in the two runs; the
+# 512x216 frame is a tenth of the screen's width, so a full frame cannot show a resolution difference). On the desktop's
+# RTX 4090 at 5120x2160 neither the spin (391 / 420 / 283 fps) nor the storm + heavy fog spin (storm-fog bench, runs
+# enh-sf-*, GPU 94 % busy: 263 / 256 / 217) gains much from a smaller render size.
+# The native GIFs are shared (`stock_file`). HDR: the night-torch preset with lamps and fires (the bench save seats the
+# player in a police car beside them) and the river shore at 15:00, turning in place (the HDR pass's showcase flags), SDR vs
+# hdr=true; tone-mapped like every GIF, so the HDR side shows brighter lights and water glitter within SDR.
+# Neither scene (nor the still upscaler one) moves the camera, so the clips start at the route start (`align='route'`)
+# rather than a motion onset.
+# AO: Rosewood's houses at noon, zoom 1, walking south, a crop around the player (AO darkens a few pixels along wall bases:
+# invisible at a tenth of the screen).
+ZOOM_CROP = '2304:972:512:216'   # 1:1 pixels, centred on the player (screen centre of the 5120x2160 capture)
+for name, stock, opt, crop, counter, sf, title in (
+        ('upscale', 'enh-native', 'enh-fsr1', None, True, 'native', 'Rosewood spin, uncapped: native vs FSR 1.0 quality'),
+        ('fsrzoom', 'enh-still-native', 'enh-still-fsr1', ZOOM_CROP, False, 'nativezoom', 'Rosewood house, 1:1 crop: native vs FSR 1.0 quality'),
+        ('dlss', 'enh-native', 'enh-dlss', None, True, 'native', 'Rosewood spin, uncapped: native vs DLSS defaults'),
+        ('dlsszoom', 'enh-still-native', 'enh-still-dlss', ZOOM_CROP, False, 'nativezoom', 'Rosewood house, 1:1 crop: native vs DLSS defaults')):
+    still = crop is not None
+    CLIPS[name] = dict(stock=stock, opt=opt, after=3.0 if still else 2.0, crop=crop, counter=counter, stock_file=sf,
+                       title=title, denoise=not still, **(dict(align='route') if still else {}))
+CLIPS['hdr'] = dict(stock='enh-sdr-night', opt='enh-hdr-night', align='route', after=6.0, counter=False,
+                    crop='1360:760:2560:1080', title='Night, fires beside a police car: SDR vs HDR')
+CLIPS['hdrday'] = dict(stock='enh-sdr-day', opt='enh-hdr-day', align='route', after=3.0, counter=False, denoise=False,
+                       crop='2900:80:1280:540', title='River shore at 15:00, the pier and the water: SDR vs HDR')
+CLIPS['ao'] = dict(stock='enh-ao-off', opt='enh-ao-on', after=1.0, counter=False, crop='1792:756:1536:648',
+                   title='Rosewood houses at noon, zoom 1, walking: ambient occlusion off vs on')
 
 
 def sh(cmd, **kw):
@@ -99,8 +130,10 @@ def sh(cmd, **kw):
     subprocess.run(cmd, check=True, **kw)
 
 
-def run_info(label):
-    """Video offset (video_t = epoch_s + off), the route start and the log / ready points of a run."""
+def run_info(label, align='onset'):
+    """Video offset (video_t = epoch_s + off), the route start and the log / ready points of a run. align='route'
+    (scenes whose camera never moves: nothing to detect) takes the recording's start as the launch, like tools/hdr/reel.sh;
+    `onset` is then the route start's video time."""
     d = st.run_dir(label)
     opts = st.kv(os.path.join(d, 'run.opts'))
     sched = st.kv(os.path.join(d, 'pzopt-schedule.out'))
@@ -108,9 +141,12 @@ def run_info(label):
     rs = int(sched['route_start_epoch_ms']) / 1000
     ready = int(sched['world_ready_epoch_ms']) / 1000
     video = os.path.join(d, 'recording.mp4')
-    on, peak, base = st.onset(video, rs - launch - 1.0)
-    if on is None:
-        raise SystemExit(f'{label}: no motion onset found near {rs - launch - 1.0:.1f} s (peak diff {peak:.2f})')
+    if align == 'route':
+        on = rs - launch
+    else:
+        on, peak, base = st.onset(video, rs - launch - 1.0)
+        if on is None:
+            raise SystemExit(f'{label}: no motion onset found near {rs - launch - 1.0:.1f} s (peak diff {peak:.2f})')
     off = on - rs
     t_log = t_cont = None
     for l in open(os.path.join(d, 'pzopt-loadtrace.out')):
@@ -170,16 +206,19 @@ TONEMAP = ('zscale=tin=smpte2084:pin=bt2020:min=bt2020nc:t=linear:npl=200,format
            'tonemap=hable,zscale=p=bt709:t=bt709:m=bt709,format=yuv420p')
 
 
-def gif(src, t0, dur, ass, out, fps=FPS, hold=0.0, extra='', crop=None):
+def gif(src, t0, dur, ass, out, fps=FPS, hold=0.0, extra='', crop=None, denoise=True):
     """Tone-map (+ crop) + scale + denoise + subtitles at the GIF's frame rate into a lossless temp, then a one-palette
     GIF (diff palette, no dither) recoded by gifsicle with lossy LZW and real-time per-frame delays. A crop
-    ('x:y:w:h' of the 5120x2160 capture) is scaled to 512 wide with its own aspect; else the frame becomes 512x216."""
+    ('x:y:w:h' of the 5120x2160 capture) is scaled to 512 wide with its own aspect; else the frame becomes 512x216.
+    denoise=False skips the median + denoise chain: the 1:1 upscaler crops and the water glints are pixel-sized detail
+    it would erase."""
+    dn = ',' + DENOISE if denoise else ''
     tmp = tempfile.mktemp(suffix='.mkv')
     if crop:
         cx, cy, cw, ch = (int(v) for v in crop.split(':'))
-        vf = f'fps={fps},{TONEMAP},crop={cw}:{ch}:{cx}:{cy},scale={W}:{max(2, round(ch * W / cw / 2) * 2)}:flags=lanczos,{DENOISE}'
+        vf = f'fps={fps},{TONEMAP},crop={cw}:{ch}:{cx}:{cy},scale={W}:{max(2, round(ch * W / cw / 2) * 2)}:flags=lanczos{dn}'
     else:
-        vf = f'fps={fps},{TONEMAP},scale={W}:{H}:flags=lanczos,{DENOISE}'
+        vf = f'fps={fps},{TONEMAP},scale={W}:{H}:flags=lanczos{dn}'
     if extra:
         vf += ',' + extra
     if ass:
@@ -214,7 +253,8 @@ WRITTEN = set()  # GIFs written by this invocation
 
 
 def action_clip(name, c, work):
-    s, o = run_info(c['stock']), run_info(c['opt'])
+    align = c.get('align', 'onset')
+    s, o = run_info(c['stock'], align), run_info(c['opt'], align)
     res = {}
     dur, fps = c.get('dur', DUR), c.get('fps', FPS)
     for side, info, colour in (('stock', s, C_STOCK), ('opt', o, C_OPT)):
@@ -231,7 +271,8 @@ def action_clip(name, c, work):
             ass = os.path.join(work, f'{name}-{side}.ass')
             fps_ass(info, t0, dur, colour, ass)
         res[side] = dict(run=os.path.basename(info['dir']), video_t0=round(t0, 2), file=os.path.basename(out),
-                         bytes=gif(info['video'], t0, dur, ass, out, fps=fps, crop=c.get('crop')))
+                         bytes=gif(info['video'], t0, dur, ass, out, fps=fps, crop=c.get('crop'),
+                                   denoise=c.get('denoise', True)))
         WRITTEN.add(out)
     return res
 

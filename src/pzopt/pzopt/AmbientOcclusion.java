@@ -17,7 +17,7 @@ import zombie.core.textures.TextureDraw;
 
 /**
  * Ambient occlusion on the static world (Config keys {@code ambientOcclusion}, {@code aoScalePct}, {@code aoRadiusPct},
- * {@code aoStrengthPct}, {@code aoThicknessPct}).
+ * {@code aoStrengthFloorPct} / {@code aoStrengthWallPct} / {@code aoStrengthObjectPct}, {@code aoThicknessPct}).
  *
  * <p>Right after the chunk textures are composited the scene depth holds exactly the static world (floors, walls,
  * furniture, baked trees) and nothing else: characters, vehicles, items and the translucent layers are drawn later.
@@ -157,7 +157,7 @@ public final class AmbientOcclusion {
       private final int[] viewport = new int[4];
       private final float[] viewportF = new float[4];
       private final Matrix4f mvp = new Matrix4f();
-      private final int[] uAo = new int[4];
+      private final int[] uAo = new int[5];
       private final int[] uBlur = new int[3];
       private final int[] uApply = new int[5];
       private boolean logged;
@@ -238,6 +238,8 @@ public final class AmbientOcclusion {
             GL20.glUniform4f(this.uAo[1], vx, vy, 1.0F / scale, ppu);
             GL20.glUniform4f(this.uAo[2], radius * ppu, thickness, UNITS_PER_DEPTH, radius);
             GL20.glUniform4f(this.uAo[3], vx + vw - 1, vy + vh - 1, Config.DEV_AO_VARIANT, 0.0F);
+            GL20.glUniform3f(this.uAo[4], Math.max(0.0F, Config.AO_STRENGTH_FLOOR_PCT / 100.0F),
+               Math.max(0.0F, Config.AO_STRENGTH_WALL_PCT / 100.0F), Math.max(0.0F, Config.AO_STRENGTH_OBJECT_PCT / 100.0F));
             GL13.glActiveTexture(GL13.GL_TEXTURE0);
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, depthTex);
             GL11.glDrawArrays(GL11.GL_TRIANGLE_FAN, 0, 4);
@@ -269,7 +271,7 @@ public final class AmbientOcclusion {
          GL20.glUniform1i(this.uApply[0], 0);
          GL20.glUniform1i(this.uApply[1], 1);
          GL20.glUniform4f(this.uApply[2], vx, vy, scale, texelWorld);
-         GL20.glUniform4f(this.uApply[3], aw - 1, ah - 1, UNITS_PER_DEPTH, Math.max(0.0F, Config.AO_STRENGTH_PCT / 100.0F));
+         GL20.glUniform4f(this.uApply[3], aw - 1, ah - 1, UNITS_PER_DEPTH, 1.0F); // the strengths are applied per surface in the AO pass
          GL20.glUniform4f(this.uApply[4], Config.DEV_AO_VIEW, ppu, 0.0F, 0.0F);
          GL13.glActiveTexture(GL13.GL_TEXTURE1);
          GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.blurTex);
@@ -454,6 +456,7 @@ public final class AmbientOcclusion {
          this.uAo[1] = GL20.glGetUniformLocation(this.aoProgram, "view");
          this.uAo[2] = GL20.glGetUniformLocation(this.aoProgram, "params");
          this.uAo[3] = GL20.glGetUniformLocation(this.aoProgram, "bounds");
+         this.uAo[4] = GL20.glGetUniformLocation(this.aoProgram, "strength");
          this.uBlur[0] = GL20.glGetUniformLocation(this.blurProgram, "Ao");
          this.uBlur[1] = GL20.glGetUniformLocation(this.blurProgram, "params");
          this.uApply[0] = GL20.glGetUniformLocation(this.applyProgram, "SceneDepth");
@@ -528,6 +531,7 @@ public final class AmbientOcclusion {
       "uniform vec4 view;", // viewport origin x, y in the depth texture; viewport pixels per AO texel; viewport pixels per square
       "uniform vec4 params;", // radius in pixels, thickness in squares, squares per unit depth, radius in squares
       "uniform vec4 bounds;", // last viewport pixel x, y in the depth texture; z: dev variant (1 = one depth read, 2 = none)
+      "uniform vec3 strength;", // darkening strength on floors, walls, everything else (aoStrength*Pct / 100)
       "out vec4 result;",
       "const float HALF_PI = 1.5707963;",
       "const float BAYER[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);",
@@ -581,6 +585,7 @@ public final class AmbientOcclusion {
       "   const vec3 NS = vec3(-0.7071068, -0.3535534, -0.6123724);", // a wall facing +y (south, lower left)
       "   float g = dot(N, NG), e = dot(N, NE), so = dot(N, NS);",
       "   if (g > 0.94) N = NG; else if (e > 0.94) N = NE; else if (so > 0.94) N = NS;",
+      "   float sk = g > 0.94 ? strength.x : (e > 0.94 || so > 0.94 ? strength.y : strength.z);", // floors, walls, the rest
       "   const vec3 V = vec3(0.0, 0.0, -1.0);",
       "   float bayer = BAYER[(t.x & 3) + 4 * (t.y & 3)];",
       "   float jitter = fract(bayer * 0.618034 + 0.5 * float((t.x ^ t.y) & 1));",
@@ -620,7 +625,7 @@ public final class AmbientOcclusion {
       "      vis += (1.0 - float(popc(mask)) / 32.0) * pnl;",
       "      wsum += pnl;",
       "   }",
-      "   result = vec4(wsum > 0.0 ? vis / wsum : 1.0, d, 0.0, 1.0);",
+      "   result = vec4(clamp(1.0 - (1.0 - (wsum > 0.0 ? vis / wsum : 1.0)) * sk, 0.0, 1.0), d, 0.0, 1.0);",
       "}");
 
    /** 4x4 box over one period of the rotation pattern, weighted by how close each texel's depth is to the centre's. */
@@ -661,7 +666,7 @@ public final class AmbientOcclusion {
       "uniform sampler2D SceneDepth;",
       "uniform sampler2D Ao;",
       "uniform vec4 view;", // viewport origin x, y; AO texels per pixel; squares per AO texel
-      "uniform vec4 params;", // last AO texel x, y; squares per unit depth; strength
+      "uniform vec4 params;", // last AO texel x, y; squares per unit depth; strength (1: the AO pass applies the per-surface ones)
       "uniform vec4 dev;", // view mode, viewport pixels per square
       "out vec4 fragColor;",
       "void main() {",

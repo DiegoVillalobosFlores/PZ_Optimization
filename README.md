@@ -413,7 +413,7 @@ re-bakes reuse the kept AO. A frame that bakes nothing pays nothing, and so does
   tail: 220 fps, p99 14.2-14.8 ms with AO on against 218 fps, 14.2-14.7 ms off. The trade-off: when the game thread
   misses the cap (a fast drive at max zoom), new chunks get their AO a little late.
 
-Off by default because it changes the picture: Options > Optimizations > Ambient occlusion (strength, radius and scale
+Off by default because it changes the picture: Options > Enhancements > Ambient occlusion (strength on floors, walls, objects and vegetation, reach and detail
 there too), applies on the next launch. Windows and Linux; the macOS game runs OpenGL 2.1, where it stays off. Every
 run: [docs/findings-ambient-occlusion-2026-09-24.md](docs/findings-ambient-occlusion-2026-09-24.md).
 
@@ -674,7 +674,7 @@ about 40 % uncapped on the desktop.
 
 ### Upscaling: FSR 1.0 and DLSS
 
-Options > Optimizations > **Upscaling** renders the world at a fraction of the screen size and
+Options > Enhancements > **Upscaling** renders the world at a fraction of the screen size and
 scales it back up before the UI, the world text, the cursor and the game's own screen shader, which
 stay at full resolution (keys `upscaler`, `upscalerQuality`, `upscalerScalePct`, `fsrSharpnessPct`,
 `dlssPreset`, `upscalerObjectMv`; off by default, applied on the next launch).
@@ -691,7 +691,7 @@ draws the world with a sub-pixel jitter and feeds the camera's and each characte
 motion to NVIDIA's network, which accumulates detail across frames (1-px power lines and car
 lettering come back at 50 %); `bicubic` is the plain stretch the stock screen shader already does.
 
-**Turning it on.** Options > Optimizations > Upscaling: set **Upscaler** to `fsr1` (or `dlss` on an
+**Turning it on.** Options > Enhancements > Upscaling: set **Upscaler** to `fsr1` (or `dlss` on an
 RTX card once the shim is under `natives/`, see "Enabling DLSS" below), pick **Upscaler quality** (`quality` keeps most of the
 detail, `performance` halves both axes), optionally an explicit percentage, the FSR sharpening
 and the DLSS preset, then restart the game — the tab shows the stock "restart required" dialog.
@@ -715,7 +715,7 @@ not found); using fsr1 at 50 %` and runs as FSR 1.0. DLSS needs two files under 
 folder (next to `libLighting64.so`): the shim `libpzopt_ngx64.so`, built from `src/native/pzopt_ngx.cpp`
 against NVIDIA's DLSS SDK, and NVIDIA's DLSS library `libnvidia-ngx-dlss.so.<version>` from that SDK.
 
-The easy way: **Options > Optimizations > Install DLSS files**. The button checks what your machine has, downloads
+The easy way: **Options > Enhancements > Install DLSS files**. The button checks what your machine has, downloads
 the shim from this project's `dlss-linux-*` release and NVIDIA's DLSS library straight from NVIDIA's DLSS repository
 (never re-hosted here), checks both against their pinned sha256 and puts them in `natives/`; then pick Upscaler: dlss
 and restart the game. It needs an RTX card: on Linux x86-64 the proprietary NVIDIA driver and the Vulkan loader, on
@@ -755,7 +755,7 @@ Or build both yourself, on top of any install method (Workshop, installer, zip);
    (Deprecation warnings from the SDK headers are normal.) With a source build, `scripts/build.sh` does
    the same when the SDK checkout is at that path — `PZOPT_DLSS_SDK=<dir>` names another one,
    `PZOPT_DLSS=0` skips it — and `scripts/pzopt.sh install` copies both files in with the classes.
-4. Options > Optimizations > Upscaling: **Upscaler** = `dlss`, a quality (`performance` = 50 %, or
+4. Options > Enhancements > Upscaling: **Upscaler** = `dlss`, a quality (`performance` = 50 %, or
    `native` for DLAA anti-aliasing at full size), optionally a **DLSS model preset** ("Upscaler, NVIDIA DLSS: model preset") (`f` is the
    cheap one at 4K), restart the game. `console.txt` then has `[pzopt] upscaler: dlss at 50 % (performance)`
    followed a few frames later by `[pzopt] dlss: ready, 2560x1080 -> 5120x2160 (performance, preset default,

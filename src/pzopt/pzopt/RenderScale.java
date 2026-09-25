@@ -27,22 +27,53 @@ public final class RenderScale {
    private RenderScale() {
    }
 
-   /** The upscaler chosen for this session, lower case; "off" when none. */
-   public static final String MODE = Overrides.enabled() ? Config.UPSCALER : "off";
+   /** The upscaler chosen, lower case; "off" when none. The Enhancements tab changes it while the game runs ({@link #reconfigure}). */
+   private static volatile String MODE = Overrides.enabled() ? Config.UPSCALER : "off";
    /** Render scale per axis, 1.0 when off. */
-   public static final float SCALE = computeScale();
-   private static final boolean ACTIVE = !"off".equals(MODE) && SCALE < 1.0F || "dlss".equals(MODE) || "xess".equals(MODE);
+   private static volatile float SCALE = computeScale();
+   private static volatile boolean ACTIVE = computeActive();
 
-   private static volatile boolean disabled; // a failure at run time (missing extension, shim, shader) switches the pass off for the session
+   private static volatile boolean disabled; // a failure at run time (missing extension, shim, shader) switches the pass off until the settings change
    private static volatile String fallbackMode; // a temporal upscaler that cannot run (no RTX, no shim, no Vulkan) continues as fsr1 at the same scale
 
    static {
+      logMode();
+   }
+
+   private static boolean computeActive() {
+      return !"off".equals(MODE) && SCALE < 1.0F || "dlss".equals(MODE) || "xess".equals(MODE);
+   }
+
+   private static void logMode() {
       if (ACTIVE) {
          Log.info("upscaler: " + MODE + " at " + Math.round(SCALE * 100.0F) + " % (" + Config.UPSCALER_QUALITY + (Config.UPSCALER_SCALE_PCT > 0 ? ", upscalerScalePct=" + Config.UPSCALER_SCALE_PCT : "") + ")");
       } else if (!"off".equals(MODE)) {
          Log.info("upscaler: " + MODE + " requested but the render scale is 100 %: off");
+      } else {
+         Log.info("upscaler: off");
       }
    }
+
+   /**
+    * An upscaler key changed on the Enhancements tab (game thread, after Config's live reload): the following frames
+    * render at the new mode and scale. A failure or fallback of the old settings is forgotten (the new ones may work);
+    * at its next frame start the render thread detaches a DLSS colour image the world may still draw into, releases the
+    * old DLSS feature (built again at its next frame when DLSS is still the mode) and drops the sub-pixel jitter
+    * ({@link #afterStartFrame}: a generation count, since a draw queued from the options screen's Apply can miss the
+    * frame's list). The frame in flight may still use the old scale for its last draws.
+    */
+   static void reconfigure() {
+      MODE = Overrides.enabled() ? Config.UPSCALER : "off";
+      SCALE = computeScale();
+      ACTIVE = computeActive();
+      disabled = false;
+      fallbackMode = null;
+      logMode();
+      generation++;
+   }
+
+   private static volatile int generation; // bumped by reconfigure (game thread)
+   private static int appliedGeneration; // render thread
 
    // render-thread state
    private static boolean worldPass; // between a scaled glDoStartFrame with a player index and the next end-of-frame
@@ -102,7 +133,7 @@ public final class RenderScale {
       return mode() + " " + Math.round(scale() * 100.0F) + " %";
    }
 
-   /** Turn the pass off for the rest of the session (logged once). */
+   /** Turn the pass off until the upscaler settings change (logged once). */
    public static void disable(String why) {
       if (!disabled) {
          disabled = true;
@@ -168,6 +199,12 @@ public final class RenderScale {
     * index the frame was started with (-1 = a full-screen frame, never scaled).
     */
    public static void afterStartFrame(int player) {
+      if (appliedGeneration != generation) { // the upscaler settings changed: release what the old ones built
+         appliedGeneration = generation;
+         Dlss.reconfigure();
+         jitterX = 0.0F;
+         jitterY = 0.0F;
+      }
       if (player < 0 || !active()) {
          worldPass = false;
          return;

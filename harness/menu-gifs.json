@@ -1,4 +1,49 @@
 {
+ "ao": {
+  "opt": {
+   "bytes": 495686,
+   "file": "ao-opt.gif",
+   "run": "enh-ao-on-20260925-003700",
+   "video_t0": 15.57
+  },
+  "stock": {
+   "bytes": 431952,
+   "file": "ao-stock.gif",
+   "run": "enh-ao-off-20260925-003550",
+   "video_t0": 16.25
+  },
+  "title": "Rosewood houses at noon, zoom 1, walking: ambient occlusion off vs on"
+ },
+ "dlss": {
+  "opt": {
+   "bytes": 2080277,
+   "file": "dlss-opt.gif",
+   "run": "enh-dlss-20260925-002715",
+   "video_t0": 16.67
+  },
+  "stock": {
+   "bytes": 2075874,
+   "file": "native-stock.gif",
+   "run": "enh-native-20260925-001906",
+   "video_t0": 19.92
+  },
+  "title": "Rosewood spin, uncapped: native vs DLSS defaults"
+ },
+ "dlsszoom": {
+  "opt": {
+   "bytes": 880420,
+   "file": "dlsszoom-opt.gif",
+   "run": "enh-still-dlss-20260925-011138",
+   "video_t0": 17.0
+  },
+  "stock": {
+   "bytes": 615169,
+   "file": "nativezoom-stock.gif",
+   "run": "enh-still-native-20260925-010922",
+   "video_t0": 18.02
+  },
+  "title": "Rosewood house, 1:1 crop: native vs DLSS defaults"
+ },
  "drive": {
   "opt": {
    "bytes": 2118044,
@@ -25,6 +70,21 @@
   },
   "title": "120 km/h drive in heavy fog"
  },
+ "fsrzoom": {
+  "opt": {
+   "bytes": 902987,
+   "file": "fsrzoom-opt.gif",
+   "run": "enh-still-fsr1-20260925-011026",
+   "video_t0": 17.36
+  },
+  "stock": {
+   "bytes": 615169,
+   "file": "nativezoom-stock.gif",
+   "run": "enh-still-native-20260925-010922",
+   "video_t0": 18.02
+  },
+  "title": "Rosewood house, 1:1 crop: native vs FSR 1.0 quality"
+ },
  "grid": {
   "opt": {
    "bytes": 1324328,
@@ -39,6 +99,36 @@
    "video_t0": 16.98
   },
   "title": "Rosewood, camera spinning, uncapped: vanilla 19x19 chunk grid vs 15x15"
+ },
+ "hdr": {
+  "opt": {
+   "bytes": 308572,
+   "file": "hdr-opt.gif",
+   "run": "enh-hdr-night-20260925-003235",
+   "video_t0": 22.31
+  },
+  "stock": {
+   "bytes": 200118,
+   "file": "hdr-stock.gif",
+   "run": "enh-sdr-night-20260925-003116",
+   "video_t0": 20.87
+  },
+  "title": "Night, fires beside a police car: SDR vs HDR"
+ },
+ "hdrday": {
+  "opt": {
+   "bytes": 2788809,
+   "file": "hdrday-opt.gif",
+   "run": "enh-hdr-day-20260925-003444",
+   "video_t0": 18.91
+  },
+  "stock": {
+   "bytes": 1587248,
+   "file": "hdrday-stock.gif",
+   "run": "enh-sdr-day-20260925-003340",
+   "video_t0": 18.47
+  },
+  "title": "River shore at 15:00, the pier and the water: SDR vs HDR"
  },
  "horde": {
   "opt": {
@@ -212,6 +302,21 @@
    "video_t0": 31.74
   },
   "title": "Night, hand torch, turning in place"
+ },
+ "upscale": {
+  "opt": {
+   "bytes": 2075939,
+   "file": "upscale-opt.gif",
+   "run": "enh-fsr1-20260925-002553",
+   "video_t0": 15.17
+  },
+  "stock": {
+   "bytes": 2075874,
+   "file": "native-stock.gif",
+   "run": "enh-native-20260925-001906",
+   "video_t0": 19.92
+  },
+  "title": "Rosewood spin, uncapped: native vs FSR 1.0 quality"
  },
  "zgt": {
   "opt": {

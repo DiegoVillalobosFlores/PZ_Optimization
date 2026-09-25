@@ -19,7 +19,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * The Optimizations tab's "Install DLSS files" button (docs/plan-upscalers.md): the native files DLSS needs that a
+ * The Enhancements tab's "Install DLSS files" button (docs/plan-upscalers.md): the native files DLSS needs that a
  * release does not carry (the maintainer's decision of 2026-09-22: 58 MB of NVIDIA library, a Windows-useless .so,
  * and the Workshop refuses .so files), fetched on request into the game's {@code natives/} folder.
  *
@@ -201,7 +201,7 @@ public final class UpscalerDeps {
          Updater.fetch(asset.optString("browser_download_url"), asset.optLong("size", -1), zip, p -> progress = p / 20);
          List<String> names = unpack(PLATFORM, zip, natives, p -> progress = 5 + p * 95 / 100); // NVIDIA's library is the bulk
          state = State.INSTALLING;
-         Files.writeString(natives.resolve(MARKER), "# written by the Optimizations tab's DLSS button (pzopt.UpscalerDeps)\n"
+         Files.writeString(natives.resolve(MARKER), "# written by the Enhancements tab's DLSS button (pzopt.UpscalerDeps)\n"
                + "release=" + asset.optString("pzoptTag") + "\n" + String.join("\n", names) + "\n", StandardCharsets.UTF_8);
          message = "installed " + String.join(", ", names) + " from " + asset.optString("pzoptTag") + "; restart the game to use DLSS";
          state = State.DONE;

@@ -88,7 +88,9 @@ public final class UserOptions {
          live.setProperty(key, value);
       }
       boolean now = Config.reloadLive(key);
-      if (now) {
+      if (now && Enhancements.owns(key)) {
+         Enhancements.apply(key);
+      } else if (now) {
          Overlay.reconfigure();
       }
       File f = file();

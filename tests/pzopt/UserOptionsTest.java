@@ -50,6 +50,17 @@ public class UserOptionsTest {
       Check.check(Config.OVERLAY_REFRESH_MS == 500 && "500".equals(Config.value("overlayRefreshMs")), "overlayRefreshMs applied now: " + Config.OVERLAY_REFRESH_MS);
       UserOptions.set("overlayRefreshMs", "");
       Check.check(Config.OVERLAY_REFRESH_MS == 250 && "250".equals(Config.value("overlayRefreshMs")), "default back now");
+
+      // the Enhancements tab's keys apply at once too, except the two HDR output switches (they pick the window)
+      for (String k : new String[] {"upscaler", "upscalerQuality", "dlssPreset", "fsrSharpnessPct", "ambientOcclusion", "aoStrengthVegetationPct", "hdrBloomPct", "hdrUiNits"}) {
+         Check.check(Config.isLive(k) && Enhancements.owns(k), k + " live and routed to Enhancements");
+      }
+      Check.check(!Config.isLive("hdr") && !Config.isLive("hdrAuto") && !Config.isLive("aoStrengthPct"), "hdr / hdrAuto / the old aoStrengthPct wait for the next launch");
+      Check.check(!Enhancements.owns("overlayRefreshMs") && !Enhancements.owns("gameThreadProfileHz"), "overlay keys stay the overlay's");
+      UserOptions.set("fsrSharpnessPct", "40"); // read every frame: no GL work to trigger in a JVM-only test
+      Check.check(Config.FSR_SHARPNESS_PCT == 40, "fsrSharpnessPct applied now: " + Config.FSR_SHARPNESS_PCT);
+      UserOptions.set("fsrSharpnessPct", "");
+      Check.check(Config.FSR_SHARPNESS_PCT == 80, "fsrSharpnessPct default back now");
       System.out.println("UserOptionsTest: ok");
    }
 }

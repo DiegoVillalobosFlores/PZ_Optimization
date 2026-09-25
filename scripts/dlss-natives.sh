@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build (and with --publish upload) the files the Optimizations tab's "Install DLSS files" button downloads
+# Build (and with --publish upload) the files the Enhancements tab's "Install DLSS files" button downloads
 # (pzopt.UpscalerDeps): build/pzopt-dlss-linux-x64.zip with
 #   libpzopt_ngx64.so      the DLSS shim of this checkout (build/native/, made by scripts/build.sh with the SDK),
 #   pzopt-dlss-files.txt   "name sha256 [source url]" per file: the shim, and NVIDIA's DLSS library pinned by its
@@ -61,7 +61,7 @@ files = (f"# name sha256 [source url]: pzopt.UpscalerDeps checks every file agai
 notice = (f"PZ_Optimization DLSS files (shim from commit {commit}, NVIDIA DLSS {tag}).\n\n"
           f"{shimname} is the PZ_Optimization DLSS shim (src/native/pzopt_ngx.cpp); it links NVIDIA's NGX SDK\n"
           "library (libnvsdk_ngx.a / nvsdk_ngx_s.lib) from the NVIDIA DLSS SDK, used under NVIDIA's DLSS SDK license.\n\n"
-          f"{name} is NVIDIA's DLSS runtime. It is not in this zip: the Optimizations tab downloads it from NVIDIA's\n"
+          f"{name} is NVIDIA's DLSS runtime. It is not in this zip: the Enhancements tab downloads it from NVIDIA's\n"
           f"DLSS repository ({url}) and checks it against the sha256 in pzopt-dlss-files.txt. It is NVIDIA's\n"
           "software, under the NVIDIA DLSS SDK license (https://github.com/NVIDIA/DLSS/blob/main/LICENSE.txt).\n")
 with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
@@ -82,5 +82,5 @@ if [[ $publish -eq 1 ]]; then
   NEEDS=$([[ $os == windows ]] && echo "an RTX card on NVIDIA's driver (nvapi64.dll, vulkan-1.dll)" || echo "the proprietary NVIDIA driver (libnvidia-ngx.so.1) and the Vulkan loader")
   gh release create "$rtag" "$out" --target "$(git rev-parse HEAD)" --latest=false \
     --title "DLSS files for $OSNAME (shim $commit, NVIDIA DLSS $tag)" \
-    --notes "What the Optimizations tab's \"Install DLSS files\" button downloads ($OSNAME x86-64, NVIDIA RTX): the PZ_Optimization DLSS shim built from $commit and the list that pins NVIDIA's DLSS library ($name) by sha256. NVIDIA's library itself is fetched from NVIDIA's DLSS repository ($url), not from this release. Needs $NEEDS. Not a build of the classes: install those from the win-* releases."
+    --notes "What the Enhancements tab's \"Install DLSS files\" button downloads ($OSNAME x86-64, NVIDIA RTX): the PZ_Optimization DLSS shim built from $commit and the list that pins NVIDIA's DLSS library ($name) by sha256. NVIDIA's library itself is fetched from NVIDIA's DLSS repository ($url), not from this release. Needs $NEEDS. Not a build of the classes: install those from the win-* releases."
 fi

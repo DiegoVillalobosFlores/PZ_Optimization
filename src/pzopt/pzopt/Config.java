@@ -643,18 +643,18 @@ public final class Config {
    public static final boolean PUDDLE_EARLY_Z = bool("puddleEarlyZ", true); // puddle shaders take their depth from the vertex, no gl_FragDepth write: early depth test rejects occluded wet ground (media/shaders/pzopt_puddles_*)
    public static final boolean RAIN_SPLASHES_FAST = bool("rainSplashesFast", true); // splash starts by geometric skipping with a local generator instead of Rand.NextBool per idle square per frame (pzopt.RainSplashes)
    // --- render-resolution upscaling (docs/plan-upscalers.md, pzopt.RenderScale / pzopt.Upscaler) ---
-   public static final String UPSCALER = string("upscaler", "off").trim().toLowerCase(java.util.Locale.ROOT); // off | bicubic | fsr1 | dlss | xess: the world pass renders at upscalerQuality's fraction of the screen and is resolved to the screen by this upscaler; the UI, text and the stock screen shader stay native
-   public static final String UPSCALER_QUALITY = string("upscalerQuality", "quality").trim().toLowerCase(java.util.Locale.ROOT); // quality 67 % | balanced 59 % | performance 50 % | ultra 33 % | native 100 % (dlss: DLAA) of the screen size per axis
-   public static final int UPSCALER_SCALE_PCT = integer("upscalerScalePct", 0); // explicit render scale in percent (10..100) instead of upscalerQuality's preset; 0 = use the preset
-   public static final int FSR_SHARPNESS_PCT = Math.max(0, Math.min(100, integer("fsrSharpnessPct", 80))); // RCAS sharpening after EASU as a percentage: 100 = the sharpest (0 stops of attenuation), 0 = 2 stops (the mildest); AMD ships 80-100 in its sample
-   public static final boolean DLSS_SHARPEN = bool("dlssSharpen", false); // dlss: the NGX sharpening flag (a mild extra sharpen; off = plain super resolution)
-   public static final boolean UPSCALER_OBJECT_MV = bool("upscalerObjectMv", true); // dlss / xess: characters and vehicles write their own motion vectors (a rect masked by the depth band) on top of the camera motion; false = camera motion only
+   public static volatile String UPSCALER; // off | bicubic | fsr1 | dlss | xess: the world pass renders at upscalerQuality's fraction of the screen and is resolved to the screen by this upscaler; the UI, text and the stock screen shader stay native
+   public static volatile String UPSCALER_QUALITY; // quality 67 % | balanced 59 % | performance 50 % | ultra 33 % | native 100 % (dlss: DLAA) of the screen size per axis
+   public static volatile int UPSCALER_SCALE_PCT; // explicit render scale in percent (10..100) instead of upscalerQuality's preset; 0 = use the preset
+   public static volatile int FSR_SHARPNESS_PCT; // RCAS sharpening after EASU as a percentage: 100 = the sharpest (0 stops of attenuation), 0 = 2 stops (the mildest); AMD ships 80-100 in its sample
+   public static volatile boolean DLSS_SHARPEN; // dlss: the NGX sharpening flag (a mild extra sharpen; off = plain super resolution)
+   public static volatile boolean UPSCALER_OBJECT_MV; // dlss / xess: characters and vehicles write their own motion vectors (a rect masked by the depth band) on top of the camera motion; false = camera motion only
    public static final boolean DEV_DLSS_GAPS = bool("devDlssGaps", false); // dev: GL timestamps at the DLSS hand-over and after the wait, matched with the evaluation's Vulkan start / end (the GL <-> Vulkan switch cost) in the dlss stats line
    public static final boolean DEV_UPSCALER_STOCK_VIS_BLUR = bool("devUpscalerStockVisBlur", false); // dev A/B: the view-cone blur keeps the stock unscaled displaySize under an upscaler (the 2026-09-23 "second view cone" bug)
    public static final boolean DEV_UPSCALER_LOG = bool("devUpscalerLog", false); // dev: log every upscaler state change, the shared-image import and the first evaluations
-   public static final String DLSS_PRESET = string("dlssPreset", "e").trim().toLowerCase(java.util.Locale.ROOT); // dlss: the render preset for every quality level: default (the driver's: transformer K / M / L), e or f (the older convolutional models, half the cost), j, k, l, m. e since 2026-09-23: at 5120x2160 K costs 1.5 ms a frame, more than the render scale saves
-   public static final int DLSS_OUTPUT_PCT = integer("dlssOutputPct", 67); // dlss: DLSS writes this percentage of the screen size (never below the render size; its cost follows the output pixels) and dlssOutputFilter finishes the upscale; 0 = the screen size. 67 since 2026-09-23: the configuration that beats no upscaler (+22 % in a GPU-bound 4K scene) with a sharper image than full-size DLSS K
-   public static final String DLSS_OUTPUT_FILTER = string("dlssOutputFilter", "rcas").trim().toLowerCase(java.util.Locale.ROOT); // dlss with dlssOutputPct: bicubic = the stock screen shader samples the smaller output directly (no extra pass), fsr1 = EASU + RCAS first, rcas = RCAS alone at the DLSS output size, then the bicubic
+   public static volatile String DLSS_PRESET; // dlss: the render preset for every quality level: default (the driver's: transformer K / M / L), e or f (the older convolutional models, half the cost), j, k, l, m. e since 2026-09-23: at 5120x2160 K costs 1.5 ms a frame, more than the render scale saves
+   public static volatile int DLSS_OUTPUT_PCT; // dlss: DLSS writes this percentage of the screen size (never below the render size; its cost follows the output pixels) and dlssOutputFilter finishes the upscale; 0 = the screen size. 67 since 2026-09-23: the configuration that beats no upscaler (+22 % in a GPU-bound 4K scene) with a sharper image than full-size DLSS K
+   public static volatile String DLSS_OUTPUT_FILTER; // dlss with dlssOutputPct: bicubic = the stock screen shader samples the smaller output directly (no extra pass), fsr1 = EASU + RCAS first, rcas = RCAS alone at the DLSS output size, then the bicubic
    public static final boolean DLSS_FLUSH_AFTER_WAIT = bool("dlssFlushAfterWait", false); // dlss A/B: glFlush right after GL's wait on the DLSS-done semaphore (2026-09-23: no effect, the ~0.2 ms after an evaluation is not unflushed GL work)
    public static final boolean DLSS_FLUSH_AFTER_COMPOSITE = bool("dlssFlushAfterComposite", false); // dlss: also glFlush after the composite quad (A/B)
    public static final boolean DLSS_WAIT_OUTPUT_ONLY = bool("dlssWaitOutputOnly", false); // dlss: GL's wait names only the output image (A/B of the layout hand-back)
@@ -672,7 +672,7 @@ public final class Config {
    public static final boolean VBO_FAST_QUADS = bool("vboFastQuads", true); // VBORenderer.addQuad writes the four vertices with one position advance
    public static final boolean FOG_PASS = bool("fogPass", true); // ImprovedFog as one batch into a scaled, depth-copied fog buffer (pzopt.FogPass)
    public static final int FOG_SCALE_PCT = integer("fogScalePct", 25); // fog buffer size per axis, % of the viewport
-   public static final boolean AO = bool("ambientOcclusion", false); // ambient occlusion on the static world: floors, walls, furniture (pzopt.AmbientOcclusion)
+   public static volatile boolean AO; // ambient occlusion on the static world: floors, walls, furniture (pzopt.AmbientOcclusion)
    public static final String AO_MODE = string("aoMode", "chunk").toLowerCase(java.util.Locale.ROOT); // chunk: baked into the chunk textures (pzopt.ChunkAo, no per-frame cost); screen: a per-frame pass on the scene (pzopt.AmbientOcclusion)
    public static final boolean AO_SKIP_SLOW_FRAMES = bool("aoSkipSlowFrames", true); // chunk AO: under a cap, computes per frame follow the slack the last frame left (after a frame that missed the cap: aoSlowFrameComputes)
    public static final int AO_SLOW_FRAME_COMPUTES = integer("aoSlowFrameComputes", 0); // chunk AO: deferred computes after a frame that missed the cap (0 = one every 8 such frames)
@@ -680,9 +680,16 @@ public final class Config {
    public static final int AO_COMPUTE_BUDGET = integer("aoComputeBudget", 4); // chunk AO: deferred computes per frame at most (under a cap: fewer, by the last frame's slack) (over the bake budget, neighbour refreshes); the rest wait
    public static final boolean AO_CHUNK_FLIP = bool("aoChunkFlip", true); // chunk AO: the bake writes texture rows top-down (FlipY); false = bottom-up
    public static final boolean AO_REUSE = bool("aoReuse", true); // the AO buffer is kept while the camera, zoom and chunk textures stay the same (no AO work on such frames)
-   public static final int AO_SCALE_PCT = integer("aoScalePct", 50); // AO buffer size per axis, % of the viewport (25..100)
-   public static final int AO_RADIUS_PCT = integer("aoRadiusPct", 60); // how far occluders reach, % of a square
-   public static final int AO_STRENGTH_PCT = integer("aoStrengthPct", 100); // darkening strength, % (100 = the computed occlusion)
+   public static volatile int AO_SCALE_PCT; // AO buffer size per axis, % of the viewport (25..100)
+   public static volatile int AO_RADIUS_PCT; // how far occluders reach, % of a square
+   public static final int AO_STRENGTH_PCT = integer("aoStrengthPct", 100); // the one darkening strength before 2026-09-25; now only the fallback of the three per-surface strengths below while they are unset
+   // darkening strength per receiving surface, % (100 = the computed occlusion), picked in the AO kernel from the normal it snaps
+   // to the ground or a wall plane: floors (and flat ground), walls, vegetation (neither, on a square with a tree, bush or grass:
+   // chunk mode only), everything else (furniture, fences, stairs, roofs' edges)
+   public static volatile int AO_STRENGTH_FLOOR_PCT;
+   public static volatile int AO_STRENGTH_WALL_PCT;
+   public static volatile int AO_STRENGTH_OBJECT_PCT;
+   public static volatile int AO_STRENGTH_VEGETATION_PCT;
    public static final int AO_THICKNESS_PCT = integer("aoThicknessPct", 60); // how deep a surface is assumed to be behind what the depth shows, % of a square
    public static final int DEV_AO_DUMP_FRAME = integer("devAoDumpFrame", 0); // dev: on this AO frame the scene depth + colour go to ~/Zomboid/pzopt-ao-*.bin
    public static final boolean DEV_AO_NO_MIPS = bool("devAoNoMips", false); // dev: a deferred chunk AO does not rebuild the texture's mipmaps (cost probe)
@@ -692,16 +699,16 @@ public final class Config {
    public static final boolean HDR = bool("hdr", false); // HDR output (pzopt.Hdr): FP16 window on Wayland tagged with the output's HDR image description, world highlights expanded, UI at the desktop's white
    public static final boolean HDR_AUTO = bool("hdrAuto", true); // HDR output whenever the screen is HDR (Linux: a Wayland output in HDR mode; macOS: an EDR display), even with hdr=false; hdr=true forces it
    public static final String HDR_ENCODE = string("hdrEncode", "auto").toLowerCase(java.util.Locale.ROOT); // on: ext_linear description + encode pass at the swap (standard, exact roll-off); off: no description, the compositor's own SDR decode shows the FP16 values above 1.0 (KWin; ~0.3 ms a frame cheaper at 4K); auto: off on KDE Plasma, on elsewhere
-   public static final int HDR_UI_NITS = integer("hdrUiNits", 0); // UI / SDR white on the panel in cd/m², 0 = the desktop's reference white
-   public static final int HDR_PAPER_PCT = integer("hdrPaperPct", 100); // world paper white, % of the UI white (lower = more room for highlights)
-   public static final int HDR_PEAK_NITS = integer("hdrPeakNits", 0); // brightest highlight in cd/m², 0 = the panel's peak
-   public static final int HDR_ITM_PCT = integer("hdrItmPct", 50); // highlight expansion strength (0 = the SDR picture in an HDR container)
-   public static final int HDR_BLOOM_PCT = integer("hdrBloomPct", 30); // bloom from the expanded highlights, % strength (0 = off)
+   public static volatile int HDR_UI_NITS; // UI / SDR white on the panel in cd/m², 0 = the desktop's reference white
+   public static volatile int HDR_PAPER_PCT; // world paper white, % of the UI white (lower = more room for highlights)
+   public static volatile int HDR_PEAK_NITS; // brightest highlight in cd/m², 0 = the panel's peak
+   public static volatile int HDR_ITM_PCT; // highlight expansion strength (0 = the SDR picture in an HDR container)
+   public static volatile int HDR_BLOOM_PCT; // bloom from the expanded highlights, % strength (0 = off)
    public static final int DEV_HDR_TRACE_MS = integer("devHdrTraceMs", 0); // dev: every N ms a console line with the player's facing, the world's average light, the night key and the light-map stats
-   public static final int HDR_LIGHT_PCT = integer("hdrLightPct", 100); // light-map gain: lit squares (lamps, torches, fire) brightened by their light over the ambient, % strength
-   public static final int HDR_GLINT_PCT = integer("hdrGlintPct", 100); // sun glints and sky reflections on water and puddles, lamp glints at night, % strength (0 = off, shaders stay stock)
-   public static final int HDR_SUN_PCT = integer("hdrSunPct", 60); // sunlit outdoors on a clear day brighter than the SDR picture by this %, scaled by sun height and clouds (0 = daylight as SDR)
-   public static final int HDR_SATURATION_PCT = integer("hdrSaturationPct", 0); // extra world chroma, %
+   public static volatile int HDR_LIGHT_PCT; // light-map gain: lit squares (lamps, torches, fire) brightened by their light over the ambient, % strength
+   public static volatile int HDR_GLINT_PCT; // sun glints and sky reflections on water and puddles, lamp glints at night, % strength (0 = off)
+   public static volatile int HDR_SUN_PCT; // sunlit outdoors on a clear day brighter than the SDR picture by this %, scaled by sun height and clouds (0 = daylight as SDR)
+   public static volatile int HDR_SATURATION_PCT; // extra world chroma, %
    public static final boolean HDR_UNTESTED_PLATFORMS = bool("hdrUntestedPlatforms", false); // dev: allow the untested Windows (scRGB) HDR path; HDR is Linux / macOS without it
    public static final String HDR_TUNE = string("hdrTune", "");
    public static final boolean HDR_WIN_FLIP = bool("hdrWinFlip", true); // Windows HDR: write the interop texture upside down (D3D rows run top-down); false if a driver maps it the other way
@@ -750,6 +757,33 @@ public final class Config {
 
    private static void loadLive() {
       loadingLive = true;
+      // The Enhancements tab's keys (2026-09-25): upscaling, the HDR sliders (not hdr / hdrAuto: on Linux they pick the
+      // window the game starts with), ambient occlusion; pzopt.Enhancements applies a change (UserOptions.set)
+      UPSCALER = string("upscaler", "off").trim().toLowerCase(java.util.Locale.ROOT);
+      UPSCALER_QUALITY = string("upscalerQuality", "quality").trim().toLowerCase(java.util.Locale.ROOT);
+      UPSCALER_SCALE_PCT = integer("upscalerScalePct", 0);
+      FSR_SHARPNESS_PCT = Math.max(0, Math.min(100, integer("fsrSharpnessPct", 80)));
+      DLSS_SHARPEN = bool("dlssSharpen", false);
+      UPSCALER_OBJECT_MV = bool("upscalerObjectMv", true);
+      DLSS_PRESET = string("dlssPreset", "e").trim().toLowerCase(java.util.Locale.ROOT);
+      DLSS_OUTPUT_PCT = integer("dlssOutputPct", 67);
+      DLSS_OUTPUT_FILTER = string("dlssOutputFilter", "rcas").trim().toLowerCase(java.util.Locale.ROOT);
+      AO = bool("ambientOcclusion", false);
+      AO_SCALE_PCT = integer("aoScalePct", 50);
+      AO_RADIUS_PCT = integer("aoRadiusPct", 60);
+      AO_STRENGTH_FLOOR_PCT = aoStrength("aoStrengthFloorPct");
+      AO_STRENGTH_WALL_PCT = aoStrength("aoStrengthWallPct");
+      AO_STRENGTH_OBJECT_PCT = aoStrength("aoStrengthObjectPct");
+      AO_STRENGTH_VEGETATION_PCT = aoStrength("aoStrengthVegetationPct");
+      HDR_UI_NITS = integer("hdrUiNits", 0);
+      HDR_PAPER_PCT = integer("hdrPaperPct", 100);
+      HDR_PEAK_NITS = integer("hdrPeakNits", 0);
+      HDR_ITM_PCT = integer("hdrItmPct", 50);
+      HDR_BLOOM_PCT = integer("hdrBloomPct", 30);
+      HDR_LIGHT_PCT = integer("hdrLightPct", 100);
+      HDR_GLINT_PCT = integer("hdrGlintPct", 100);
+      HDR_SUN_PCT = integer("hdrSunPct", 60);
+      HDR_SATURATION_PCT = integer("hdrSaturationPct", 0);
       OVERLAY_SAMPLING = bool("overlaySampling", false);
       OVERLAY = bool("overlay", false);
       OVERLAY_LOG = bool("overlayLog", false);
@@ -833,6 +867,12 @@ public final class Config {
          Log.warn("bad integer for " + key + ": " + v + "; using " + def);
          return def;
       }
+   }
+
+   /** A per-surface AO strength: its own key, else the old single {@code aoStrengthPct} (options files from before 2026-09-25). */
+   private static int aoStrength(String key) {
+      String v = raw(key);
+      return register(key, v == null ? AO_STRENGTH_PCT : parseInt(key, v, AO_STRENGTH_PCT), 100);
    }
 
    private static int integer(String key, int def) {
@@ -925,7 +965,7 @@ public final class Config {
             + Runtime.getRuntime().availableProcessors() + ") wake=" + WAKE + " (effective " + effectiveWake() + ") chunkGridWidth=" + CHUNK_GRID_SETTING + " instrument=" + INSTRUMENT + " dev=" + DEV + " luaChecksumExempt=" + LUA_CHECKSUM_EXEMPT
             + " translucentCache=" + TRANSLUCENT_CACHE + " hotsaveIntervalSec=" + HOTSAVE_INTERVAL_SEC + " persistentVbo=" + PERSISTENT_VBO + " treesInChunkTexture=" + TREES_IN_CHUNK_TEXTURE + " windowsInChunkTexture=" + WINDOWS_IN_CHUNK_TEXTURE + " translucentTilesInChunkTexture=" + TRANSLUCENT_TILES_IN_CHUNK_TEXTURE + " treeBakePass=" + TREE_BAKE_PASS + " curtainDepthNudgePct=" + Math.round(CURTAIN_DEPTH_NUDGE * 100.0F) + " bakeBudget=" + BAKE_BUDGET + " lightingBudget=" + LIGHTING_BUDGET + " lightingRebakeMs=" + LIGHTING_REBAKE_MS + " rebakeBudget=" + REBAKE_BUDGET + " rebakeMaxFrames=" + REBAKE_MAX_FRAMES + " lightingRebakeBudget=" + LIGHTING_REBAKE_BUDGET + " lightingRebakeMaxFrames=" + LIGHTING_REBAKE_MAX_FRAMES + " zoomRetain=" + ZOOM_RETAIN + " zoomRebakeBudget=" + ZOOM_REBAKE_BUDGET + " zoomFrameMs=" + Math.round(ZOOM_FRAME_MS) + " zoomPlaceholder=" + ZOOM_PLACEHOLDER + " zoomEaseMs=" + ZOOM_EASE_MS + " zoomEase=" + ZOOM_EASE + " lightingStrongDelta=" + LIGHTING_STRONG_DELTA + " lightingStrongBudget=" + LIGHTING_STRONG_BUDGET + " lightingStrongFrameMs=" + Math.round(LIGHTING_STRONG_FRAME_MS) + " lightingGlobalDeltaPct=" + Math.round(LIGHTING_GLOBAL_DELTA * 100.0F) + " lightingFlush=" + LIGHTING_FLUSH + " lightSwitchCheckFrames=" + LIGHT_SWITCH_CHECK_FRAMES + " cutawayFast=" + CUTAWAY_FAST + " cutawayRadius=" + CUTAWAY_RADIUS + " gridStackInterval=" + GRID_STACK_INTERVAL + " roofHideDebounceFrames=" + ROOF_HIDE_DEBOUNCE_FRAMES + " weatherMaskIdleSkip=" + WEATHER_MASK_IDLE_SKIP + " worldSoundFast=" + WORLD_SOUND_FAST + " keyboardFresh=" + KEYBOARD_FRESH + " inputLatch=" + INPUT_LATCH + " inputLatchWaitUs=" + INPUT_LATCH_WAIT_US + " frameStartGate=" + FRAME_START_GATE + " gpuMaxFrames=" + GPU_MAX_FRAMES + " reflexSleep=" + REFLEX_SLEEP + " reflexBoost=" + REFLEX_BOOST + " reflexQueueUs=" + REFLEX_QUEUE_US + " reflexCapFps=" + REFLEX_CAP_FPS + " vsyncAdaptive=" + VSYNC_ADAPTIVE + " vblankLock=" + VBLANK_LOCK + " vblankLockMarginUs=" + VBLANK_LOCK_MARGIN_US + " aimHoldMs=" + AIM_HOLD_MS + " cursorLatch=" + CURSOR_LATCH + " saveCellAsync=" + SAVE_CELL_ASYNC + " chunkMapFast=" + CHUNK_MAP_FAST + " propertySurfaceNoAlloc=" + PROPERTY_SURFACE_NOALLOC + " weatherNoGlGet=" + WEATHER_NO_GLGET + " renderChunkPrewarm=" + RENDER_CHUNK_PREWARM + " lightingVisionParallel=" + LIGHTING_VISION_PARALLEL + " threadNice=" + THREAD_NICE + " profileHandshake=" + PROFILE_HANDSHAKE + " luaProfile=" + LUA_PROFILE + " gcMode=" + GC_MODE + " gcPauseMs=" + GC_PAUSE_MS + " jitMode=" + JIT_MODE + " jitC1Cores=" + JIT_C1_CORES + " vehicleCull=" + VEHICLE_CULL + " playerLosFast=" + PLAYER_LOS_FAST + " zombieSpotFast=" + ZOMBIE_SPOT_FAST + " playerLosNative=" + PLAYER_LOS_NATIVE + " animBonesParallel=" + ANIM_BONES_PARALLEL + " animBatchAsync=" + ANIM_BATCH_ASYNC + " animatorParallel=" + ANIMATOR_PARALLEL + " animatorPipeline=" + ANIMATOR_PIPELINE + " frameSpinUs=" + FRAME_SPIN_US + " frameThreads=" + FRAME_THREADS + " actionEvalParallel=" + ACTION_EVAL_PARALLEL + " actionSnapshotFilter=" + ACTION_SNAPSHOT_FILTER + " emitterParamSkip=" + EMITTER_PARAM_SKIP + " emitterIdleSkip=" + EMITTER_IDLE_SKIP + " worldSoundCleanupFast=" + WORLD_SOUND_CLEANUP_FAST + " hearingHoist=" + HEARING_HOIST + " soundTickHz=" + SOUND_TICK_HZ + " audioLimiter=" + AUDIO_LIMITER + " audioLimiterCeilingDb=" + Math.round(AUDIO_LIMITER_CEILING_DB) + " separateFast=" + SEPARATE_FAST + " separateParallel=" + SEPARATE_PARALLEL + " actionGroupCache=" + ACTION_GROUP_CACHE + " profilerThreadMemo=" + PROFILER_THREAD_MEMO + " sleepCheckMemo=" + SLEEP_CHECK_MEMO + " stateParamMemo=" + STATE_PARAM_MEMO + " zombieSimLodTiles=" + ZOMBIE_SIM_LOD_TILES + " zombieSimLodSteps=" + ZOMBIE_SIM_LOD_STEPS + " zombieCheckSpread=" + ZOMBIE_CHECK_SPREAD + " lightingReadParallel=" + LIGHTING_READ_PARALLEL + " zombieCullSortFast=" + ZOMBIE_CULL_SORT_FAST + " skinTransformsPrecompute=" + SKIN_TRANSFORMS_PRECOMPUTE + " skinPalettePrecompute=" + SKIN_PALETTE_PRECOMPUTE + " shadowPrep=" + SHADOW_PREP + " boneIndexCache=" + BONE_INDEX_CACHE + " ecsLookupFast=" + ECS_LOOKUP_FAST + " actionConditionFast=" + ACTION_CONDITION_FAST + " charDrawPrep=" + CHAR_DRAW_PREP + " zombieAtlasFast=" + ZOMBIE_ATLAS_FAST + " charDrawThreads=" + CHAR_DRAW_THREADS
             + " fileThreads=" + FILE_THREADS + " fileInflight=" + FILE_INFLIGHT + " textureBufferMb=" + TEXTURE_BUFFER_MB + " parallelDepthMaps=" + PARALLEL_DEPTH_MAPS + " loaderCpuFixes=" + LOADER_CPU_FIXES + " loadWorkers=" + LOAD_WORKERS + " scriptParserFast=" + SCRIPT_PARSER_FAST + " fmodAsync=" + FMOD_ASYNC + " noLoadFade=" + NO_LOAD_FADE + " noIntroWait=" + NO_INTRO_WAIT + " noClickToStart=" + NO_CLICK_TO_START + " noLoadingScreen=" + NO_LOADING_SCREEN + " centerFirstLoad=" + CENTER_FIRST_LOAD + " resumeShot=" + RESUME_SHOT + " resumeShotDetail=" + RESUME_SHOT_DETAIL + " bootPump=" + BOOT_PUMP + " earlyModels=" + EARLY_MODELS + " luaPrecompile=" + LUA_PRECOMPILE + " preloadAnimSets=" + PRELOAD_ANIM_SETS + " tileDefPreload=" + TILE_DEF_PRELOAD + " skipIdChecks=" + SKIP_ID_CHECKS + " voronoiFast=" + VORONOI_FAST + " earlyTilePacks=" + EARLY_TILE_PACKS + " aotCache=" + AOT_CACHE + " animClipCache=" + ANIM_CLIP_CACHE + " packIndex=" + PACK_INDEX + " itemParamSwitch=" + ITEM_PARAM_SWITCH + " bootFileThreads=" + BOOT_FILE_THREADS + " shaderCache=" + SHADER_CACHE + " mipmapArrays=" + MIPMAP_ARRAYS + " puddleCache=" + PUDDLE_CACHE + " puddleCacheFrames=" + PUDDLE_CACHE_FRAMES + " puddleVbo=" + PUDDLE_VBO + " treeAppend=" + TREE_APPEND + " puddleEarlyZ=" + PUDDLE_EARLY_Z + " rainSplashesFast=" + RAIN_SPLASHES_FAST + " rainTiles=" + RAIN_TILES + " vboBatchKb=" + VBO_BATCH_KB + " vboFastQuads=" + VBO_FAST_QUADS + " fogPass=" + FOG_PASS + " fogScalePct=" + FOG_SCALE_PCT + " fogMaskFrames=" + FOG_MASK_FRAMES
-            + " ambientOcclusion=" + AO + " aoMode=" + AO_MODE + " aoScalePct=" + AO_SCALE_PCT + " aoRadiusPct=" + AO_RADIUS_PCT + " aoStrengthPct=" + AO_STRENGTH_PCT + " aoThicknessPct=" + AO_THICKNESS_PCT
+            + " ambientOcclusion=" + AO + " aoMode=" + AO_MODE + " aoScalePct=" + AO_SCALE_PCT + " aoRadiusPct=" + AO_RADIUS_PCT + " aoStrengthFloorPct=" + AO_STRENGTH_FLOOR_PCT + " aoStrengthWallPct=" + AO_STRENGTH_WALL_PCT + " aoStrengthObjectPct=" + AO_STRENGTH_OBJECT_PCT + " aoStrengthVegetationPct=" + AO_STRENGTH_VEGETATION_PCT + " aoThicknessPct=" + AO_THICKNESS_PCT
             + " upscaler=" + UPSCALER + " upscalerQuality=" + UPSCALER_QUALITY + " upscalerScalePct=" + UPSCALER_SCALE_PCT + " fsrSharpnessPct=" + FSR_SHARPNESS_PCT + " dlssSharpen=" + DLSS_SHARPEN + " upscalerObjectMv=" + UPSCALER_OBJECT_MV + " dlssPreset=" + DLSS_PRESET + " dlssAutoExposure=" + DLSS_AUTO_EXPOSURE + " dlssPipeline=" + DLSS_PIPELINE + " dlssOutputPct=" + DLSS_OUTPUT_PCT + " dlssOutputFilter=" + DLSS_OUTPUT_FILTER + " dlssFlushAfterWait=" + DLSS_FLUSH_AFTER_WAIT + " dlssFlushAfterComposite=" + DLSS_FLUSH_AFTER_COMPOSITE + " dlssWaitOutputOnly=" + DLSS_WAIT_OUTPUT_ONLY + " dlssDirectColor=" + DLSS_DIRECT_COLOR;
    }
 }

@@ -14,7 +14,8 @@ ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "src/pzopt/pzopt/Config.java"
 OUT = ROOT / "src/lua/client/pzopt/pzopt_optimizations_classes.lua"
 
-DECL = re.compile(r'static\s+final\s+[\w<>\[\]]+\s+([A-Z][A-Z0-9_]*)\s*=.*?\b(?:bool|integer|string)\(\s*"(\w+)"')
+# aoStrength("key"): the per-surface AO strengths, an integer key that falls back on the old aoStrengthPct
+DECL = re.compile(r'static\s+final\s+[\w<>\[\]]+\s+([A-Z][A-Z0-9_]*)\s*=.*?\b(?:bool|integer|string|aoStrength)\(\s*"(\w+)"')
 
 
 def main():

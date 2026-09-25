@@ -158,6 +158,13 @@ public final class Harness {
    private static final int[] zoomTraceUrgentFlags = new int[16];
    private static final long[] zoomTraceCf = new long[4];
    private static final int[] zoomTraceCfFlags = new int[16];
+   /**
+    * live_set rig (2026-09-25, the Enhancements tab applies without a restart): {key, value, seconds into the route}; at
+    * that time the harness does what the options screen's Apply does, UserOptions.set(key, value). Point the run's
+    * options file elsewhere (--vmarg -Dpzopt.userOptionsFile=...) so the player's file is left alone, and do not pin the
+    * key with --prop (a pinned key wins over the file).
+    */
+   private static final java.util.ArrayList<String[]> liveSets = new java.util.ArrayList<>();
    /** bench: seconds into the route at which the camera is held for a screenshot (flag shot_at, 0 = off). */
    private static float shotAt = 0f;
    /** bench: seconds to stay on the route's end square, still spinning, before the run ends (flag hold, 0 = off). */
@@ -311,6 +318,13 @@ public final class Harness {
          zoomJump = "true".equals(HarnessFlags.get("zoom_jump", "false"));
          zoomSpan = Math.max(1, Integer.parseInt(HarnessFlags.get("zoom_span", "1")));
          shotAt = Float.parseFloat(HarnessFlags.get("shot_at", "0"));
+         for (String item : HarnessFlags.get("live_set", "").split(",")) { // live_set=<key>=<value>@<s>,...
+            int eq = item.indexOf('=');
+            int at = item.lastIndexOf('@');
+            if (eq > 0 && at > eq) {
+               liveSets.add(new String[] {item.substring(0, eq).trim(), item.substring(eq + 1, at).trim(), item.substring(at + 1).trim()});
+            }
+         }
          holdSecs = Float.parseFloat(HarnessFlags.get("hold", "0"));
          jitterTiles = Float.parseFloat(HarnessFlags.get("jitter", "0"));
          shotBurst = Integer.parseInt(HarnessFlags.get("shot_burst", "0"));
@@ -670,6 +684,15 @@ public final class Harness {
                upstairsAt = 0f; // once: the level change mid-route (upstairs_at, issue #12 transition)
                Stats.mark("upstairs");
                goUpstairs(p, Integer.parseInt(HarnessFlags.get("upstairs", "1").trim()));
+            }
+            for (int i = 0; i < liveSets.size(); i++) {
+               String[] ls = liveSets.get(i);
+               if (ls != null && (nowNs - runStartNs) / 1e9 >= Float.parseFloat(ls[2])) {
+                  liveSets.set(i, null);
+                  Stats.mark("live-" + ls[0]);
+                  Log.info(String.format(java.util.Locale.ROOT, "harness: live_set %s=%s at t=%.1fs", ls[0], ls[1], (nowNs - runStartNs) / 1e9));
+                  UserOptions.set(ls[0], ls[1]);
+               }
             }
             if (shotAt > 0f && shotPhase < 2 && !holdForScreenshot(nowNs)) {
                return; // camera held for the screenshot: no teleport, no turn this frame

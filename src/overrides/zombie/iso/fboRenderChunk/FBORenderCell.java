@@ -583,6 +583,9 @@ public final class FBORenderCell {
             FBORenderOcclusion.getInstance().occludedGridY1 = perPlayerData1.occludedGridY1;
             FBORenderOcclusion.getInstance().occludedGridX2 = perPlayerData1.occludedGridX2;
             FBORenderOcclusion.getInstance().occludedGridY2 = perPlayerData1.occludedGridY2;
+            this.pzoptCountsPrecomputed = pzopt.Config.OCCLUSION_COUNT_PARALLEL && pzopt.Overrides.enabled() && this.pzoptPrecountRenderedSquares(playerIndex); // pzopt: occlusionCountParallel
+         } else {
+            this.pzoptCountsPrecomputed = false; // pzopt: occlusionCountParallel
          }
 
          AbstractPerformanceProfileProbe var43 = updateLighting.profile();
@@ -1888,7 +1891,11 @@ public final class FBORenderCell {
          }
 
          if (FBORenderOcclusion.getInstance().enabled) {
-            if (level == renderLevels.getMinLevel(level) && perPlayerData1.occlusionChanged) {
+            if (level == renderLevels.getMinLevel(level) && perPlayerData1.occlusionChanged && this.pzoptCountsPrecomputed && pzopt.Config.DEV_OCCLUSION_COUNT_CHECK) { // pzopt: rig, the worker count against the stock one
+               pzoptCountChecks++; // pzopt
+               if (renderLevels.getRenderedSquaresCount(level) != this.calculateRenderedSquaresCount(playerIndex, c, level)) pzoptCountMismatches++; // pzopt
+            } // pzopt
+            if (level == renderLevels.getMinLevel(level) && perPlayerData1.occlusionChanged && !this.pzoptCountsPrecomputed) { // pzopt: occlusionCountParallel counted it already this frame
                renderLevels.setRenderedSquaresCount(level, this.calculateRenderedSquaresCount(playerIndex, c, level));
             }
 
@@ -5110,6 +5117,8 @@ public final class FBORenderCell {
       if (pzopt.SeamSpread.ON) sb.append(pzopt.SeamSpread.summary()); // pzopt: seamSpread counters
       if (pzopt.BakeScheduler.ON) sb.append(pzopt.BakeScheduler.get(0).summary()); // pzopt: bakeScheduler counters
       if (pzopt.GlNames.ON) sb.append(pzopt.GlNames.summary()); // pzopt: glNoSync counters
+      if (zombie.iso.LightingJNI.pzoptNewDeferred > 0) { sb.append(" | new-chunk lighting passes deferred: ").append(zombie.iso.LightingJNI.pzoptNewDeferred); zombie.iso.LightingJNI.pzoptNewDeferred = 0; } // pzopt: lightingNewChunkBudget
+      if (pzoptParallelCountFrames > 0) { sb.append(" | occlusion counts on workers: ").append(pzoptParallelCounts).append(" levels in ").append(pzoptParallelCountFrames).append(" frames, dev checks ").append(pzoptCountChecks).append(" mismatches ").append(pzoptCountMismatches); pzoptParallelCounts = pzoptParallelCountFrames = 0; } // pzopt: occlusionCountParallel
       if (pzopt.PuddleCache.enabled()) { sb.append(" | ").append(pzopt.PuddleCache.stats()); } // pzopt
       if (pzopt.RainSplashes.enabled()) { sb.append(" | ").append(pzopt.RainSplashes.stats()); } // pzopt
       if (pzopt.RainTiles.enabled()) { sb.append(" | ").append(pzopt.RainTiles.stats()); } // pzopt
@@ -5941,6 +5950,89 @@ public final class FBORenderCell {
          mask |= 1L << i;
       }
       return mask;
+   }
+
+   // pzopt: occlusionCountParallel. The rendered-squares count of every on-screen level (renderOneLevel recomputed it level
+   // by level whenever the occlusion grid changed: every few frames while driving, all levels at once) is counted right
+   // after the grid is built, chunks spread over the FrameBatch workers. Reads only: the cutaway square flags and the
+   // grid (the stock isOccluded writes FBORenderOcclusion.testValue, so the same test runs here on locals); each task
+   // writes its own chunk's counts.
+   private boolean pzoptCountsPrecomputed;
+   private final java.util.ArrayList<IsoChunk> pzoptCountChunks = new java.util.ArrayList<>();
+   public static long pzoptParallelCounts, pzoptParallelCountFrames, pzoptCountChecks, pzoptCountMismatches;
+
+   private boolean pzoptPrecountRenderedSquares(int playerIndex) {
+      FBORenderCell.PerPlayerData perPlayerData1 = this.perPlayerData[playerIndex];
+      java.util.ArrayList<IsoChunk> list = this.pzoptCountChunks;
+      list.clear();
+      list.addAll(perPlayerData1.onScreenChunks);
+      final int[] grid = perPlayerData1.occludedGrid;
+      final int gx1 = perPlayerData1.occludedGridX1, gy1 = perPlayerData1.occludedGridY1;
+      final int gw = perPlayerData1.occludedGridX2 - gx1 + 1, gh = perPlayerData1.occludedGridY2 - gy1 + 1;
+      final boolean cheap = DebugOptions.instance.cheapOcclusionCount.getValue();
+      final int per = 8;
+      int tasks = (list.size() + per - 1) / per;
+      final java.util.concurrent.atomic.AtomicLong counted = new java.util.concurrent.atomic.AtomicLong();
+      Throwable t = pzopt.FrameBatch.run(tasks, index -> {
+         int end = Math.min(list.size(), (index + 1) * per);
+         for (int i = index * per; i < end; i++) {
+            IsoChunk c = list.get(i);
+            FBORenderLevels renderLevels = c.getRenderLevels(playerIndex);
+            for (int z = c.minLevel; z <= c.maxLevel; z++) {
+               if (z == renderLevels.getMinLevel(z) && renderLevels.isOnScreen(z)) {
+                  renderLevels.setRenderedSquaresCount(z, pzoptCountRendered(playerIndex, c, z, renderLevels, grid, gx1, gy1, gw, gh, cheap));
+                  counted.incrementAndGet();
+               }
+            }
+         }
+      });
+      if (t != null) {
+         pzopt.Log.warn("occlusionCountParallel: " + t + "; counting on the game thread");
+         return false;
+      }
+      pzoptParallelCounts += counted.get();
+      pzoptParallelCountFrames++;
+      return true;
+   }
+
+   /** calculateRenderedSquaresCount with FBORenderOcclusion.isOccluded on locals (worker threads). */
+   private static int pzoptCountRendered(int playerIndex, IsoChunk chunk, int level, FBORenderLevels renderLevels, int[] grid, int gx1, int gy1,
+                                         int gw, int gh, boolean cheap) {
+      int minLevel = renderLevels.getMinLevel(level);
+      int maxLevel = renderLevels.getMaxLevel(level);
+      int renderedSquaresCount = 0;
+      for (int z = minLevel; z <= maxLevel; z++) {
+         ChunkLevelData chunkLevelData = chunk.getCutawayDataForLevel(z);
+         IsoGridSquare[] squares = chunk.getSquaresForLevel(z);
+         for (int i = 0; i < squares.length; i++) {
+            IsoGridSquare square = squares[i];
+            if (chunkLevelData.shouldRenderSquare(playerIndex, square) && !pzoptOccluded(square.x, square.y, z, grid, gx1, gy1, gw, gh)) {
+               if (cheap) {
+                  return 1;
+               }
+               renderedSquaresCount++;
+            }
+         }
+      }
+      return renderedSquaresCount;
+   }
+
+   /** FBORenderOcclusion.isOccluded (the same ten grid cells behind the square, occluded when every one is higher). */
+   private static boolean pzoptOccluded(int x, int y, int z, int[] grid, int gx1, int gy1, int gw, int gh) {
+      return pzoptOccAux(x, y, z, grid, gx1, gy1, gw, gh) && pzoptOccAux(x - 1, y - 1, z, grid, gx1, gy1, gw, gh)
+         && pzoptOccAux(x - 2, y - 2, z, grid, gx1, gy1, gw, gh) && pzoptOccAux(x - 3, y - 3, z, grid, gx1, gy1, gw, gh)
+         && pzoptOccAux(x - 1, y, z, grid, gx1, gy1, gw, gh) && pzoptOccAux(x, y - 1, z, grid, gx1, gy1, gw, gh)
+         && pzoptOccAux(x - 2, y - 1, z, grid, gx1, gy1, gw, gh) && pzoptOccAux(x - 1, y - 2, z, grid, gx1, gy1, gw, gh)
+         && pzoptOccAux(x - 3, y - 2, z, grid, gx1, gy1, gw, gh) && pzoptOccAux(x - 2, y - 3, z, grid, gx1, gy1, gw, gh);
+   }
+
+   private static boolean pzoptOccAux(int x, int y, int z, int[] grid, int gx1, int gy1, int gw, int gh) {
+      int zeroX = x - z * 3 - gx1;
+      int zeroY = y - z * 3 - gy1;
+      if (zeroX < 0 || zeroY < 0 || zeroX >= gw || zeroY >= gh) {
+         return false;
+      }
+      return grid[zeroX + zeroY * gw] > z;
    }
 
    private int calculateRenderedSquaresCount(int playerIndex, IsoChunk chunk, int level) {

@@ -3613,6 +3613,32 @@ it in place like the fog pass).
 - After the swap: `pzopt.GlNames.refill()` (`glNoSync`), one batched `glGenTextures` / `glGenFramebuffers` when a pool
   is under half, while the render thread waits for the next frame anyway.
 
+### zombie.iso.RoomDef (new override, `kidsRoomMemo`, default on)
+
+- `isKidsRoom`: while a trashed-house pass is open (`pzopt.KidsRoom`, game thread) the answer is kept per room; the stock
+  body moved to `pzoptIsKidsRoom`, its 19 tile names from a static set (`KidsRoom.TILES`) instead of a list built per call.
+  `devKidsRoomCheck` rescans every memo hit (689 checked, 0 mismatches).
+
+### zombie.randomizedWorld.randomizedBuilding.RBTrashed (new override, `kidsRoomMemo`)
+
+- `randomizeBuilding`: `trashHouse(def)` runs between `KidsRoom.begin()` and `end()` (the pass is timed with the memo
+  off too). `trashHouse` destroys doors, smashes windows, moves container items and adds graffiti overlays, none of them a
+  kids-room tile, so a room's answer holds through the pass.
+
+### zombie.iso.LightingJNI (`lightingNewChunkBudget`, default 1)
+
+- `update`: at most `lightingNewChunkBudget` never-lit chunks (`lightingNeverDone`) go through `updateChunk` a pass, in the
+  centre-first order; the others keep `lightCheck` for the next pass. Applies only in steady state: more than
+  `lightingNewChunkBacklog` (8) never-lit chunks waiting (a load, a teleport) switches it off until a pass finds none,
+  so a load lights every chunk at once as stock (time to a fully lit world 3.41 / 3.03 vs 3.35 / 3.04 s).
+
+### zombie.iso.fboRenderChunk.FBORenderCell (structural pass)
+
+- `occlusionCountParallel` (default on): right after the occlusion grid is built, `pzoptPrecountRenderedSquares` counts
+  every on-screen level's rendered squares on the FrameBatch workers (`pzoptCountRendered`, `pzoptOccluded`: the stock
+  `FBORenderOcclusion.isOccluded` test on locals, since the stock one writes `testValue`), and `renderOneLevel` skips its
+  own count that frame. `devOcclusionCountCheck` recounts on the game thread (1,214,010 checked, 0 mismatches).
+
 ### pzopt classes (not game classes)
 
 - `GlNames` (`glNoSync`): the name pools and the complete-shape set; `TreeBake`'s append check reads the render

@@ -29,7 +29,7 @@ public final class GlNames {
    private GlNames() {
    }
 
-   /** Render thread, right after the swap: tops the pools up to full when they are under half. */
+   /** Render thread, right after the swap: tops the texture pool up to full when under three quarters, the framebuffer pool under half. */
    public static void refill() {
       if (!ON) {
          return;
@@ -40,7 +40,7 @@ public final class GlNames {
       } else if (owner != t) {
          return;
       }
-      if (texN < textures.length / 2) {
+      if (texN < textures.length * 3 / 4) { // topped up early: a frame creating many textures (corpse clothing, atlas pages) ran the pool dry at half
          int[] fresh = new int[textures.length - texN];
          GL11.glGenTextures(fresh);
          System.arraycopy(fresh, 0, textures, texN, fresh.length);

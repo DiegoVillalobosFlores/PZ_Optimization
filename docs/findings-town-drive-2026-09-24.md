@@ -240,3 +240,36 @@ Stock game (`--prop enabled=false`) against the release build, drive-120-south, 
 
 The Workshop card (`docs/workshop/images/30-smooth-operator-driving.gif`, `harness/smooth-card-gif.py`) plays
 td-rel-stock-1 above td-rel-new-1 at the same route second with both frame-time traces.
+
+## Structural pass: the game thread's bursts (2026-09-25, after the release)
+
+Rig: `harness/jfr-subtree.java` (callee tree under one frame from the async-profiler JFR, 2 ms samples) and
+`harness/jfr-windows.java` per worst-step windows. **Trap:** native threads inherit their creator's OS name, so Bink's
+and FMOD's idle workers are also "MainThread": wall samples filtered by name alone showed a third of the worst steps as
+libc waits. Both tools now match a Java thread name against Java threads only (`JFR_JAVA_ONLY=0` for the old behaviour),
+and a `cstack=vm` profile (`--asprof event=cpu,interval=2ms,wall=2ms,cstack=vm`) walks through native frames.
+
+Game-thread CPU on the drive (release build, `td-dfn-prof`): tile rendering 28.6 % (chunk-level bakes 12.5 %:
+emission 5.5 %, occlusion counts 1.5 %, object render info 1.4 %, puddles 0.9 %; translucents 4.6 %; view cone 1.8 %),
+chunk arrival `IsoChunk.doLoadGridsquare` 4.4 % (border neighbour recalculation 2.4 %), lighting of new chunks 3 %.
+The 40 worst steps (10-104 ms, `td-s-profvm`), wall time on the game thread: 20 % `RBTrashed.trashHouse` ->
+`RoomDef.isKidsRoom` on chunk load, 19 % waiting for the render thread (`pushFrameDown`), the rest spread.
+
+| step | technique | result |
+|---|---|---|
+| 1 | `lightingVisionParallel` on the 16-core desktop (existing key, vision tests of new chunks on the workers) | 236.2 / 234.0 vs 236.2 / 234.9 fps, tails the same: stays off |
+| 2 | `occlusionCountParallel`: every on-screen level's rendered-squares count on the FrameBatch workers right after the occlusion grid (stock recounted level by level on the game thread whenever the grid changed; `FBORenderOcclusion.isOccluded` writes a shared field, so the test runs on locals) | 1,214,010 worker counts checked against the stock count, 0 mismatches (`devOcclusionCountCheck`); p99 8.1 / 8.7 -> 7.8 / 7.9 ms, 1 %-low 124 / 115 -> 128 / 127: **on by default** |
+| 3 | `kidsRoomMemo`: `RoomDef.isKidsRoom` answers kept per room through one trashed-house pass (new `RoomDef` + `RBTrashed` overrides, `pzopt.KidsRoom`; the pass changes no kids-room tile, so exact) and the 19 tile names in a static set | 689 memo answers rescanned, 0 mismatches; a pass that answered 2,005 times from the memo took 6.3 ms, the checked pass (every answer rescanned, i.e. stock's cost) 19.8 ms for 689; the spike source of the 10-104 ms steps: **on by default** |
+
+Measurement: the harness's MangoHud preload hooks `glXSwapBuffers` and calls `glXQueryDrawable` on every swap (a driver
+round trip; 26 % of the render thread's wall time in the worst windows). Release defaults with / without it
+(`td-mh-*`): 235.6 / 235.6 vs 236.5 / 236.9 fps, p99 8.1 / 8.0 vs 7.1 / 7.2 ms, 1 %-low 123 / 125 vs 141 / 140. Players
+see the second; the in-game overlay logs the same metrics, so drive measurements from here on use `--no-mangohud`.
+
+`glNoSync` re-tested without MangoHud and with a 256-name pool (`td-ns-*`): 236.5 / 236.7 vs 236.2 / 236.6 fps, p99
+7.2 / 7.5 vs 7.5 / 7.2 ms: still no effect, although driver round trips are ~36 % of the render thread's wall time in
+the worst windows (`td-s-profvm2`): removing one moves the wait to the next sync point while the driver thread is busy.
+
+| step | technique | result |
+|---|---|---|
+| 4 | `lightingNewChunkBudget`: `LightingJNI.update` lights at most one never-lit chunk a pass (nearest first; a chunk is not drawn until lit, so it appears a pass later at the grid edge); chunks already lit always update; with more than `lightingNewChunkBacklog` (8) never-lit chunks waiting (a world load, a teleport) every one is lit at once, as stock | budget 1 against the defaults, three runs each (`td-l-*`): 237.0 / 237.2 / 237.0 vs 235.0 / 235.6 / 235.9 fps, p99 7.2 / 6.9 / 7.0 vs 8.3 / 7.6 / 7.5 ms, 1 %-low 139 / 145 / 144 vs 121 / 131 / 133, game thread 41-45 vs 45-48 %; p99.9 not better (14.0-16.7 vs 13.9-14.9 ms). Budget 2 in between. Holes equal (1.06 vs 1.02 % enclosed black, 34 vs 35 frames over 0.5 %). **On by default** |

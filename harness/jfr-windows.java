@@ -11,6 +11,7 @@ import java.util.*;
 import jdk.jfr.consumer.*;
 
 public class JfrWindows {
+   static final boolean JAVA_ONLY = !"0".equals(System.getenv("JFR_JAVA_ONLY"));
    public static void main(String[] a) throws Exception {
       Path jfr = Path.of(a[0]);
       String thread = a[2];
@@ -38,7 +39,9 @@ public class JfrWindows {
             if (!ev.getEventType().getName().equals(event)) continue;
             RecordedThread t = ev.hasField("sampledThread") ? ev.getThread("sampledThread") : ev.getThread();
             if (t == null) continue;
-            String tn = t.getJavaName() != null ? t.getJavaName() : t.getOSName();
+            // native threads inherit their creator's OS name (Bink's and FMOD's workers are "MainThread" too): a Java thread
+            // name is matched only against Java threads
+            String tn = t.getJavaName() != null ? t.getJavaName() : (JAVA_ONLY ? null : t.getOSName());
             if (tn == null || !tn.equals(thread)) continue;
             java.time.Instant st = ev.getStartTime();
             long ns = st.getEpochSecond() * 1_000_000_000L + st.getNano();

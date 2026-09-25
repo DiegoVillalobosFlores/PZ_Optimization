@@ -24,11 +24,19 @@ a = ap.parse_args()
 
 for r in a.runs:
     run = Path(r)
-    sched = (run / "schedule.log").read_text()
-    m = re.search(r"route starts at \+(\d+) s", sched)
-    start = int(m.group(1)) if m else 15
     kv = dict(l.split("=", 1) for l in (run / "pzopt-bench.out").read_text().splitlines() if "=" in l)
     length = (int(kv["route_end_epoch_ms"]) - int(kv["route_start_epoch_ms"])) / 1000.0
+    sched = run / "schedule.log"
+    m = re.search(r"route starts at \+(\d+) s", sched.read_text()) if sched.exists() else None
+    if m:
+        start = int(m.group(1))
+    else:
+        # --no-mangohud runs have no schedule.log: the capture runs from launch to exit, so it began at the file's
+        # modification time minus its duration
+        dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
+                                    str(run / "recording.mp4")], capture_output=True, text=True).stdout)
+        began = (run / "recording.mp4").stat().st_mtime - dur
+        start = max(0.0, int(kv["route_start_epoch_ms"]) / 1000.0 - began)
     probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
                             "-of", "csv=p=0", str(run / "recording.mp4")], capture_output=True, text=True).stdout.split(",")
     w0, h0 = int(probe[0]), int(probe[1])

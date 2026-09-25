@@ -908,6 +908,11 @@ public final class LightingJNI {
       }
    }
 
+   private static final int PZOPT_NEW_CHUNK_BUDGET = pzopt.Overrides.enabled() ? pzopt.Config.LIGHTING_NEW_CHUNK_BUDGET : 0; // pzopt: lightingNewChunkBudget
+   public static long pzoptNewDeferred; // pzopt: never-lit chunks held to a later pass (counters line)
+   private static final boolean[] pzoptNewSteady = new boolean[4]; // pzopt: lightingNewChunkBudget applies once the grid has been fully lit
+   private static final int PZOPT_NEW_CHUNK_BACKLOG = pzopt.Config.LIGHTING_NEW_CHUNK_BACKLOG; // pzopt: lightingNewChunkBudget applies up to this many never-lit chunks pending
+
    public static void update() {
       if (IsoWorld.instance != null && IsoWorld.instance.currentCell != null) {
          GameProfiler profiler = GameProfiler.getInstance();
@@ -1022,6 +1027,20 @@ public final class LightingJNI {
                   // calls): the engine lights them in about that order, so the world appears from the player outwards
                   // instead of in the grid's row bands
                   int[] pzoptOrder = pzopt.CenterFirstLoad.gridOrder(IsoChunkMap.chunkGridWidth);
+                  int pzoptNewLit = 0; // pzopt: lightingNewChunkBudget, never-lit chunks lit this pass
+                  int pzoptNewBudget = PZOPT_NEW_CHUNK_BUDGET; // pzopt
+                  if (pzoptNewBudget > 0) { // pzopt: a world load or a teleport (many never-lit chunks at once) lights them all, as stock
+                     int pending = 0; // pzopt
+                     for (int cy = 0; cy < IsoChunkMap.chunkGridWidth && pending <= PZOPT_NEW_CHUNK_BACKLOG; cy++) { // pzopt
+                        for (int cx = 0; cx < IsoChunkMap.chunkGridWidth; cx++) { // pzopt
+                           IsoChunk c = cm.getChunk(cx, cy); // pzopt
+                           if (c != null && c.loaded && c.lightCheck[playerIndex] && c.lightingNeverDone[playerIndex]) pending++; // pzopt
+                        } // pzopt
+                     } // pzopt
+                     if (pending > PZOPT_NEW_CHUNK_BACKLOG) pzoptNewSteady[playerIndex] = false; // pzopt: a load or a teleport: stock until the grid is lit
+                     else if (pending == 0) pzoptNewSteady[playerIndex] = true; // pzopt: every loaded chunk lit: streaming from here on
+                     if (!pzoptNewSteady[playerIndex]) pzoptNewBudget = 0; // pzopt: the last chunks of a load light at once too (+0.3 s to a lit world otherwise)
+                  } // pzopt
                   for (int pzoptI = 0; pzoptI < pzoptOrder.length; pzoptI++) {
                      int cx = pzoptOrder[pzoptI] % IsoChunkMap.chunkGridWidth;
                      int cy = pzoptOrder[pzoptI] / IsoChunkMap.chunkGridWidth;
@@ -1029,8 +1048,17 @@ public final class LightingJNI {
                         IsoChunk mchunk = cm.getChunk(cx, cy);
                         if (mchunk != null && mchunk.loaded) {
                            if (mchunk.lightCheck[playerIndex]) {
-                              updateChunk(playerIndex, mchunk);
-                              mchunk.lightCheck[playerIndex] = false;
+                              // pzopt: lightingNewChunkBudget. A chunk never lit yet (just handed over by the streamer, not
+                              // drawn until lit) past this pass's budget keeps its flag for the next pass, nearest first
+                              // (centerFirstLoad order): the frame a chunk arrives no longer also lights it and its
+                              // neighbours' arrivals; chunks already lit (light changes near the player) always update
+                              if (pzoptNewBudget > 0 && mchunk.lightingNeverDone[playerIndex] && pzoptNewLit >= pzoptNewBudget) { // pzopt
+                                 pzoptNewDeferred++; // pzopt
+                              } else { // pzopt
+                                 if (mchunk.lightingNeverDone[playerIndex]) pzoptNewLit++; // pzopt
+                                 updateChunk(playerIndex, mchunk);
+                                 mchunk.lightCheck[playerIndex] = false;
+                              } // pzopt
                            }
 
                            mchunk.lightingNeverDone[playerIndex] = !chunkLightingDone(mchunk.wx, mchunk.wy);

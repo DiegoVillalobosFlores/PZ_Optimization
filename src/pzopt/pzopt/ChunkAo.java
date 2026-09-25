@@ -133,7 +133,7 @@ public final class ChunkAo {
 
    public static String stats() {
       String s = "chunk ao: computed=" + computed + " (in bakes " + computedInBake + ") multiplied=" + multiplied + " skipped (no occlusion)=" + skippedEmpty + " neighbour refreshes=" + refreshes + " (skipped, bare border " + refreshesSkipped + ") bare textures=" + bareSkipped + " slow frames without computes=" + heavyFrames + " zoom-out re-bakes=" + mipRebakes + " pending=" + PENDING.size()
-         + " pending peak=" + deferredPeak + (SunShadow.enabled() ? " sun requeued=" + sunRequeued + " | " + SunShadow.stats() : "") + (failed ? " FAILED" : "");
+         + " pending peak=" + deferredPeak + (SunShadow.enabled() ? " sun requeued=" + sunRequeued + " roof columns=" + roofColumnsFound + " | " + SunShadow.stats() : "") + (failed ? " FAILED" : "");
       if (Config.DEV_AO_TIMING) {
          StringBuilder sb = new StringBuilder(s).append(" | geometry bakes by flag:");
          for (int b = 0; b < 15; b++) {
@@ -564,6 +564,7 @@ public final class ChunkAo {
     */
    private static void exteriorMask(int[] ext, IsoChunk c, int minLevel) {
       java.util.Arrays.fill(ext, 0);
+      roofColumns(ext, c, minLevel);
       zombie.iso.IsoCell cell = IsoWorld.instance.currentCell;
       if (cell == null) {
          return;
@@ -655,6 +656,48 @@ public final class ChunkAo {
       return any;
    }
 
+   /**
+    * Plane 2 of the exterior mask (ints 16..23): the columns (x, y) with a roof tile on the texture's levels or the one
+    * above. Roof sprites' depth is a staircase whose steps snap to the floor / wall planes: the sun term shaded every
+    * tile's riser and cast each step onto the next (an egg-crate pattern, cs-bt-on*); pixels over a roof column take none.
+    */
+   private static void roofColumns(int[] ext, IsoChunk c, int minLevel) {
+      zombie.iso.IsoCell cell = IsoWorld.instance.currentCell;
+      if (cell == null) {
+         return;
+      }
+      int x0 = c.wx * 8 - VEG_MARGIN;
+      int y0 = c.wy * 8 - VEG_MARGIN;
+      for (int y = 0; y < VEG_SIDE; y++) {
+         for (int x = 0; x < VEG_SIDE; x++) {
+            for (int z = minLevel; z <= minLevel + 2; z++) {
+               IsoGridSquare sq = cell.getGridSquare(x0 + x, y0 + y, z);
+               if (sq != null && roof(sq)) {
+                  int bit = y * VEG_SIDE + x;
+                  ext[16 + (bit >> 5)] |= 1 << (bit & 31);
+                  roofColumnsFound++;
+                  break;
+               }
+            }
+         }
+      }
+   }
+
+   private static long roofColumnsFound;
+
+   /** Does a roof tile (a sprite with a RoofGroup, or from the roofs_ sheets) stand on this square? */
+   private static boolean roof(IsoGridSquare sq) {
+      zombie.util.list.PZArrayList<IsoObject> objects = sq.getObjects();
+      for (int k = 0; k < objects.size(); k++) {
+         IsoObject o = objects.get(k);
+         IsoSprite sp = o == null ? null : o.getSprite();
+         if (sp != null && (sp.getProperties() != null && sp.getProperties().get("RoofGroup") != null || sp.getName() != null && sp.getName().startsWith("roofs_"))) {
+            return true;
+         }
+      }
+      return false;
+   }
+
    private static boolean isVegetation(IsoSprite sprite) {
       return sprite != null && !sprite.solidfloor
          && (sprite.isBush || sprite.canBeRemoved || sprite.getProperties().has(IsoFlagType.vegitation));
@@ -729,7 +772,7 @@ public final class ChunkAo {
       boolean sun; // sun shadows: sunDir / sunPerp / ext are set
       final float[] sunDir = new float[4]; // SunShadow.dir: view-space direction to the sun, w = strength
       final float[] sunPerp = new float[4]; // SunShadow.perp: across it, w = tan of the penumbra angle
-      final int[] ext = new int[16]; // exterior squares, 2 planes of 16 x 16 bits (exteriorMask)
+      final int[] ext = new int[24]; // exterior squares, 2 planes of 16 x 16 bits, then the roof columns (exteriorMask)
       float sunTanElev; // tan of the sun's elevation (the march length)
       float isoHalfW; // texels from the texture's left edge to the chunk corner's screen x
       float isoInvSA; // units of (x - y) per texel
@@ -1420,7 +1463,7 @@ public final class ChunkAo {
       "uniform vec4 sunDir;", // sun shadows: view-space direction to the sun, w = strength (0 = no sun term)
       "uniform vec4 sunPerp;", // across the sun and the view direction, w = tan of the sun's angular radius
       "uniform vec4 sunPar;", // march length in texture texels per unit of screen travel, thickness in squares, steps, 1 = exterior test
-      "uniform uint ext[16];", // exterior squares: planes 0-1 = the texture's levels; 16 x 16 bits from 4 squares before the chunk
+      "uniform uint ext[24];", // exterior squares: planes 0-1 = the texture's levels, plane 2 = roof columns; 16 x 16 bits from 4 squares before the chunk
       "out vec4 result;",
       "const float HALF_PI = 1.5707963;",
       "const float BAYER[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);",
@@ -1477,6 +1520,15 @@ public final class ChunkAo {
       "   if (sq.x < 0 || sq.y < 0 || sq.x >= 16 || sq.y >= 16) return true;",
       "   int bit = sq.y * 16 + sq.x;",
       "   int lvl = clamp(int(floor(s.z + 0.05)), 0, 1);",
+      "   vec3 s0 = squareAt(c, d, ys);", // the roof test on the pixel's own column and the 8 around it (the stepped roof depth reconstructs loosely)
+      "   for (int ry = -1; ry <= 1; ry++) {",
+      "      for (int rx = -1; rx <= 1; rx++) {",
+      "         ivec2 q0 = ivec2(s0.xy) + ivec2(rx, ry);",
+      "         if (q0.x < 0 || q0.y < 0 || q0.x >= 16 || q0.y >= 16) continue;",
+      "         int b0 = q0.y * 16 + q0.x;",
+      "         if (((ext[16 + (b0 >> 5)] >> uint(b0 & 31)) & 1u) != 0u && s0.z > 0.5) return false;",
+      "      }",
+      "   }",
       "   return ((ext[lvl * 8 + (bit >> 5)] >> uint(bit & 31)) & 1u) != 0u;",
       "}",
       "uint popc(uint v) {",
@@ -1507,8 +1559,8 @@ public final class ChunkAo {
       // the share of the sun's disk this surface sees: one slice through the sun and the view direction (the sun lies in it),
       // leaning across the disk by this texel's Bayer rank (the 4x4 box averages the 16), casters as depth intervals
       // [front, front + thickness] whose angles cover sectors of the disk (visibility bitmask), attached shadow from the normal
-      // (facing only on the floor / wall planes: sprites' painted depth gives noisy normals; an object ignores casters closer than
-      // a third of a square: a bush or a crown does not shadow itself, its neighbours do)
+      // (facing only on the floor / wall planes: sprites' painted depth gives noisy normals; an object ignores casters closer
+      // than a third of a square: a bush or a crown does not shadow itself, its neighbours do; roofs are out, see exteriorMask)
       "float sunVisibility(vec2 c, float d, vec3 N, bool plane, float bayer, float jitter, float ppu, float kz, float ys) {",
       "   float tanA = sunPerp.w;",
       "   float lat = ((bayer + 0.5) / 8.0 - 1.0) * tanA;",

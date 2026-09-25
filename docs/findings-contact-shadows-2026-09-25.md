@@ -158,3 +158,16 @@ the bench car at 16 h, AO + sun shadows. No crash, no shader or compile failure 
 cast their shadows on both. The flip's character pass read 124-199 us / frame for 16 casters (the desktop ~20): on an
 iGPU the per-frame part is not yet "virtually zero" (the per-pixel work of the oriented quads is bandwidth-bound there);
 next: scale it to the GPU (fewer capsules, a lower-resolution shadow buffer, or the frame's GPU budget).
+
+## Roofs (release check, 2026-09-25 evening)
+
+At the Riverside pier (runs cs-bt-*) sloped roofs came out egg-crated with sun shadows on: roof sprites' depth is a
+staircase whose steps snap to the floor / wall planes, so the risers took the attached shade and every step cast onto the
+next. The released AO already quilts them mildly (cs-bt-aoonly). Now the exterior mask carries a third plane, the columns
+with a roof tile (a `RoofGroup` sprite or a `roofs_` sheet) on the texture's levels or the one above, and a pixel over one
+(of the 3 x 3 around its reconstructed column, above its lowest level) takes no sun term: the donut shop's roof reads as
+without sun shadows. Still open: roofs of houses whose chunk picture has them cut away (the striped green / yellow roofs
+south-east of the pier, cs-bt-sun2) are drawn by another path and keep the stripes. The Workshop card's clip
+(cs-card-horde) shows none of those roofs. The "black trees" there were the player's view cone (unseen squares drawn
+dark), the same with every feature off (cs-bt-alloff). The card run hit the known quit-time crash
+(`Ragdoll::deleteRigidBodies` in `WorldSimulation.destroy` after a heavy-kill scene) after its route was done.

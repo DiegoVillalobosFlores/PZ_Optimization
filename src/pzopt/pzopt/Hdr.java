@@ -810,7 +810,7 @@ public final class Hdr {
       float[] m = HdrLight.mapping;
       GL20.glUniform3f(l0, m[0], m[1], m[2]);
       GL20.glUniform3f(l1, m[3], m[4], m[5]);
-      GL20.glUniform4f(f, tune.light, tune.lightCurve, HdrLight.ready && tune.light > 0F ? 1F : 0F, tune.debugView);
+      GL20.glUniform4f(f, tune.light, tune.lightCurve, tune.light > 0F && HdrLight.bind() ? 1F : 0F, tune.debugView);
       GL20.glUniform1i(sampler, LIGHT_UNIT);
    }
 

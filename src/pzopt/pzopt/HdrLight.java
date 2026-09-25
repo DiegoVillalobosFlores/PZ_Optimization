@@ -417,6 +417,20 @@ public final class HdrLight {
       return i < 0 ? 0 : Math.min(i, 255);
    }
 
+   /** Render thread: bind the last uploaded light map before sampling it, preserving the active texture unit. */
+   static boolean bind() {
+      if (tex == 0 || !ready) {
+         return false;
+      }
+      // Chunk AO also uses this unit; a floor change can leave no new map to upload and restore its binding.
+      int prevActive = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
+      GL13.glActiveTexture(GL13.GL_TEXTURE0 + Hdr.LIGHT_UNIT);
+      GL11.glBindTexture(GL11.GL_TEXTURE_2D, tex);
+      GL13.glActiveTexture(prevActive);
+      Texture.lastTextureID = -1;
+      return true;
+   }
+
    /** Render thread, the composite: the aux (sun) map on its unit. */
    static boolean bindAux() {
       if (auxTex == 0 || !ready) {

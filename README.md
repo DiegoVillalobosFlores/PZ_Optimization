@@ -616,15 +616,33 @@ by itself: the main menu has an **UPDATE PZ OPTIMIZATION** item between CREDITS 
 styled like the stock ones, greyed out while your build is current. Once per boot the menu
 checks the GitHub releases and, when a newer build for your game revision exists, the item
 lights up. It opens a dialog with the installed and offered builds and
-the release notes; **Update now** downloads the zip, replaces the files listed in
-`pzopt-installed.txt` (the game's own files are never touched, saves and options stay) and
-asks to quit, because the classes already loaded stay the old ones until the next launch.
+the release notes; **Update now** replaces the files that changed (only files listed in
+`pzopt-installed.txt`; the game's own files are never touched, saves and options stay) and
+offers **Restart game**, because the classes already loaded stay the old ones until the next
+start: the game closes and starts again by itself with the update.
+
+The update is near instant. The check runs while the game boots (a cached, conditional
+request: usually ~70 ms and no data), so its answer is there when the menu appears. Releases
+differ in a few files, and the updater reads which from the end of the release zip and fetches
+only those entries (a release apart: ~60 KB instead of 59 MB); that happens in the background
+as soon as an update is offered, so Update now only writes them (1 ms on the desktop, 5 ms on
+a MacBook, instead of 1.2-2.4 s). Without range support it downloads the whole zip in parallel
+parts. Measurements: `docs/findings-updater-2026-09-26.md`.
 With a controller the lit item is one more row of the menu's D-pad list (A opens the dialog;
 there A is the first button, B the second one or close, the D-pad scrolls the notes).
-Nothing is downloaded before that click; the check itself is one request to
-`api.github.com` and can be switched off in Options > Optimizations > Updates
-(`updateCheck=false`). A copy unpacked by hand (Method C, no `pzopt-installed.txt`) only
+Only the changed entries are fetched before that click (`updatePrefetch`, capped at 16 MB;
+the whole zip never); the check itself is one request to `api.github.com` (the release page
+when the API's hourly limit is used up) and can be switched off in Options > Optimizations >
+Updates (`updateCheck=false`). A copy unpacked by hand (Method C, no `pzopt-installed.txt`) only
 gets a link to the release page from the item.
+
+Workshop subscribers do not need GitHub for it: Steam already downloads every release with
+the Workshop item (the same files as the release zip). The check looks at that copy first,
+in the Steam library that holds the game, and offers it at once when it is newer than your
+build; **Update now** then copies it from the disk. GitHub is still asked afterwards and only
+replaces the offer with a newer release, so where GitHub is slow or blocked the item still
+lights up, and otherwise it goes grey ("up to date") instead of failing. Switch:
+Options > Optimizations > Updates, `updateFromWorkshop` (default on).
 
 ### After a game update
 

@@ -412,6 +412,10 @@ local SECTIONS = {
         entries = {
             { key = "updateCheck", label = "Offer new releases in the main menu",
               tip = "Once per boot the main menu asks the GitHub releases (one request to api.github.com) whether a newer build for this game revision exists. The \"UPDATE PZ OPTIMIZATION\" item between Credits and Exit is greyed out while the build is current and enabled when a newer one exists: it downloads the zip, replaces the installed files and asks to quit so the next launch loads them. Nothing is downloaded without that click. Applies on the next launch." },
+            { key = "updatePrefetch", label = "Get an offered update ready in the background",
+              tip = "When the check finds a newer build, the files that differ from the installed ones are fetched right away (a release apart is usually a few files, tens of KB, read out of the release zip with range requests; the whole zip is never downloaded without the click), so Update now only writes them: a few milliseconds instead of downloading and unpacking 59 MB. Needs the first setting. Applies on the next launch." },
+            { key = "updateFromWorkshop", label = "Update from the Steam Workshop copy",
+              tip = "Subscribers already have every release: Steam downloads the Workshop item (the same files as the GitHub release zip) into the Steam library. The update check looks there first, before GitHub, and offers that copy when it is newer than the installed build: Update now then copies it from the disk, no download. GitHub is still asked afterwards and only replaces the offer with a newer release, so the check also works where GitHub cannot be reached. Needs the setting above. Applies on the next launch." },
         },
     },
     {
@@ -1141,6 +1145,8 @@ local EFFECTS = {
     luaChecksumExempt = {},
     -- updates
     updateCheck = {},
+    updateFromWorkshop = {},
+    updatePrefetch = { disk = 1 },
     -- overlay
     overlaySampling = { cpu = 1, cores = 1 },
     overlay = { cpu = 1 },

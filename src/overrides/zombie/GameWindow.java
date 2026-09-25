@@ -771,6 +771,10 @@ public final class GameWindow {
          GameServer.server = true;
       }
 
+      if (!GameServer.server && pzopt.Overrides.buildMatches()) {
+         pzopt.Updater.check(); // pzopt: the release check runs during the boot, its answer is ready when the menu appears
+      }
+
       try {
          renameSaveFolders();
          init();

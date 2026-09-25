@@ -291,6 +291,10 @@ objects, chunks by lighting counter, translucent squares). Every fix is marked
 
 ## zombie.GameWindow
 
+The update check starts in `mainThreadInit` right after the `server` property is read
+(2026-09-26, `if (!GameServer.server && pzopt.Overrides.buildMatches()) pzopt.Updater.check();`),
+so its answer is there when the menu appears (the menu's own call is then a no-op).
+
 Two edits. In the boot sequence (`init`, between `Translator.loadFiles()` and
 `LuaManager.init()`): the call to `doEpilepsyWarningText()` is wrapped in
 `if (!pzopt.Overrides.enabled())`, so the photosensitivity warning frame is
@@ -855,6 +859,29 @@ the dialog (`PzoptUpdateDialog`) shows the installed and offered builds, the
 release notes, a progress bar and Update now / Later, then Quit game / Later:
 classes the JVM already loaded stay the old ones until a restart. Never in the
 pause menu; no joypad entry (the stock list is hard-coded).
+
+Steam Workshop source (issue #16, 2026-09-26, `updateFromWorkshop`, default on):
+one more forward, `getPzoptUpdateSource()` ("workshop", "github" or ""). Before
+the GitHub request the check looks for the Workshop item in the library that
+holds the game (`<steamapps>/workshop/content/108600/3805285544/mods/
+PZ_Optimization/<version>/pzopt-classes/`, the unpacked release zip that
+`workshop.sh --tag` stages); a copy counts when its build-info names this
+revision and a commit and every file of its `pzopt-files.txt` exists (Steam
+mid-update skips it). It is offered at once when newer than this build by the
+same rule, with its `built=` standing in for the publish date (no downgrade
+after a GitHub install). The GitHub answer then replaces the offer only with a
+later release; when GitHub is unreachable the item goes grey ("up-to-date")
+instead of "error". Installing the copy stages its files and runs the zip
+path's swap (`swapFolder` → `swapStaged`); Steam's folder is not touched. The
+dialog names the source and the Workshop change-notes page.
+
+Near-instant updater (2026-09-26, `docs/findings-updater-2026-09-26.md`): two more forwards,
+`pzoptRestartGame()` (`pzopt.Restart.relaunch()`: a helper process starts the game again once
+this one has quit; the dialog's "Quit game" is now "Restart game", which calls it and then the
+stock `quitToDesktop`) and `getPzoptUpdateDrive()` (the `devUpdateDrive` rig's mode for the
+Lua: "", "drive", "restarted:<ms>"). The install now goes through `pzopt.UpdateDelta`: the
+changed zip entries only (range requests, prefetched in the background once offered), written
+beside their targets and renamed over them; unchanged files are not rewritten.
 
 Performance overlay item (added 2026-09-23): three forwards to `pzopt.Overlay`
 for `media/lua/client/pzopt/pzopt_mainscreen_overlay.lua`: `togglePzoptOverlay()`

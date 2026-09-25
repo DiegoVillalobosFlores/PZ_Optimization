@@ -6,9 +6,14 @@
 --  the build is current, enabled while a newer build is offered. A small line under it names the installed
 --  build ("Version <commit>", "Version <commit> -> <offered commit>" while an update is offered). Clicking it opens a small dialog: what is installed, what is available, the release notes, and "Update now": the download
 --  and the file swap run on a daemon thread while the item shows the progress; once done the dialog
---  offers to quit, because the classes the JVM already loaded stay the old ones until a restart.
+--  offers Restart game (pzopt.Restart relaunches the game once it has quit), because the classes the JVM already
+--  loaded stay the old ones until a restart. Usually the changed files were fetched in the background as soon
+--  as the update was offered (updatePrefetch), so Update now only writes them.
 --  A copy without pzopt-installed.txt (a hand-unpacked zip) cannot swap its own files: the dialog
 --  then only opens the release page.
+--  The offer can be the Steam Workshop copy already on disk (source "workshop", issue #16): the dialog says so,
+--  Update now copies it without a download, and the page button opens the Workshop change notes. The GitHub
+--  answer may replace that offer with a newer release while the dialog is open (same state, another tag).
 --  Controller: the item has its own row in the menu's joypad list while it is enabled (the D-pad reaches
 --  it between Credits and Exit, A is the click), the dialog takes the joypad focus like the stock modals
 --  (A = first button, B = second one or close, D-pad scrolls the notes) and hands it back to the item.
@@ -25,6 +30,13 @@ end
 local function state()
     local ok, s = pcall(function() return perf():getPzoptUpdateState() end)
     if not ok then return "idle" end
+    return s
+end
+
+-- "workshop" (the Steam Workshop copy on disk), "github" or ""
+local function source()
+    local ok, s = pcall(function() return perf():getPzoptUpdateSource() end)
+    if not ok then return "github" end
     return s
 end
 
@@ -56,6 +68,7 @@ function PzoptUpdateDialog:new(x, y, width, height)
     o.borderColor = { r = 1, g = 1, b = 1, a = 0.5 }
     o.moveWithMouse = true
     o.shownState = nil
+    o.shownTag = nil
     return o
 end
 
@@ -92,51 +105,62 @@ end
 -- Button labels, text and layout for the current updater state; only rebuilt when the state changes.
 function PzoptUpdateDialog:refresh(force)
     local s = state()
-    if s == self.shownState and not force then return end
-    self.shownState = s
     local p = perf()
-    local installed = p:getPzoptUpdateInstalledCommit()
     local tag = p:getPzoptUpdateTag()
+    if s == self.shownState and tag == self.shownTag and not force then return end
+    self.shownState = s
+    self.shownTag = tag
+    local installed = p:getPzoptUpdateInstalledCommit()
     local published = p:getPzoptUpdatePublished()
+    local local_ = source() == "workshop"
     local head = "Installed build: " .. installed .. " <LINE> Available: " .. tag
-    if published ~= "" then head = head .. " (published " .. published .. ")" end
+    if local_ then
+        head = head .. " (Steam Workshop copy on this computer" .. (published ~= "" and (", built " .. published) or "") .. ")"
+    elseif published ~= "" then
+        head = head .. " (published " .. published .. ")"
+    end
+    local pageTitle = local_ and "Open Workshop page" or "Open release page"
     local body
     if s == "available" then
         if p:canPzoptUpdateInstall() then
             body = head .. " <LINE> <LINE> "
-                .. "Update now downloads the release zip, replaces the installed files (the ones listed in "
-                .. "pzopt-installed.txt; the game's own files are never touched) and asks to quit: the new classes load "
-                .. "on the next launch. Saves and options stay as they are."
+                .. (local_ and "Update now copies the files Steam already downloaded with the Workshop item (nothing is downloaded), "
+                    or "Update now downloads the release zip, ")
+                .. "replaces the installed files that changed (the ones listed in "
+                .. "pzopt-installed.txt; the game's own files are never touched) and offers to restart the game: the new classes load "
+                .. "on the next start. Saves and options stay as they are."
             self.primary:setTitle("Update now")
             self.secondary:setTitle("Later")
         else
             body = head .. " <LINE> <LINE> "
                 .. "This copy was not installed by install.sh / install.ps1 (no pzopt-installed.txt in the game folder), "
-                .. "so it cannot replace its own files. Get the new zip from the release page and unpack it by hand, "
-                .. "or install it once with the installer."
-            self.primary:setTitle("Open release page")
+                .. "so it cannot replace its own files. "
+                .. (local_ and "Run install.ps1 / install.bash from the Workshop item's folder once; later updates then install from here."
+                    or "Get the new zip from the release page and unpack it by hand, or install it once with the installer.")
+            self.primary:setTitle(pageTitle)
             self.secondary:setTitle("Close")
         end
         local notes = richNotes(p:getPzoptUpdateNotes())
         if notes ~= "" then body = body .. " <LINE> <LINE> <RGB:0.8,0.8,0.8> " .. notes end
     elseif s == "downloading" then
-        body = head .. " <LINE> <LINE> Downloading the release zip..."
+        body = head .. " <LINE> <LINE> Downloading the files that changed..."
         self.primary:setTitle("Hide")
         self.secondary:setTitle("")
     elseif s == "installing" then
-        body = head .. " <LINE> <LINE> Replacing the installed files..."
+        body = head .. " <LINE> <LINE> " .. (local_ and "Copying the Steam Workshop files over the installed ones..." or "Replacing the installed files...")
         self.primary:setTitle("Hide")
         self.secondary:setTitle("")
     elseif s == "installed" then
         body = head .. " <LINE> <LINE> <RGB:0.6,1,0.6> " .. p:getPzoptUpdateMessage() .. " <RGB:1,1,1> <LINE> <LINE> "
-            .. "The game keeps running the previous build until it restarts. Quit now and launch it again to load the update."
-        self.primary:setTitle("Quit game")
+            .. "The game keeps running the previous build until it restarts. Restart game closes it and starts it again with the update."
+        self.primary:setTitle("Restart game")
         self.secondary:setTitle("Later")
     elseif s == "error" then
         body = head .. " <LINE> <LINE> <RGB:1,0.6,0.6> " .. (p:getPzoptUpdateMessage():gsub("[<>]", "")) .. " <RGB:1,1,1> <LINE> <LINE> "
-            .. "Nothing was changed if the download failed; if the file swap failed, run the installer again "
-            .. "(install.sh / install.ps1, --uninstall first). The release page has the zip."
-        self.primary:setTitle("Open release page")
+            .. "Nothing was changed if the " .. (local_ and "copy" or "download") .. " failed; if the file swap failed, run the installer again "
+            .. "(install.sh / install.ps1, --uninstall first). "
+            .. (local_ and "The Workshop item's folder has the installers." or "The release page has the zip.")
+        self.primary:setTitle(pageTitle)
         self.secondary:setTitle("Close")
     else
         body = "No update is offered right now."
@@ -253,6 +277,10 @@ function PzoptUpdateDialog:onPrimary()
             openUrl(perf():getPzoptUpdatePageUrl())
         end
     elseif s == "installed" then
+        local ok, started = pcall(function() return perf():pzoptRestartGame() end)
+        if not ok or not started then
+            print("[pzopt] update: could not start the restart helper, quitting only")
+        end
         self:close()
         MainScreen.instance:quitToDesktop()
     elseif s == "error" then
@@ -478,6 +506,39 @@ local function syncItem(self)
     if self.joyfocus then syncJoypadRow(self) end
 end
 
+-- devUpdateDrive (dev rig, Config key): the real buttons pressed in order once the menu is up: open the dialog,
+-- Update now, Restart game. In the process the restart started, log the time since the press and quit.
+local driveStep = nil
+local function driveTick(self)
+    local ok, mode = pcall(function() return perf():getPzoptUpdateDrive() end)
+    if not ok or not mode or mode == "" or driveStep == "done" then return end
+    if not self.exitOption or not self.exitOption:isVisible() then return end
+    if mode:sub(1, 9) == "restarted" then
+        driveStep = "done"
+        print("[pzopt] update drive: restarted process reached the main menu " .. mode:sub(11) .. " ms after Restart game was pressed")
+        self:quitToDesktop()
+        return
+    end
+    local s = state()
+    local dlg = PzoptUpdateDialog.instance
+    if s == "available" and not dlg then
+        print("[pzopt] update drive: offer " .. perf():getPzoptUpdateTag() .. " from " .. source() .. " at " .. getTimestampMs())
+        PzoptUpdateDialog.show()
+    elseif dlg and dlg.shownState == "available" and driveStep == nil then
+        driveStep = "installing"
+        print("[pzopt] update drive: Update now pressed at " .. getTimestampMs())
+        dlg:onPrimary()
+    elseif dlg and dlg.shownState == "installed" and driveStep == "installing" then
+        driveStep = "done"
+        print("[pzopt] update drive: installed (" .. perf():getPzoptUpdateMessage() .. "), Restart game pressed at " .. getTimestampMs())
+        dlg:onPrimary()
+    elseif s == "error" and driveStep ~= "done" then
+        driveStep = "done"
+        print("[pzopt] update drive: error " .. perf():getPzoptUpdateMessage())
+        self:quitToDesktop()
+    end
+end
+
 local function install()
     if not MainScreen or MainScreen.pzoptUpdateItem then return end
     local ok, has = pcall(function() return getPerformance():hasPzoptOptions() end)
@@ -496,6 +557,7 @@ local function install()
     function MainScreen:prerender(...)
         stockPrerender(self, ...)
         if self.pzoptUpdateOption then
+            pcall(driveTick, self)
             local okSync, err = pcall(syncItem, self)
             if not okSync then
                 print("[pzopt] update item: sync failed, item removed: " .. tostring(err))

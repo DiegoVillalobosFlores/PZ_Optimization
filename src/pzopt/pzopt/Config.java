@@ -44,8 +44,17 @@ import java.util.Properties;
  *   updateCheck true/false   the main menu asks the GitHub releases once per boot whether a newer build for this game
  *                            revision exists and offers an "Update PZ Optimization" menu item that downloads and
  *                            installs it (pzopt.Updater; default true; never in harness runs)
+ *   updatePrefetch true/false  once a release is offered, the files that differ from the installed ones are fetched in
+ *                            the background (range requests of the changed zip entries; default true), so Update now
+ *                            only writes them; updatePrefetchMaxKb (16384) caps that background fetch
+ *   updateFromWorkshop true/false  the update check first looks at the Steam Workshop item's copy on this disk (the
+ *                            same files as the release zip) and offers it without a download when it is newer than
+ *                            this build; GitHub is still asked after it (issue #16; default true; needs updateCheck)
  *   devUpdateOffer true/false  dev: offer the newest release for this revision whatever this build is, to see the
  *                            menu item, the dialog and the install (default false)
+ *   devUpdateDrive true/false  dev rig: the menu opens the update dialog and presses Update now, then Restart game; the
+ *                            restarted process logs the time since the press and quits (harness/mac-update-e2e.sh;
+ *                            also runs the check in a harness run; default false)
  *   translucentCache true/false  reuse prepared translucent render lists (default false)
  *   hotsaveIntervalSec int   (default 30) minimum seconds between the "hot saves" of the ancillary systems (meta grid, game time,
  *                            world map, entities) that ChunkSaveWorker runs on the game thread whenever its chunk
@@ -348,6 +357,10 @@ public final class Config {
    public static final boolean DEV = bool("dev", false);
    public static final boolean LUA_CHECKSUM_EXEMPT = bool("luaChecksumExempt", true); // NetChecksum skips media/lua/*/pzopt/ files: they only exist on clients
    public static final boolean UPDATE_CHECK = bool("updateCheck", true); // main menu: check the GitHub releases for a newer build and offer the update item (pzopt.Updater)
+   public static final boolean UPDATE_FROM_WORKSHOP = bool("updateFromWorkshop", true); // update check: offer the Steam Workshop copy already on disk before asking GitHub (pzopt.Updater.findWorkshopCopy)
+   public static final boolean UPDATE_PREFETCH = bool("updatePrefetch", true); // once a release is offered, fetch the files that differ from the installed ones in the background (a range request per changed span; the whole zip never before the click)
+   public static final int UPDATE_PREFETCH_MAX_KB = integer("updatePrefetchMaxKb", 16384); // the background fetch stops at this many compressed KB of changed entries (a release apart is ~60 KB)
+   public static final boolean DEV_UPDATE_DRIVE = bool("devUpdateDrive", false); // dev rig: the menu opens the update dialog, presses Update now and Restart game; the restarted process logs its timing and quits (pzopt.Updater.drive)
    public static final boolean DEV_UPDATE_OFFER = bool("devUpdateOffer", false); // dev: offer the newest release for this revision whatever this build is (menu item / dialog / install checks)
    public static final boolean TRANSLUCENT_CACHE = bool("translucentCache", false);
    public static final int HOTSAVE_INTERVAL_SEC = integer("hotsaveIntervalSec", 30);

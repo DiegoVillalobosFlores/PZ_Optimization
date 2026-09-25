@@ -177,6 +177,11 @@ public final class PerformanceSettings {
       return pzopt.Updater.pageUrl();
    }
 
+   // pzopt: "workshop" (the Steam Workshop copy on disk, no download), "github" or "" (issue #16)
+   public String getPzoptUpdateSource() {
+      return pzopt.Updater.source();
+   }
+
    public String getPzoptUpdateInstalledCommit() {
       return pzopt.Updater.installedCommit();
    }
@@ -195,6 +200,16 @@ public final class PerformanceSettings {
 
    public boolean pzoptUpdateInstall() {
       return pzopt.Updater.install();
+   }
+
+   // pzopt: the devUpdateDrive rig's mode for the menu Lua: "", "drive" or "restarted:<ms since the press>"
+   public String getPzoptUpdateDrive() {
+      return pzopt.Updater.drive();
+   }
+
+   // pzopt: "Restart game" after an update: a helper relaunches the game once this process ends (pzopt.Restart)
+   public boolean pzoptRestartGame() {
+      return pzopt.Restart.relaunch();
    }
 
    // pzopt: the Enhancements tab's "Install DLSS files" button polls pzopt.UpscalerDeps through these: one check

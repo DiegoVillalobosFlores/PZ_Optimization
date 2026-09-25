@@ -29,7 +29,7 @@ OPTIONS = ROOT / "src/lua/client/pzopt/pzopt_optimizations_options.lua"
 
 # Booleans left at their defaults: not optimizations, or needed for the recording.
 KEEP = {
-    "enabled", "instrument", "luaChecksumExempt", "updateCheck", "profileHandshake",
+    "enabled", "instrument", "luaChecksumExempt", "updateCheck", "updateFromWorkshop", "updatePrefetch", "profileHandshake",
     "overlay", "overlaySampling", "overlayLog", "overlayTexture", "overlayFpsColor", "overlayFpsFollowCap",
     "persistentVboCoherent",  # a sub-key of persistentVbo, inert with it off
     "dumpItems",

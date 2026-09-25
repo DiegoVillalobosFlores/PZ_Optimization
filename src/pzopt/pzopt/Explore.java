@@ -31,6 +31,10 @@ import zombie.iso.objects.IsoThumpable;
  * hold, done). Without it an autopilot plays the same order. look_around turns the player once round in place (the HDR
  * trace, devHdrTraceMs, logs every facing); in the first {@code explore_dump_rooms} rooms it asks Hdr for a frame dump at
  * each of N / E / S / W. Flags: {@code explore_match} (room-name substrings, comma-separated), {@code explore_radius}.
+ *
+ * <p>{@code explore=circle} (2026-09-25, the flip report: textures flicker at the top left of the screen while the player
+ * walks in circles on a real save): the player walks round the square it loaded on, on foot through the same movement
+ * keys, {@code circle_radius} tiles (1.5) away, clockwise ({@code circle_dir=ccw} the other way), until the route ends.
  */
 public final class Explore {
    private Explore() {
@@ -41,6 +45,9 @@ public final class Explore {
    private static final String[] DIRS = {"E", "SE", "S", "SW", "W", "NW", "N", "NE"}; // k * 45 deg, 0 = east, +y = south
 
    private static boolean on, director, started, finished, restaurantLit;
+   private static boolean circle;
+   private static float circleX, circleY, circleRadius, circleSign, circleTurned, circleLastAngle;
+   private static long circleLogNs;
    private static String command = "hold";
    private static int commandSeq = -1, commands, dumpRooms, doorsOpened, replans, stuckMarks;
    private static long startNs, lastStateNs, lastCmdCheckNs, lastPlanNs, lastProgressNs;
@@ -71,6 +78,16 @@ public final class Explore {
 
    /** World-ready (game thread): out of harm's way, find the restaurant. */
    static void worldReady(IsoPlayer p) {
+      circle = "circle".equalsIgnoreCase(HarnessFlags.get("explore", "").trim());
+      if (circle) {
+         on = true;
+         circleX = p.getX();
+         circleY = p.getY();
+         circleRadius = Float.parseFloat(HarnessFlags.get("circle_radius", "1.5").trim());
+         circleSign = "ccw".equalsIgnoreCase(HarnessFlags.get("circle_dir", "cw").trim()) ? -1F : 1F;
+         Log.info(String.format(Locale.ROOT, "harness: explore=circle round %.1f,%.1f,%d, radius %.1f, %s", circleX, circleY, (int)p.getZ(), circleRadius, circleSign > 0 ? "cw" : "ccw"));
+         return;
+      }
       on = "restaurant".equalsIgnoreCase(HarnessFlags.get("explore", "").trim());
       if (!on) {
          return;
@@ -130,11 +147,16 @@ public final class Explore {
          p.getVehicle().exit(p);
       }
       command = director ? "hold" : "go_to_restaurant";
+      circleLastAngle = (float)Math.atan2(p.getY() - circleY, p.getX() - circleX);
    }
 
    /** Per frame while the run is live (game thread). */
    static void tick(IsoPlayer p, long nowNs) {
       if (!on || !started || finished) return;
+      if (circle) {
+         walkCircle(p, nowNs);
+         return;
+      }
       float dt = Math.min(0.1F, zombie.GameTime.getInstance().getRealworldSecondsSinceLastUpdate());
       if (!restaurantLit && Scene.lightsFlag() && targetRoom != null
             && Math.abs(p.getX() - targetRoom.getX()) < 30 && Math.abs(p.getY() - targetRoom.getY()) < 30) {
@@ -188,6 +210,23 @@ public final class Explore {
       if (director && nowNs - lastStateNs >= 300_000_000L) {
          lastStateNs = nowNs;
          writeState(p, here, nowNs);
+      }
+   }
+
+   /** explore=circle: head for a point 45 degrees further round the circle (+y is south, so + angle = clockwise on screen). */
+   private static void walkCircle(IsoPlayer p, long nowNs) {
+      Showcase.releaseKeys();
+      float a = (float)Math.atan2(p.getY() - circleY, p.getX() - circleX);
+      float da = a - circleLastAngle;
+      da = (float)(((da + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI);
+      circleTurned += da * circleSign;
+      circleLastAngle = a;
+      float t = a + circleSign * (float)Math.PI / 4F;
+      Showcase.moveKeys(circleX + circleRadius * (float)Math.cos(t) - p.getX(), circleY + circleRadius * (float)Math.sin(t) - p.getY());
+      if (nowNs - circleLogNs >= 2_000_000_000L) {
+         circleLogNs = nowNs;
+         Log.info(String.format(Locale.ROOT, "harness: explore: circle t=%.0fs pos=%.2f,%.2f dist=%.2f laps=%.2f",
+               (nowNs - startNs) / 1e9, p.getX(), p.getY(), Math.hypot(p.getX() - circleX, p.getY() - circleY), circleTurned / (2 * Math.PI)));
       }
    }
 

@@ -169,6 +169,17 @@ minus 4 s) counts pixels that change and revert within 3 frames (a per-frame app
 `--heat out.png` paints where. Stock reads 3.8 px/frame at `--scale 2560` (the spinning player
 only) and 0.0 at `--scale 1280`; the broken build read 26 / 3.4. Compare only same-scale numbers.
 
+Circle-walk flicker rig (2026-09-25, the flip report "textures flicker at the top left while walking in circles"):
+`--mode bench --launcher direct --source-save <Mode/save> --flag explore=circle [--flag circle_radius=1.5 circle_dir=cw|ccw]
+--flag zoom=1 --flag route=S:1 --flag speed=0.033 --prop devCapture=<start>,8,240,50`: the player walks round the square it
+loaded on through the movement keys (no teleports, ~3.7 s a lap) for 30 s, and `pzopt.FrameCapture` reads back every presented
+frame. `devCapture`'s start counts from the first world frame: 10 s lands in the walk for an optimized run, ~21 s for a stock
+one (stock's world comes up ~11 s before the harness world-ready). Then `region-flicker.py <run> 0 8 --json <run>/region-flicker.json`
+on both sides and `region-flicker-judge.py <test json> <control json>`. On machines without gpu-screen-recorder (the flip) do not
+fall back to ffmpeg x11grab of the XWayland window: it caught 3-12 distinct frames a second, and its "transients" were
+capture artefacts. Runs `flip-circle-cap-opt-20260925-181539` (4 one-frame bursts in 8 s, up to 40 % of the top-left region) vs
+`flip-circle-cap-stock2-20260925-182055` (none): Jev flicker_confirmed 0.93, stock_also 0.03, kind pzopt_flicker 1.00.
+
 Flags that must be on every measured run: `--prop instrument=true` (else no
 `pzopt-chunks.out` / `pzopt-frames.out` and compare.py crashes), `--flag zoom=max` on bench,
 `--no-dashboard` when measuring (the PZDashboard mod fires four collectors every 2.000 s, one
@@ -387,6 +398,8 @@ same window with `harness/mp/window.py <run>:27 ...`; results in `docs/archive/2
 | `zoomsteps.py <run> [--window S]` | pzopt-frames.out of a `--flag zoom_cycle=S [zoom_span=N] [zoom_jump=true]` run (the harness marks `zoom-<level>` at every step) | frame times in the window after each camera zoom step vs the rest of the route (max / p99 / >8 >16 >33 ms); the console has a per-step bake trace (`zoom step N trace`) and the `retain:` / `change-frame` counters; `attribute.py --after-mark zoom-:1` and `sections.py --after-mark zoom-2.5:1` profile the change frames |
 | `flicker.py <run>/recording.mp4 START END [--scale W] [--heat png]` | `--record` of a `--flag hold=N` run | per-frame appear / disappear metric (pixels that change and revert within 3 frames), busiest screen cells, heat map |
 | `flicker-triple.py <run>/recording.mp4 FRAME` | same | crops of one frame triple with the A-B-A pixels marked (frame-numbered; use `-ss` times for anything compared with flicker.py) |
+| `region-flicker.py <run\|video> START END [--json f] [--heat png]` | a `devCapture` sequence (`<run>/capture`) or a lossless video | flicker.py's transient metric at the capture's own size, per 3 x 3 screen region (HUD and a disc round the player masked), per second for the top-left, the busiest cells, the worst frames, capture gaps (frames the writer dropped) |
+| `region-flicker-judge.py <test.json> <control.json> [--region top-left] [--out f]` | two region-flicker.py JSONs of the same walk | Jev over numbers only: `flicker_confirmed`, `stock_also`, `kind` (pzopt_flicker / shared_flicker / no_flicker / inconclusive); a burst frame blinks > 4 % of the region |
 | `drive_check.py <run> [--against <run>...] [--no-jev]` | `pzopt-drive.out` + `pzopt-bench.out` of a path drive | the drive's card and Jev's verdict (valid / left_the_line / crashed / stalled / slow, usable, consistent with the reference drives); exit 0 = valid; writes `<run>/drive-check.json`; judge.py runs it too |
 | `drive-path.py streets\|route\|plan` | the map's `streets.xml` + town labels | `path=` flags for path drives: `route --via "A>B>C"` follows named streets, `plan --describe "..."` lets Jev pick among the street-graph routes from a start |
 | `judge.py <run> --against <run|baseline.json>... --goal "<what the change should do>"` | analyze.py summaries | TypeSafe (Jev) verdict on the uplift: achieved / partial / no_change / regressed / invalid, goal met, tail regressed, setup matches the goal, hardware-headroom finding. Code computes the card, the deltas (compare.py noise floors, presented-frame ratios) and the objective's facts; Jev only reads that JSON. Exit 0 = achieved; writes `<run>/judge.json` |

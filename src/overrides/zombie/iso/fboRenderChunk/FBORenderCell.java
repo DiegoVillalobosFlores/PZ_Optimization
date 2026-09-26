@@ -2149,6 +2149,7 @@ public final class FBORenderCell {
          }
 
          if (isDirty && canRender) {
+            pzopt.ChunkFloor.queueLevel(level); // pzopt: this level remains attached to its pixels after the bake
             if (level == renderLevels.getMinLevel(level)) {
                pzopt.LightDirt.baked(c, level, frameNo); // pzopt: the accumulated light changes of this level are on screen
                if (pzopt.BakeScheduler.ON) pzopt.BakeScheduler.get(playerIndex).baked(c, level); // pzopt: bakeScheduler, its wait restarts
@@ -2706,6 +2707,9 @@ public final class FBORenderCell {
                   this.pzoptBakeTrees(c, playerIndex, zoom);
                   pzopt.GpuSections.end("bake.trees"); // pzopt: GPU sub-section
                }
+               if (FBORenderChunkManager.instance.renderChunk != null && FBORenderChunkManager.instance.renderChunk.isTopLevel(level)) { // pzopt: AO changes colour, not source-floor ownership
+                  pzopt.ChunkFloor.queueEnd(); // pzopt
+               } // pzopt
                if (pzopt.ChunkAo.enabled() && FBORenderChunkManager.instance.renderChunk != null && FBORenderChunkManager.instance.renderChunk.isTopLevel(level)) { // pzopt: ambient occlusion baked into the texture
                   pzopt.ChunkAo.bakeEnd(FBORenderChunkManager.instance.renderChunk, c, playerIndex, zoom, pzopt.ChunkAo.geometryDirty(renderLevels, level, zoom)); // pzopt
                } // pzopt
@@ -3407,11 +3411,11 @@ public final class FBORenderCell {
                }
                IsoDirections dir = tree.getForwardIsoDirection();
                // sprite.x0 / y0 is the origin the sprite path would use; each texture adds its own trim offsets
-               this.pzoptAddTreeTexture(drawer, tree.getSprite().getTextureForCurrentFrame(dir, tree), sprite.x0, sprite.y0, sprite.ground, base, cr, cg, cb, tileScale);
+               this.pzoptAddTreeTexture(drawer, tree.getSprite().getTextureForCurrentFrame(dir, tree), sprite.x0, sprite.y0, sprite.ground, base, cr, cg, cb, tileScale, square.z); // pzopt: source floor
                if (tree.attachedAnimSprite != null) {
                   for (int k = 0; k < tree.attachedAnimSprite.size(); k++) {
                      IsoSpriteInstance inst = tree.attachedAnimSprite.get(k);
-                     this.pzoptAddTreeTexture(drawer, inst.parentSprite.getTextureForCurrentFrame(dir, tree), sprite.x0, sprite.y0, sprite.ground, base, cr, cg, cb, tileScale);
+                     this.pzoptAddTreeTexture(drawer, inst.parentSprite.getTextureForCurrentFrame(dir, tree), sprite.x0, sprite.y0, sprite.ground, base, cr, cg, cb, tileScale, square.z); // pzopt: source floor
                   }
                }
                pzopt.TreeBake.treesDrawn++;
@@ -3513,11 +3517,11 @@ public final class FBORenderCell {
                drawer = pzopt.TreeBake.alloc();
             }
             IsoDirections dir = tree.getForwardIsoDirection();
-            this.pzoptAddTreeTexture(drawer, tree.getSprite().getTextureForCurrentFrame(dir, tree), sprite.x0, sprite.y0, sprite.ground, base, cr, cg, cb, tileScale);
+            this.pzoptAddTreeTexture(drawer, tree.getSprite().getTextureForCurrentFrame(dir, tree), sprite.x0, sprite.y0, sprite.ground, base, cr, cg, cb, tileScale, square.z); // pzopt: source floor
             if (tree.attachedAnimSprite != null) {
                for (int k = 0; k < tree.attachedAnimSprite.size(); k++) {
                   IsoSpriteInstance inst = tree.attachedAnimSprite.get(k);
-                  this.pzoptAddTreeTexture(drawer, inst.parentSprite.getTextureForCurrentFrame(dir, tree), sprite.x0, sprite.y0, sprite.ground, base, cr, cg, cb, tileScale);
+                  this.pzoptAddTreeTexture(drawer, inst.parentSprite.getTextureForCurrentFrame(dir, tree), sprite.x0, sprite.y0, sprite.ground, base, cr, cg, cb, tileScale, square.z); // pzopt: source floor
                }
             }
          }
@@ -3573,7 +3577,7 @@ public final class FBORenderCell {
 
    /** One texture of a tree (main sprite or foliage overlay) placed like IsoSprite.performRenderFrame would. */
    private void pzoptAddTreeTexture(pzopt.TreeBake.Drawer drawer, Texture texture, float sx, float sy, float ground, float base,
-                                    float r, float g, float b, int tileScale) {
+                                    float r, float g, float b, int tileScale, int sourceLevel) { // pzopt: tree copies retain the source square's level
       if (texture == null || !texture.isReady() || texture.getTextureId() == null) {
          return;
       }
@@ -3583,7 +3587,7 @@ public final class FBORenderCell {
       float x1 = x0 + texture.getWidth() * scale;
       float y1 = y0 + texture.getHeight() * scale;
       drawer.add(texture, x0, y0, x1, y1, pzopt.TreeBake.depthAtRow(base, ground, y0, tileScale),
-         pzopt.TreeBake.depthAtRow(base, ground, y1, tileScale), r, g, b, 1.0F);
+         pzopt.TreeBake.depthAtRow(base, ground, y1, tileScale), r, g, b, 1.0F, sourceLevel); // pzopt: ownership for this queued tree quad
    }
 
    /** JUMBO trees do not come out of the chunk-texture tree batch (missing at game load, 2026-09-19); they stay per frame. */

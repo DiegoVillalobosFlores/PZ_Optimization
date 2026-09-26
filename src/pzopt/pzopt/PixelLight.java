@@ -490,6 +490,7 @@ public final class PixelLight {
 
    /** Game thread, right after FBORenderChunkManager.endFrame(): the pass (pass mode) and the dev dumps of the static world. */
    public static void afterComposite(int playerIndex) {
+      ChunkFloor.afterComposite();
       if (!Config.DEV_PPL_DUMP_AT.isEmpty()) {
          scheduledDumps(playerIndex);
       }
@@ -540,9 +541,8 @@ public final class PixelLight {
 
    /**
     * Render thread, ChunkRenderShader.startRenderThread (that shader's program is bound, its DEPTH and chunkDepth set): the
-    * program for this chunk texture is the variant compiled for the kinds of light its list holds (none: the light-free
-    * base, 32 registers; the full program 48, 10 waves instead of 16 on the flip's RDNA 3.5), switched through the game's
-    * program cache; the first draw of a frame on each program sets its light uniforms, every draw its light list.
+    * program for this chunk texture omits unused lighting and ownership work. It is switched through the game's program
+    * cache; the first draw of a frame on each program sets its light uniforms, every draw its light list and floor map.
     */
    public static void chunkDraw(zombie.core.opengl.Shader shader, TextureDraw texd) {
       try {
@@ -556,13 +556,14 @@ public final class PixelLight {
             return;
          }
          int bits = ACTIVE && Gl.wantOn && !failed ? GL.lightBits(texd.tex1) : -1;
-         zombie.core.opengl.Shader want = bits == -1 ? null : GL.variantFor(bits);
+         zombie.core.opengl.Shader want = bits == -1 ? null : GL.variantFor(bits, ChunkFloor.hasTexture(texd.tex1));
          if (want != null && want != shader) {
             zombie.core.ShaderHelper.glUseProgramObjectARB(want.getID()); // through the game's cache: its per-draw ModelViewProjection goes to the bound program
             ((zombie.viewCone.ChunkRenderShader)want).startRenderThread(texd); // DEPTH and chunkDepth on that program, then back here
             return;
          }
-         if (shader == baseShader) {
+         boolean base = shader == baseShader || (programKeys.getOrDefault(shader.getID(), 0) & V_BASE) != 0;
+         if (base) {
             baseDraws++;
          } else {
             fullDraws++;
@@ -579,7 +580,7 @@ public final class PixelLight {
                      GL.ox, GL.oy, GL.d0, k == null ? "?" : GL.chunkRect[k * 4] + "," + GL.chunkRect[k * 4 + 1] + "," + GL.chunkRect[k * 4 + 2], texd.chunkDepth));
             }
          }
-         if (shader != baseShader && bits != -1) {
+         if (!base && bits != -1) {
             GL.selectLights(program, bits);
          }
          GL.selectLevels(program, texd.tex1);
@@ -588,13 +589,14 @@ public final class PixelLight {
       }
    }
 
-   static final int V_NO_POINT = 1, V_NO_TORCH = 2, V_NO_WET = 4, V_NO_MASK = 8, V_BASE = 16, V_COPY = 32;
-   private static final java.util.HashMap<Integer, Integer> programKeys = new java.util.HashMap<>(); // variant programs (dev tint)
+   static final int V_NO_POINT = 1, V_NO_TORCH = 2, V_NO_WET = 4, V_NO_MASK = 8, V_BASE = 16, V_COPY = 32, V_NO_OWNER = 64;
+   private static final java.util.HashMap<Integer, Integer> programKeys = new java.util.HashMap<>(); // variant flags for base-draw classification and dev tint
    private static String variantDefines = "#define PPL_BASE\n"; // read by patchShader while a variant compiles
 
    /** Render thread: a variant program of the chunk composite (pzopt_chunkBase's placeholder, the source from here), or null. */
    static zombie.viewCone.ChunkRenderShader compileVariant(int key) {
       StringBuilder d = new StringBuilder();
+      if ((key & V_NO_OWNER) != 0) d.append("#define PPL_NO_OWNER\n");
       if ((key & V_BASE) != 0) {
          d.append("#define PPL_BASE\n");
          if ((key & V_COPY) != 0) d.append("#define PPL_COPY\n"); // dev: a second, identical program
@@ -1352,8 +1354,8 @@ public final class PixelLight {
       private final java.util.HashMap<Integer, zombie.viewCone.ChunkRenderShader> variants = new java.util.HashMap<>();
       private boolean switchToggle;
 
-      /** The program for a chunk texture with these lights: a variant without the kinds it does not need, null = the full one. */
-      zombie.core.opengl.Shader variantFor(int bits) {
+      /** Omit unused lighting and ownership work for this cache; null selects the full program. */
+      zombie.core.opengl.Shader variantFor(int bits, boolean hasOwner) {
          if (!Config.PPL_VARIANTS || Config.DEV_PPL_VIEW != 0 || baseShader == null) {
             return null;
          }
@@ -1377,10 +1379,14 @@ public final class PixelLight {
             mask |= i == this.shadowLight;
          }
          boolean wet = this.wet * Config.PPL_SPEC_PCT / 100.0F > 0.004F;
+         int key;
          if (!point && !torch && !(vehicle && wet)) {
-            return baseShader; // a vehicle light only lights the wet glints
+            key = V_BASE; // a vehicle light only lights the wet glints
+         } else {
+            key = (point ? 0 : V_NO_POINT) | (torch ? 0 : V_NO_TORCH) | (wet ? 0 : V_NO_WET)
+               | (mask && this.maskValid && Config.PPL_SHADOWS ? 0 : V_NO_MASK);
          }
-         int key = (point ? 0 : V_NO_POINT) | (torch ? 0 : V_NO_TORCH) | (wet ? 0 : V_NO_WET) | (mask && this.maskValid && Config.PPL_SHADOWS ? 0 : V_NO_MASK);
+         if (!hasOwner) key |= V_NO_OWNER; // single-level caches need neither a tag lookup nor its shader branch
          if (key == 0) {
             return null;
          }
@@ -1500,13 +1506,14 @@ public final class PixelLight {
          }
       }
 
-      private final java.util.HashMap<Integer, int[]> levelState = new java.util.HashMap<>(); // program -> {pplLv location, min, top sent}
+      private final java.util.HashMap<Integer, int[]> levelState = new java.util.HashMap<>(); // program -> {pplLv location, min, top sent, owner location, owner enabled sent}
 
-      /** Per chunk draw on every program: the levels the chunk texture holds (a uniform, sent only when it changes). */
+      /** Bounds and source-floor image for this draw; uniform changes are cached per program. */
       void selectLevels(int program, zombie.core.textures.Texture depth) {
          int[] st = this.levelState.get(program);
          if (st == null) {
-            st = new int[] {GL20.glGetUniformLocation(program, "pplLv"), Integer.MIN_VALUE, Integer.MIN_VALUE};
+            st = new int[] {GL20.glGetUniformLocation(program, "pplLv"), Integer.MIN_VALUE, Integer.MIN_VALUE,
+               GL20.glGetUniformLocation(program, "pplHasOwner"), -1};
             this.levelState.put(program, st);
          }
          Integer k = depth == null ? null : this.chunkIndex.get(depth);
@@ -1515,6 +1522,13 @@ public final class PixelLight {
             GL20.glUniform2i(st[0], lo, hi);
             st[1] = lo;
             st[2] = hi;
+         }
+         if (st[3] >= 0) {
+            int hasOwner = ChunkFloor.bind(depth) ? 1 : 0;
+            if (st[4] != hasOwner) {
+               GL20.glUniform1i(st[3], hasOwner);
+               st[4] = hasOwner;
+            }
          }
       }
       private final java.util.HashMap<Integer, int[]> chunkUniforms = new java.util.HashMap<>();
@@ -2193,6 +2207,7 @@ public final class PixelLight {
       "   return clamp(max(dot(n, ld) + wr, 0.0) / max(ld.z + wr, 0.15), 0.0, 1.25);",
       "}",
       "uniform vec4 pplWet;", // x: wet ground x specular strength, y: shininess
+      "float pplOwner = -64.0;", // source floor from a mixed-level cache; the screen pass has no ownership image
       "vec3 pplSpec = vec3(0.0);", // out of pplLight: the wet glints of the lights (added, not multiplied by the surface colour)
       "const vec3 PPL_VIEW = vec3(0.6428, 0.6428, 0.5162);", // towards the camera, in squares (the axis the screen does not see: (3, 3, 1) levels)
       "#ifdef PPL_LAZY_NORMAL",
@@ -2204,18 +2219,17 @@ public final class PixelLight {
       "   if ((cost & 8) != 0) return vec3(fract(P.x * 0.001) + 0.999);",
       // the square that owns the surface: a hair towards the viewer (a north wall's owner is on its +y side, a west wall's
       // on its +x side, a floor's above it)
-      // tile edge rows are written up to 0.005 levels low; at most one row of a wall's top goes up. Along the chunk edges the
-      // edge rows sit deeper and took the level below the texture's (no squares there: a black lattice, a dotted dark line
-      // along every chunk edge); a wall's top row that goes up in a chunk with no squares above took a black lattice as
-      // well (dots along the wall tops): the level stays within the ones the chunk texture holds (top = the chunk's
-      // highest level with squares)
-      "   float lz = clamp(floor(P.z + 0.006), float(pplLv.x), float(pplLv.y));",
+      // Tagged pixels supply their source floor directly. Quantization/resampling can reconstruct a floor just below
+      // its level, while the native upper-floor clamp deliberately keeps object tops below the next level. Height and
+      // brightness cannot identify the owner reliably. Retain the released rule only for untagged caches, uncovered
+      // texels and the optional screen-space pass; chunk bounds prevent those paths from reading an absent level.
+      "   float lz = pplOwner > -64.0 ? pplOwner : clamp(floor(P.z + 0.006), float(pplLv.x), float(pplLv.y));",
       "   vec2 sq = floor(P.xy + 0.004);",
       "   vec2 fxy = clamp(P.xy - sq, 0.0, 1.0);",
       "   ivec2 s = (ivec2(sq) + pplOrg.xy) & pplOrg.z;",
       // lifted a level by the tolerance: a floor's edge row a hair low or the top row of a wall of the level below; the
       // brighter of the two squares (an unseen upper floor put dark dots along the wall tops)
-      "   if (P.z < lz && lz > float(pplLv.x)) {",
+      "   if (pplOwner == -64.0 && P.z < lz && lz > float(pplLv.x)) {",
       "      vec3 a = pplInfoAt(s, int(lz) & pplOrg.w).rgb, b = pplInfoAt(s, int(lz - 1.0) & pplOrg.w).rgb;",
       "      if (max(b.r, max(b.g, b.b)) > max(a.r, max(a.g, a.b))) lz -= 1.0;",
       "   }",
@@ -2417,6 +2431,10 @@ public final class PixelLight {
 
    /** The game's chunkShader.frag (DIFFUSE x vertex colour, depth = chunkDepth + the texture's depth) with the light multiplied in. */
    private static final String CHUNK_FRAG_BODY = String.join("\n",
+      "#ifndef PPL_NO_OWNER",
+      "layout(binding = 8) uniform usampler2D pplOwnerTexture;",
+      "uniform int pplHasOwner = 0;",
+      "#endif",
       "uniform sampler2D DIFFUSE;",
       "uniform sampler2D DEPTH;",
       "uniform int useTexture = 1;",
@@ -2471,6 +2489,12 @@ public final class PixelLight {
       "   gl_FragDepth = d;",
       "   if (pplOn > 0.5 && (int(pplOpt2.w + 0.5) & 16) == 0) {",
       "      vec3 P = pplPos(gl_FragCoord.xy, d);",
+      "#ifndef PPL_NO_OWNER",
+      "      if (pplHasOwner != 0 && c.a > 0.0) {",
+      "         uint tag = texture(pplOwnerTexture, texCoord.st).r;",
+      "         if (tag != 0u) pplOwner = float(tag) - 33.0;",
+      "      }",
+      "#endif",
       "      float dz = 0.0;",
       "#ifdef PPL_BASE",
       "      vec3 n = vec3(0.0, 0.0, 1.0);",

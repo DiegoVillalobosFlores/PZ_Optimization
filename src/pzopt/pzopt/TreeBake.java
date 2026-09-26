@@ -180,10 +180,11 @@ public final class TreeBake {
       /**
        * Adds one textured quad: texture rectangle {@code x0..x1, y0..y1} in texture space, the texture's atlas
        * coordinates, the depth at the top and bottom rows (interpolated per fragment, clamped by GL to the
-       * depth range) and the vertex colour.
+       * depth range), vertex colour and source square's lighting level. The level survives copies
+       * into a neighbour's cache; it is not the last level drawn before this tree pass.
        */
       public void add(Texture texture, float x0, float y0, float x1, float y1, float depthTop, float depthBottom,
-                      float r, float g, float b, float a) {
+                      float r, float g, float b, float a, int sourceLevel) {
          if (this.count == this.textures.length) {
             this.textures = java.util.Arrays.copyOf(this.textures, this.count * 2);
             this.v = java.util.Arrays.copyOf(this.v, this.count * 2 * STRIDE);
@@ -200,6 +201,7 @@ public final class TreeBake {
          this.v[i + 7] = g;
          this.v[i + 8] = b;
          this.v[i + 9] = a;
+         this.v[i + 10] = sourceLevel;
          this.count++;
       }
 
@@ -249,6 +251,7 @@ public final class TreeBake {
                continue;
             }
             int i = n * STRIDE;
+            ChunkFloor.treeLevel((int)this.v[i + 10]);
             float x0 = this.v[i];
             float y0 = this.v[i + 1];
             float x1 = this.v[i + 2];

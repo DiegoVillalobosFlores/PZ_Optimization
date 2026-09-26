@@ -269,6 +269,7 @@ public final class TextureID extends Asset implements IDestroyable, Serializable
 
    public void destroy() {
       assert Thread.currentThread() == RenderThread.renderThread;
+      pzopt.ChunkFloor.release(this); // pzopt: ownership storage has the same lifetime as its parent depth texture
       if (this.id != -1) {
          if (deleteTextureIDS.position() == deleteTextureIDS.capacity()) {
             deleteTextureIDS.flip();

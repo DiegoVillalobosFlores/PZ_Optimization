@@ -130,6 +130,7 @@ public final class Scene {
       headlights = "on".equalsIgnoreCase(HarnessFlags.get("headlights", "").trim());
       puddles = Float.parseFloat(HarnessFlags.get("puddles", "-1").trim());
       Showcase.apply(); // showcase=horde
+      RoomLightRig.init(); // room_light=auto (PR #26 HDR rig)
       Showcase.worldReady(p); // showcase=horde: god mode, unseen, power off, the area cleared until the scene starts
       Explore.worldReady(p); // explore=restaurant: the walk through the nearest restaurant
       TreeWalk.worldReady(p); // explore=trees: from tree to tree, circling and watching each
@@ -308,6 +309,7 @@ public final class Scene {
       Showcase.tick(p, nowNs); // showcase=horde: aim, fire, keep the lights on
       Explore.tick(p, nowNs); // explore=restaurant: walk, look around
       TreeWalk.tick(p, nowNs); // explore=trees: walk, circle, watch; the trees' screen rectangles
+      RoomLightRig.tick(p, nowNs); // room_light=auto: the room light off / on timeline
       ThumpRig.tick(p, nowNs); // thump=N: zombies thumping a door off-screen (the thump-burst repro)
       crowdTick(p, nowNs); // crowd=N: a crowd around the player (the capsule shadow rig)
       if (zombiesOff) {

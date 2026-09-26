@@ -348,6 +348,23 @@ logged, and the recorded GL error checks were clear.
 These are sparse CPU timing records, not a frame-time or GPU benchmark. Windows and macOS runtime
 validation remains outstanding. The temporary local `devHdrTraceMs` override was removed after confirmation.
 
+Maintainer-side check before merging (2026-09-26, desktop, runs `pr26-base-*` / `pr26-fix-*`): harness rig
+`room_light=auto` (`pzopt.RoomLightRig`: at night the player held in the biggest lit room of the nearest building with
+several switched rooms, a grocery with 15 here; HDR dumps `on`, `off` 3 s after its switches go off, `on2` 3 s after
+they come back), `--preset night-dark --flag zombies=off --flag room_light=auto --flag route=S:1 --flag speed=0.01
+--flag zoom=0.75 --prop hdr=true --prop hdrAuto=false --prop overlay=false --prop upscaler=off --record`. HDR light
+off / on over the lit pixels of the rooms whose own lights never changed:
+
+| Region | master | PR |
+|---|---|---|
+| north-east room | 5.2x (2 % -> 80 % above UI white) | 1.16x (0 % -> 0 %) |
+| south-west rooms | 6.3x | 1.0x |
+| north-west strip | 3.2x | 1.0x |
+
+A lamp left on inside the darkened grocery rises 2.2x on the PR (stands out in the new dark, as intended); master also
+blew out a bloom blob in the lit grocery with every light on (max 912 vs 505 nits). Light back on: both return to the
+`on` picture. Jev over the numbers: issue in master 0.97, fixed 0.96, verdict fixed (0.98).
+
 ## State (2026-09-24 10:10)
 
 `hdr=true` on KDE Plasma 6 with HDR on gives: UI at the desktop's white, the world as SDR in daylight, lamp / torch /

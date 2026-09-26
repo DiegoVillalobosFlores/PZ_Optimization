@@ -1,8 +1,8 @@
 # Darkness floor, remembered places, colour grading (candidate B, 2026-09-26)
 
 Candidate B of `docs/plan-graphics-enhancements.md` ("the void", black rooms out of sight, night tint: player demands
-#1, #3 and #7), implemented in the worktree `../PZ_Optimization-darkness` (branch `darkness-lut`), with the goal that
-it costs nothing a frame. All three are off by default, change what a player can make out (the floor, remembered
+#1, #3 and #7), released 2026-09-26 as `ea05422` (GitHub release `win-b0bbce05d5-ea05422`, Workshop "New! Darkness, memory,
+colour", card 37), with the goal that it costs nothing a frame. All three are off by default, change what a player can make out (the floor, remembered
 places), so they stay out of parity comparisons, and apply at once from the Enhancements tab section "Darkness,
 remembered places and colour grading". Classes: `pzopt.Darkness`, `pzopt.Grade`, `pzopt.GradeMath`; override edits in
 `docs/override-edits.md`.

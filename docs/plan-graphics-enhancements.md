@@ -3,7 +3,15 @@
 Candidates for further visual features after the ambient-occlusion pass
 (`docs/findings-ambient-occlusion-2026-09-24.md`), asked by the maintainer: "surface scattering, tessellation, soft
 contact shadows, wind simulation, things that modern games have". Each entry says what the engine gives us, what it
-would cost, and how it would ship. Nothing here is implemented; ordering is payoff per effort.
+would cost, and how it would ship; ordering is payoff per effort.
+
+**Status (2026-09-26).** Shipped, all off by default on the Enhancements tab: item 1, sun shadows (`sunShadows`,
+`docs/findings-contact-shadows-2026-09-25.md`, with the character capsule shadows of candidate D.3); item 2,
+per-pixel lighting (`pixelLight`, phases A-C and the experimental torch shadows of D,
+`docs/findings-per-pixel-lighting-2026-09-25.md`); item 4, reflections (`reflections`,
+`docs/findings-reflections-2026-09-25.md`); candidate B, darkness floor, remembered places and colour grading
+(`darknessFloorPct`, `memoryTint`, `colorGrading`, released `ea05422`, `docs/findings-darkness-grading-2026-09-26.md`).
+Open: items 3, 5-8 and candidates A, C, D.1-2, E-O.
 
 ## What the engine gives us
 
@@ -23,6 +31,10 @@ would cost, and how it would ship. Nothing here is implemented; ordering is payo
 ## Candidates, in order
 
 ### 1. Soft directional shadows (the "soft contact shadows" ask)
+
+**Done 2026-09-25** (`sunShadows`, pzopt.SunShadow / pzopt.CapsuleShadow): the sun term in the chunk AO kernel and
+capsule shadows for characters and cars, see `docs/findings-contact-shadows-2026-09-25.md`. The text below is the
+original plan.
 
 Sun shadows cast by walls, trees, fences, furniture and vehicles, with a penumbra that widens with the distance
 between caster and receiver (PCSS-style: blocker search, then a filter radius from the blocker distance).
@@ -50,6 +62,10 @@ sprite-silhouette shadows, which is what the height-field march replaces. Source
 [RimWorld sun shadows](https://ludeon.com/blog/2013/08/sun-shadows/).
 
 ### 2. Per-pixel lighting (light composed per frame instead of baked per square)
+
+**Done 2026-09-25** (`pixelLight`, pzopt.PixelLight): the unlit bake and the per-frame light lattice (phases A-C),
+torch / lamp shapes and facing, experimental torch shadows (`pplShadows`, phase D), see
+`docs/findings-per-pixel-lighting-2026-09-25.md`. The text below is the original plan.
 
 Today the light map is per square (libLighting64), applied when the chunk texture bakes: a lamp is a stepped
 patch of squares, a flickering lamp or a torch that moves with the player re-bakes its chunks

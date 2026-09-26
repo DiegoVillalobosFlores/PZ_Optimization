@@ -471,7 +471,19 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   Measured and left off: extrap, physicsStepHz, physicsStepMode, frameClockSmooth, vsyncLock. Rig `--prop
   devDriveJitter=true` + `harness/drivejitter.py <run> --present` (real display times from pzopt-driveswap.out +
   present.txt). What remains is late frames in town (game-thread bursts at chunk arrival): `docs/plan-drive-game-thread.md`.
-- Open plans: `docs/plan-drive-game-thread.md` (2026-09-26: late frames while driving through town), `docs/plan-graphics-enhancements.md` (2026-09-25: visual features after AO, sun shadows and per-pixel lighting first), `docs/plan-game-load.md`, `docs/plan-vulkan-renderer.md`, `docs/plan-resource-use.md`,
+- Darkness floor, remembered places, colour grading (2026-09-26, released `ea05422` + Workshop card 37,
+  `docs/findings-darkness-grading-2026-09-26.md`, candidate B of the graphics plan; off by default, Enhancements tab section
+  "Darkness, remembered places and colour grading", applies at once): `darknessFloorPct` (pzopt.Darkness: seen squares above
+  ground keep a soft minimum light, applied to the native's per-square light in LightingJNI, no frame cost; unseen stays
+  black), `memoryTint` (out of sight drawn grey / dim / cool by the vision-cone pass itself, remembered rooms keep their
+  furniture; no dearer than the stock pass), `colorGrading` (pzopt.Grade / GradeMath: looks per hour and weather incl. the
+  Purkinje night shift, baked on a worker into a 65³ LUT fused with the stock `screen.frag` tail, which skips its 3D-noise
+  grain: screen pass 100 -> 72 us at 5K; `.cube` overlays in `Zomboid/pzopt/luts/`). Rigs: `devDarkAlternate=N` + `gpuSections`
+  (same-run on / off GPU sections), `devDarkStats`, `devGradeAblate`, harness `options_select=<key>`; published media come from
+  in-game `devCapture` (the desktop recorder showed a browser window over the game), `harness/stitch-darkness.py`,
+  `darkness-card-gif.py`, `menu-gifs.py` kind `pane`. Cost runs need their own `-Dpzopt.userOptionsFile` (the desktop's
+  tab file turns on HDR, DLSS and AO).
+- Open plans: `docs/plan-drive-game-thread.md` (2026-09-26: late frames while driving through town), `docs/plan-graphics-enhancements.md` (2026-09-25: visual features; items 1, 2, 4 and candidate B shipped by 2026-09-26), `docs/plan-game-load.md`, `docs/plan-vulkan-renderer.md`, `docs/plan-resource-use.md`,
   `docs/plan-zombie-multithread.md` (2026-09-22: the rest of the zombie simulation on all cores, phased).
   The game-thread optimization plans were dropped on 2026-09-21 at the maintainer's request.
 - Native Wayland works via `--env JAVA_TOOL_OPTIONS=-Dzomboid.wayland=1`; A/B on 2026-09-19 is a

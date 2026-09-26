@@ -188,6 +188,13 @@ from the times measured on the MacBook (the previous updater's 2,164 ms download
 write of the prefetched files, then Restart game), drawn as two copies of the update dialog; 20 fps, 0.19 MB; the table:
 click to installed on the Mac and the desktop, bytes per update, the check, the Workshop copy (issue #16). The
 Let There Be Light card `33` lost its "New!" heading (its image stays).
+`35` the "New! Reflections" card (`harness/ssr-card-gif.py`; 2026-09-26, reflections on water and puddles,
+`docs/findings-reflections-2026-09-25.md`): the left half plays the channel below the Sunset bar on the Riverside pier (15:00,
+zoom 1) from one run whose reflections switch on and off every 3 s (`devSsrAlternate=3000`, run `ssr-card2`), taken with
+the game's own frame capture (`devCapture=6,12,10,50`: the screen recorder had caught the desktop beside a half-width game
+window) and labelled from the alternation clock; 96 frames at 10 fps, 96 colours (6.4 MB); the table: what water and
+puddles reflect, characters, the GPU cost without water, at a river and in rain. The faster-local-updates card `34` lost
+its "New!" heading (its image stays).
 `description.txt` embeds them with `[img]` from the raw GitHub URL of `master`,
 so they render only after the folder is pushed. The staged page carries da.gd short links instead (2026-09-24,
 `scripts/workshop-shorten.py`, cache `docs/workshop/short-urls.txt`, ~80 characters saved per image; da.gd is the one

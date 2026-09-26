@@ -81,6 +81,8 @@ public final class VehicleSmooth {
    }
 
    private static final HashMap<Integer, Snap> prev = new HashMap<>();
+   /** Vehicles whose collide flag one of our reads took (the native clears it on every read), for the stock read. */
+   private static final java.util.HashSet<Integer> collided = new java.util.HashSet<>();
    private static final HashMap<Integer, Snap> curr = new HashMap<>();
    private static final float[] ff = new float[8192];
    private static int stamp; // bumped once per frame that stepped
@@ -150,6 +152,9 @@ public final class VehicleSmooth {
             }
             sn.pos.set(ff[fn], ff[fn + 1], ff[fn + 2]);
             sn.rot.set(ff[fn + 3], ff[fn + 4], ff[fn + 5], ff[fn + 6]);
+            if (ff[fn + 11] > 0.5f) {
+               collided.add(id); // the read cleared it natively: hand it on to WorldSimulation's read (crash damage)
+            }
             fn += 7 + 3 + 2; // position, rotation, velocity, speed, collide
             int wc = (int)ff[fn++];
             sn.wheels = Math.min(wc, 4);
@@ -162,6 +167,20 @@ public final class VehicleSmooth {
             sn.stamp = s;
          }
       }
+   }
+
+   /**
+    * WorldSimulation.updateInternal, for each vehicle of the stock read: Bullet.getVehiclePhysics reports a vehicle's
+    * collide flag once and clears it, and {@link #read} runs before that read, so without this the game never saw a
+    * collision (no crash damage, sound or injury while vehicleSmooth was on, 2026-09-26).
+    */
+   public static float collide(int id, float isCollide) {
+      return collided.remove(id) ? 1f : isCollide;
+   }
+
+   /** WorldSimulation.updateInternal, after the stock read: flags of vehicles it did not report are dropped. */
+   public static void collideDone() {
+      collided.clear();
    }
 
    private static boolean handles() {

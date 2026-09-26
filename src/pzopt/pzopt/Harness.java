@@ -50,6 +50,10 @@ import zombie.vehicles.BaseVehicle;
  *   zoom_jump  true    with zoom_cycle: set the zoom to the level at once (no ease), the worst case for the chunk-texture bakes
  *   zoom_span  N       with zoom_cycle: levels per step (default 1; 9 = the whole 0.25..2.5 range, a fast wheel spin)
  *   max_seconds        drive mode: give up (route_status=timeout) after this long on the route (default 90)
+ *   ram      true      drive mode with path=: crash test (2026-09-26): no obstacle avoidance, no stop before a hard obstacle
+ *                      or at the path's end, so the car hits whatever the path leads into at speed; every telemetry line
+ *                      carries crashes= (BaseVehicle.crash calls, the game's "Vehicle Crash Counter"), cond= (sum of the
+ *                      car's part conditions) and hp= (the driver's overall health)
  *   jitter   tiles     bench/parity, with hold: every frame of the hold the player's X alternates between the end
  *                      square's east edge minus and plus this much (e.g. 0.05), i.e. the square under the player
  *                      flips every frame, like zombies shoving a player standing on a roof edge (carport flicker rig)
@@ -104,7 +108,7 @@ public final class Harness {
    /** drive mode with flag path=: the route's centreline, its driver and what it sees (DrivePilot, 2026-09-24). */
    private static DrivePath drivePath;
    private static DrivePilot pilot;
-   private static DriveSenses senses;
+   private static DrivePilot.Senses senses;
    private static String pathError;
    private static final DrivePilot.Input pilotIn = new DrivePilot.Input();
    private static final DrivePilot.Output pilotOut = new DrivePilot.Output();
@@ -668,7 +672,8 @@ public final class Harness {
                           vehicle.isRegulator(), vehicle.getRegulatorSpeed(), vehicle.throttle, vehicle.transmissionNumber, zombie.GameTime.isGamePaused(), Core.getInstance().getZoom(p.getIndex()))
                           + (pilot == null ? "" : String.format(java.util.Locale.ROOT, " s=%.0f/%.0f target=%.0fkm/h hdg_err=%+.1f offset=%+.2f obstacles=%d%s brake=%s chunk_ahead=%s gain=%.2f impacts=%d",
                           pilot.progress(), drivePath.length, pilot.targetTps * pilot.kmhPerTps(), pilot.headingErrDeg, pilot.offsetNow, pilot.obstaclesAhead,
-                          Float.isNaN(pilot.stopAt) ? "" : String.format(java.util.Locale.ROOT, " stop_at=%.0f", pilot.stopAt), pilotOut.brake, pilotIn.chunkAhead, pilot.gain(), pilot.impacts)));
+                          Float.isNaN(pilot.stopAt) ? "" : String.format(java.util.Locale.ROOT, " stop_at=%.0f", pilot.stopAt), pilotOut.brake, pilotIn.chunkAhead, pilot.gain(), pilot.impacts))
+                          + (RAM ? crashState(p) : ""));
                  }
                  // path length: the road turns, so the distance is accumulated per frame
                  float ddx = vehicle.getX() - x;
@@ -994,6 +999,23 @@ public final class Harness {
     * capped; 5 / 0.6 / 40), lane (tiles right of the centreline, 0), avoid_slope (tiles sideways per tile along, 0.15),
     * avoid_margin (tiles of clearance, 0.5), stop_at_end (true), avoid_zombies (true).
     */
+   private static final boolean RAM = "true".equals(HarnessFlags.get("ram"));
+
+   /** ram=true telemetry: the game's crash counter, the car's summed part condition, the driver's overall health. */
+   private static String crashState(zombie.characters.IsoPlayer p) {
+      float crashes = 0f;
+      try {
+         crashes = zombie.statistics.StatisticsManager.getInstance().getStatistic("Vehicle Crash Counter");
+      } catch (RuntimeException e) {
+         // absent until the first crash
+      }
+      int cond = 0;
+      for (int i = 0; i < vehicle.getPartCount(); i++) {
+         cond += vehicle.getPartByIndex(i).getCondition();
+      }
+      return String.format(java.util.Locale.ROOT, " crashes=%.0f cond=%d hp=%.1f", crashes, cond, p.getBodyDamage().getOverallBodyHealth());
+   }
+
    private static void startPilot() {
       zombie.scripting.objects.VehicleScript sc = vehicle.getScript();
       org.joml.Vector3f ext = sc.getExtents();
@@ -1008,8 +1030,20 @@ public final class Harness {
             Float.parseFloat(HarnessFlags.get("lat_accel", "5")), Float.parseFloat(HarnessFlags.get("decel", "6")),
             Float.parseFloat(HarnessFlags.get("look_min", "5")), Float.parseFloat(HarnessFlags.get("look_time", "0.6")), Float.parseFloat(HarnessFlags.get("look_max", "40")),
             Float.parseFloat(HarnessFlags.get("lane", "0")), Float.parseFloat(HarnessFlags.get("avoid_slope", "0.15")), Float.parseFloat(HarnessFlags.get("avoid_margin", "0.5")),
-            !"false".equals(HarnessFlags.get("stop_at_end", "true")), ext.x() * 0.5f, ext.z() * 0.5f, wheelbase);
-      senses = new DriveSenses(drivePath, vehicle, !"false".equals(HarnessFlags.get("avoid_zombies", "true")));
+            !RAM && !"false".equals(HarnessFlags.get("stop_at_end", "true")), ext.x() * 0.5f, ext.z() * 0.5f, wheelbase);
+      DriveSenses real = new DriveSenses(drivePath, vehicle, !"false".equals(HarnessFlags.get("avoid_zombies", "true")));
+      senses = !RAM ? real : new DrivePilot.Senses() { // ram=true: blind to obstacles and street edges
+         public float[] band(DrivePath path, int i) {
+            return null;
+         }
+
+         public void obstacles(DrivePath path, float s0, float s1, int iHint, DrivePilot.Obstacles out) {
+         }
+
+         public boolean onStreet(float x, float y) {
+            return real.onStreet(x, y);
+         }
+      };
       Log.info(String.format(java.util.Locale.ROOT, "harness: drive pilot: %s %.2f x %.2f tiles, wheelbase %.2f, max %.0f km/h, cruise %.0f km/h, path %.0f tiles",
             vehicle.getScriptName(), ext.x(), ext.z(), wheelbase, vehicle.getMaxSpeed(), cruiseKmh, drivePath.length));
    }

@@ -221,6 +221,7 @@ public final class WorldSimulation {
                this.tempVector3f.set(vx, vy, vz);
                float speed = this.ff[fn++];
                float isCollide = this.ff[fn++];
+               isCollide = pzopt.VehicleSmooth.collide(id, isCollide); // pzopt: vehicleSmooth, the collide flag its earlier reads took
                int wheelCount = (int)this.ff[fn++];
 
                for (int n = 0; n < wheelCount; n++) {
@@ -292,6 +293,8 @@ public final class WorldSimulation {
                }
             }
          }
+
+         pzopt.VehicleSmooth.collideDone(); // pzopt: vehicleSmooth, drop collide flags of vehicles the read did not report
 
          if (GameClient.client) {
             IsoPlayer driver = IsoPlayer.players[IsoPlayer.getPlayerIndex()];

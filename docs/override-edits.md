@@ -3873,6 +3873,14 @@ Rig: `devDriveJitter` (pzopt.DriveJitter, `harness/drivejitter.py`, `harness/dri
 - `updatePhysic`: before the frame's last Bullet step, `VehicleSmooth.beforeLastStep` reads every vehicle's physics state
   (position, rotation, wheels) from Bullet; after the steps, `VehicleSmooth.afterSteps` reads it again and keeps the
   carried remainder as the render fraction. The simulation itself is unchanged.
+- `updateInternal` (fix, 2026-09-26, Workshop report "no more damage to cars in a crash regardless of speed"): the
+  native `Bullet.getVehiclePhysics` reports each vehicle's collide flag and clears it in the same call (a one-shot latch,
+  `movb $0x0,0x5(vehicle)` in libPZBullet64 right after the flag is written to the array). The two reads above ran before
+  the stock read of the frame, so the stock read always got 0, `BaseVehicle.jniIsCollide` stayed false and
+  `BaseVehicle.crash` never ran: no damage to the car or the driver, no crash sound, no damaged objects, whatever the
+  speed. `VehicleSmooth.read` now keeps the id of every vehicle whose flag it took and the stock read ORs it back in
+  (`VehicleSmooth.collide`), then drops what is left (`VehicleSmooth.collideDone`, vehicles the read did not report).
+  Rig: `--flag ram=true` on a path drive (Harness: no avoidance, no stop; telemetry `crashes= cond= hp=`).
 - With `physicsStepHz` other than 100 or `physicsStepMode=frame` the method hands over to `updatePhysicPzopt`, the same
   loop with another fixed step, or with the frame's time split into equal steps no longer than one fixed step and
   nothing carried over; the network clock advances by the stepped time. Single player only. Measured, not shipped on.

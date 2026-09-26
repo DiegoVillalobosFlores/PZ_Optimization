@@ -111,3 +111,26 @@ On: `vehicleSmooth=interp` (the camera re-centring of `driveCameraLate` included
 `physicsStepMode=frame` (same floor, physics change with the frame rate), `frameClockSmooth` (noise level against real
 display times), `vsyncLock`. Multiplayer clients: the smoothing is off (their vehicles follow the server's
 interpolation; not measured).
+
+## Regression: no crash damage with vehicleSmooth (fixed 2026-09-26 afternoon)
+
+Workshop report after the c17a039 release: "no more damage to cars in a crash regardless of speed ... the car just
+bounces and there's no sound/damage to car or player". `Bullet.getVehiclePhysics` (libPZBullet64) writes each
+vehicle's collide flag to the array and clears it in the same call, so it is a once-per-read latch. `VehicleSmooth.read`
+called it twice a frame (before the last step, after the steps) ahead of the stock read in
+`WorldSimulation.updateInternal`, which then always saw 0: `jniIsCollide` never set, `BaseVehicle.crash` /
+`damageObjects` never ran. Fix: the flags our reads take are handed to the stock read (`VehicleSmooth.collide`).
+
+Rig: `--mode drive --flag path=8010,11204.5/8080,11204.5/8130,11185/8230,11147 --flag ram=true --flag kmh=120
+--flag lat_accel=100 --flag max_seconds=14` (the car leaves KY-60 at ~104 km/h and hits an object at 8116,11190;
+telemetry `crashes= cond= hp=`). Mac runs, same path and impact speed:
+
+| run | build | crash counter | part condition sum | driver health |
+|---|---|---|---|---|
+| crash-bug-mac2 | c17a039..3dd6fba (no fix) | +0 | 3500 -> 3500, car stuck on the object | 100 -> 100 |
+| crash-fix-mac2 | fix | +1 | 3500 -> 3182, object destroyed | 100 -> 89.1 |
+| crash-stock-mac1 | `enabled=false` | +1 | 3500 -> 3184, object destroyed | 100 -> 51.4 |
+| crash-fix-frame-mac1 | fix, `physicsStepHz=120 physicsStepMode=frame` | +1 | 3410 -> 3140 | 100 -> 70.0 |
+
+(The driver's injury is random per crash, `addRandomDamageFromCrash`.) flip run crash-fix-1 (tab file with
+`physicsStepMode=frame`): +1, 3500 -> 3324, 100 -> 62.4 at ~60 km/h.

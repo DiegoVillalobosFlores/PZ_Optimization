@@ -129,6 +129,7 @@ Modes:
   every street-graph route from there, Jev picks the one the words describe). Bench `drive-120-south` (Rosewood:
   KY-60 east 96 tiles from 8010,11204.5, 8 tiles past the bench save's own car at 8002,11204 (a start on it pins both cars: the harness now rejects that), North Main St + Jacks Lane south 761, stop 12 tiles before Angel Road, 120 km/h).
   Town loop (runs `rwloop-1/2`, 2026-09-24, 1,191 tiles, 6 turns, ~75 s): `--flag path=8010,11204.5/8106,11204.5/8106,11579/8265,11579/8265,11382/8317.5,11382/8326.5,11379/8334,11371.5/8337,11365.5/8337,11204.5/8200,11204.5 --flag corner_radius=6 --flag kmh=120 --flag max_seconds=150 --route-seconds 90` (KY-60 > North Main St > Frederick Lane > Butterfly St > JC Carroll Road > KY-60 west; `drive-path.py route ... --to 8200,11204`); corner_radius 6 on 6-8 wide streets keeps the inner kerb clear. Longer paths need `max_seconds` above the default 90.
+  Crash test (2026-09-26, crash-damage regression): `--flag path=8010,11204.5/8080,11204.5/8130,11185/8230,11147 --flag ram=true --flag kmh=120 --flag lat_accel=100 --flag max_seconds=14` (`ram`: no avoidance, no stop; the car hits an object at 8116,11190 at ~104 km/h; telemetry `crashes= cond= hp=`: a crash adds 1 to crashes and takes ~300 off cond). `run-mac.sh` has no `--route-seconds`.
   `tests/pzopt/DrivePilotTest` drives the path in a simulated car (240 / 60 / 30 fps, steering gain x0.6 / x1.7,
   a parked car, a road block, a zombie).
 - `parity`: captures recalc output per chunk; `parity-gate.sh` compares with

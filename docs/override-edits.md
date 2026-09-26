@@ -3791,7 +3791,8 @@ Write-up: `docs/findings-contact-shadows-2026-09-25.md`. Off by default (a chang
 - After the chunk composite (`PixelLight.afterComposite`), `CapsuleShadow.queue(playerIndex)` queues this frame's
   capsule shadow pass (a GenericDrawer placed before every character draw).
 - `renderPlayer` and `pzoptRenderOnScreenObject`: right before a character's stock `renderShadow`, `CapsuleShadow.add`
-  puts its bone capsules into the pass; before a vehicle's, `CapsuleShadow.addVehicle`; a zombie drawn as an atlas
+  puts its bone capsules into the pass (not for a character seated in a vehicle, whose stock shadow is skipped too:
+  the vehicle's capsules shade the car, 2026-09-26); before a vehicle's, `CapsuleShadow.addVehicle`; a zombie drawn as an atlas
   sprite (whose stock shadow call charDrawPrep skips) gets `CapsuleShadow.addAtlas` (one upright capsule). Nothing else
   changes.
 

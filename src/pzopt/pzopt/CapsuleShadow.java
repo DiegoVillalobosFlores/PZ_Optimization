@@ -212,6 +212,9 @@ public final class CapsuleShadow {
       if (f == null || f.n >= MAX || chr == null || !Config.SUN_SHADOW_CHARACTERS) {
          return;
       }
+      if (chr.isSeatedInVehicle()) {
+         return; // a driver or passenger: the vehicle's capsules are the shadow there, like stock's renderShadow skipping them
+      }
       IsoGridSquare sq = chr.getCurrentSquare();
       if (sq == null || !chr.hasAnimationPlayer()) {
          return;

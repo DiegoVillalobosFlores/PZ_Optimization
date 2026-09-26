@@ -205,6 +205,12 @@ this release, `cj-card-fix2`), each a fixed window round the car with a fixed cr
 table: world judder, the car's wobble, frames it moves backwards, frames without motion (Rosewood, 60 km/h, zoom 1, each
 frame judged at the refresh it was shown on) and zoomed-in world judder. The Reflections card `35` lost its "New!"
 heading (its image stays).
+`38` the "New! Sharp sprites" card (`harness/spritefilter-card-gif.py`; 2026-09-26, candidate A of the graphics plan,
+`docs/findings-sprite-filter-2026-09-26.md`): the left half stacks the same spot at the same moment, stock filtering above and
+`spriteFilter=sharp` below, as 3x nearest-neighbour close-ups of the game's own 1:1 frames (the runs of
+`docs/media/sprite-filter-stock-vs-sharp.mp4`: `sfv-walk0.75-*`, `sfv-walk1.5-*`, `sfv-drive-*`, `devCapture=...,crop=...,ram`),
+3.2 s per scene at 10 fps, 96 colours (3.2 MB); the table: fine detail at 75 % / 175 % / in the 120 km/h drive, the world
+pass's GPU time on the drive and zoomed out. The darkness card `37` lost its "New!" heading (its image stays).
 `description.txt` embeds them with `[img]` from the raw GitHub URL of `master`,
 so they render only after the folder is pushed. The staged page carries da.gd short links instead (2026-09-24,
 `scripts/workshop-shorten.py`, cache `docs/workshop/short-urls.txt`, ~80 characters saved per image; da.gd is the one

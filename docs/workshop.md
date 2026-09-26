@@ -195,6 +195,16 @@ the game's own frame capture (`devCapture=6,12,10,50`: the screen recorder had c
 window) and labelled from the alternation clock; 96 frames at 10 fps, 96 colours (6.4 MB); the table: what water and
 puddles reflect, characters, the GPU cost without water, at a river and in rain. The faster-local-updates card `34` lost
 its "New!" heading (its image stays).
+`36` the "New! Fluid driving" card (`harness/drive-card-gif.py`; 2026-09-26, vehicles drawn between the physics steps and
+the camera placed after the car moved, `docs/findings-car-jitter-2026-09-26.md`): the left half plays the presented frames
+of two flip runs on the same stretch east of Rosewood (zoom 0.5, 60 km/h, `devCapture=22,2.5,120,50` stock with
+`enabled=false`, run `cj-card-stock1`, whose session had the stale camera on 88 % of frames; `devCapture=9,2.5,120,50`
+this release, `cj-card-fix2`), each a fixed window round the car with a fixed cross-hair, 0.6 s of capture shown 4x slower
+(every captured frame), and under them each run's car offset from its smooth path frame by frame from its drive log;
+72 frames at 30 fps, 128 colours (8.4 MB; 1.6 s with taller panels was 44 MB: the moving asphalt does not compress); the
+table: world judder, the car's wobble, frames it moves backwards, frames without motion (Rosewood, 60 km/h, zoom 1, each
+frame judged at the refresh it was shown on) and zoomed-in world judder. The Reflections card `35` lost its "New!"
+heading (its image stays).
 `description.txt` embeds them with `[img]` from the raw GitHub URL of `master`,
 so they render only after the folder is pushed. The staged page carries da.gd short links instead (2026-09-24,
 `scripts/workshop-shorten.py`, cache `docs/workshop/short-urls.txt`, ~80 characters saved per image; da.gd is the one

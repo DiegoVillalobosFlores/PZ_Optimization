@@ -3859,3 +3859,34 @@ See `docs/findings-tree-lighting-2026-09-25.md`.
   straight up), so a tree near the player (swaying in the wind, fading, translucent: never baked) keeps the shaded trunk
   and lower crown its baked neighbours have. Everything else about the quad (corners, wind distortion, uv, depth, stencil
   passes) is unchanged; with both keys off, or drawing into a chunk texture, the stock single quad is drawn.
+## Driving smoothness (2026-09-26: `vehicleSmooth`, `driveCameraLate`, `driveLookSmooth`, `cameraScreenPixels`, `frameClockSmooth`, `physicsStepHz`, `physicsStepMode`; pzopt.VehicleSmooth, pzopt.DriveCamera, pzopt.FrameClock)
+
+Write-up: `docs/findings-car-jitter-2026-09-26.md` (the maintainer's "micro rubber banding" of the car while driving).
+Rig: `devDriveJitter` (pzopt.DriveJitter, `harness/drivejitter.py`, `harness/drivejitter-capture.py`).
+
+### zombie.core.physics.WorldSimulation (new override)
+- `updatePhysic`: before the frame's last Bullet step, `VehicleSmooth.beforeLastStep` reads every vehicle's physics state
+  (position, rotation, wheels) from Bullet; after the steps, `VehicleSmooth.afterSteps` reads it again and keeps the
+  carried remainder as the render fraction. The simulation itself is unchanged.
+- With `physicsStepHz` other than 100 or `physicsStepMode=frame` the method hands over to `updatePhysicPzopt`, the same
+  loop with another fixed step, or with the frame's time split into equal steps no longer than one fixed step and
+  nothing carried over; the network clock advances by the stepped time. Single player only. Measured, not shipped on.
+
+### zombie.GameWindow
+- `frameStep`: right after the FPS tracker set the frame's simulation step, `FrameClock.afterFpsTracking` may replace it
+  with a whole number of display periods (`frameClockSmooth`). Around `renderInternal`, `VehicleSmooth.beforeRender`
+  puts moving vehicles, their seated characters and the driving camera where this frame should show them and
+  `VehicleSmooth.afterRender` puts every value back; `DriveJitter.beforeRender` logs the frame (rig).
+
+### zombie.iso.PlayerCamera (new override)
+- `update`, pan camera while driving: the look-ahead's frame time comes from `System.nanoTime` and its target and value
+  stay fractional when `driveLookSmooth` is on (`DriveCamera.panMult`, `DriveCamera.px`; stock truncates to whole pixels
+  and paces with whole milliseconds).
+- `getOffX/Y`, `getTOffX/Y`, `getLastOffX/Y`: `DriveCamera.snap` (stock's whole offscreen pixels, or with
+  `cameraScreenPixels` at zoom below 1 whole screen pixels). `XToIso` / `YToIso` keep a fractional screen point when
+  either key is on (the model camera goes through them with the camera offset; truncating it there put the car model up
+  to one offscreen pixel off the world).
+
+### zombie.core.opengl.RenderThread, org.lwjglx.opengl.Display
+- `Ready`, `lockStepRenderStep`, `update`: `DriveJitter.pushed / acquired / swapped` (rig only: which game frame each
+  swap showed, `pzopt-driveswap.out`).

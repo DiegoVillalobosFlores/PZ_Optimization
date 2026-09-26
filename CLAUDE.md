@@ -461,7 +461,16 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   the chunk-depth texel and its neighbours 2 texels away, only where a light reaches; +52 us/frame on the flip) and
   `bakeLevelChangeFrames` / `bakeLevelChangeRadius` (a floor change bakes the 3x3 chunks round the player at once) -> blink =
   stock. Rig: `--flag explore=stairs --flag director=jev` + `harness/stairs-flicker.py` (harness/CLAUDE.md).
-- Open plans: `docs/plan-graphics-enhancements.md` (2026-09-25: visual features after AO, sun shadows and per-pixel lighting first), `docs/plan-game-load.md`, `docs/plan-vulkan-renderer.md`, `docs/plan-resource-use.md`,
+- Driving smoothness (2026-09-26, `docs/findings-car-jitter-2026-09-26.md`): the car's "micro rubber band" was the
+  driving camera placed inside the player's update, before the car moved (per session / per town stretch: object update
+  order), plus 100 Hz Bullet steps drawn without interpolation. `vehicleSmooth=interp` (pzopt.VehicleSmooth: the frame
+  draws vehicles, seated characters and the re-centred camera between the last two physics steps, simulation untouched;
+  WorldSimulation override), `driveLookSmooth` and `cameraScreenPixels` (pzopt.DriveCamera, PlayerCamera override), all
+  default on. Flip, 120 Hz: world judder median 5.1 -> 0.7 px, car 5.4 -> 1.0 px in town; zoom 0.5 10.5 -> 0.9 px.
+  Measured and left off: extrap, physicsStepHz, physicsStepMode, frameClockSmooth, vsyncLock. Rig `--prop
+  devDriveJitter=true` + `harness/drivejitter.py <run> --present` (real display times from pzopt-driveswap.out +
+  present.txt). What remains is late frames in town (game-thread bursts at chunk arrival): `docs/plan-drive-game-thread.md`.
+- Open plans: `docs/plan-drive-game-thread.md` (2026-09-26: late frames while driving through town), `docs/plan-graphics-enhancements.md` (2026-09-25: visual features after AO, sun shadows and per-pixel lighting first), `docs/plan-game-load.md`, `docs/plan-vulkan-renderer.md`, `docs/plan-resource-use.md`,
   `docs/plan-zombie-multithread.md` (2026-09-22: the rest of the zombie simulation on all cores, phased).
   The game-thread optimization plans were dropped on 2026-09-21 at the maintainer's request.
 - Native Wayland works via `--env JAVA_TOOL_OPTIONS=-Dzomboid.wayland=1`; A/B on 2026-09-19 is a

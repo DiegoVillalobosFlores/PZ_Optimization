@@ -254,6 +254,7 @@ public class RenderThread {
       SpriteRenderState renderState = SpriteRenderer.instance.acquireStateForRendering(RenderThread::waitForRenderStateCallback);
       if (renderState != null) {
          pzopt.InputLag.acquired(); // pzopt: harness input-lag probe, the render thread took a game frame
+         pzopt.DriveJitter.acquired(); // pzopt: devDriveJitter, which game frame the next swap shows
          pzopt.LowLatency.frameBegin(); // pzopt: reflexSleep queue measurement, frames-in-flight count, input-latch busy
          pzopt.Pacing.onAcquire(); // pzopt: the frame's step start (VRR pacing)
          waitTime = System.nanoTime() - startWaitTime;
@@ -439,6 +440,7 @@ public class RenderThread {
       pzopt.Pacing.onPush(); // pzopt: pair the pushed frame with its step start (VRR pacing)
       SpriteRenderer.instance.pushFrameDown();
       pzopt.InputLag.pushed(pzoptReadyNs); // pzopt: harness input-lag probe
+      pzopt.DriveJitter.pushed(); // pzopt: devDriveJitter
       pzopt.LowLatency.pushed(pzoptReadyNs); // pzopt: reflexSleep, the frame's hand-off and its wait
       if (!isInitialized) {
          invokeOnRenderContext(RenderThread::renderStep);

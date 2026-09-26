@@ -669,6 +669,7 @@ public final class GameWindow {
          } else {
             accumulator += timeDiffNS;
             long desiredDt = PZMath.secondsToNanos / pzopt.FrameCap.lockNow();
+            desiredDt = pzopt.VsyncLock.desiredDt(desiredDt, pzopt.FrameCap.lockNow()); // pzopt: vsyncLock, vsync paces a cap that divides the refresh
             if (accumulator >= desiredDt) {
                long pzoptShift = pzopt.MacPresent.takeStepShiftNs(desiredDt); // pzopt: macOS present bridge phase control
                if (pzoptShift > 0L) { // pzopt
@@ -926,6 +927,7 @@ public final class GameWindow {
 
          try {
             s_fpsTracking.frameStep();
+            pzopt.FrameClock.afterFpsTracking(); // pzopt: frameClockSmooth, the frame's simulation step on the display's grid
             AbstractPerformanceProfileProbe profiler = GameWindow.s_performance.logic.profile();
 
             try {
@@ -975,7 +977,10 @@ public final class GameWindow {
             }
 
             pzopt.InputLag.beforeRender(); // pzopt: harness input-lag probe, player 0 after this frame's update
+            pzopt.VehicleSmooth.beforeRender(); // pzopt: vehicleSmooth, vehicles drawn between the physics steps
+            pzopt.DriveJitter.beforeRender(startTime); // pzopt: devDriveJitter, the frame's vehicle / camera state
             renderInternal();
+            pzopt.VehicleSmooth.afterRender(); // pzopt: vehicleSmooth, the simulation's values back
             if (doRenderEvent) {
                ProfileArea var35 = profilerx.profile("On Render");
 

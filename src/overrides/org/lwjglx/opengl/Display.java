@@ -282,6 +282,7 @@ public class Display {
       vsyncEnabled = sync;
       if (sync) {
          GLFW.glfwSwapInterval(pzopt.LowLatency.vsyncInterval()); // pzopt: vsyncAdaptive, -1 (late frames tear instead of waiting a refresh) when the driver has swap_control_tear
+         pzopt.VsyncLock.intervalReset(); // pzopt: vsyncLock, re-apply its interval before the next swap
       } else {
          GLFW.glfwSwapInterval(0);
       }
@@ -297,9 +298,11 @@ public class Display {
 
    public static void update(boolean processMessages) {
       try {
+         pzopt.VsyncLock.beforeSwap(); // pzopt: vsyncLock, the swap interval the cap asks for
          pzopt.LowLatency.beforeSwap(); // pzopt: reflexSleep, how long the swap blocks (vsync)
          swapBuffers();
          pzopt.InputLag.swapped(); // pzopt: harness input-lag probe (--flag inputlag=1), the frame's swap returned
+         pzopt.DriveJitter.swapped(); // pzopt: devDriveJitter, the swap of the frame acquired last
          pzopt.LowLatency.afterSwap(); // pzopt: gpuMaxFrames, fence the frame and wait for the GPU queue to drain
          displayDirty = false;
       } catch (LWJGLException e) {

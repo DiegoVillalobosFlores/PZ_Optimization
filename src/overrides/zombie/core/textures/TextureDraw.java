@@ -699,12 +699,14 @@ public final class TextureDraw {
             Core.getInstance().DoPopIsoStuff();
             break;
          case FBORenderChunkEnd:
+            pzopt.ChunkFloor.end(); // pzopt: finish ownership writes before leaving the chunk framebuffer
             if (pzopt.DrawStats.ON) pzopt.DrawStats.bakeEnd(); // pzopt: instrumented runs, draw-call census
             FBORenderChunkManager.instance.renderThreadChunkEnd();
             break;
          case FBORenderChunkStart:
             if (pzopt.DrawStats.ON) pzopt.DrawStats.bakeStart(); // pzopt: instrumented runs, draw-call census
             FBORenderChunkManager.instance.renderThreadChunkStart(this.a, this.b == 1);
+            pzopt.ChunkFloor.begin(FBORenderChunkManager.instance.renderThreadCurrent, this.b == 1); // pzopt: retain source floors beside the cached depth
             break;
          case glDoStartFrameNoZoom:
             Core.getInstance().DoStartFrameNoZoom(this.a, this.b, this.f1, this.c, false, false, false);

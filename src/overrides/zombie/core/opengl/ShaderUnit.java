@@ -102,7 +102,14 @@ public final class ShaderUnit {
             DebugType.Shader.error(this.getFileName() + "> Failed to generate shaderID. Shader code:\n" + processedCode);
             return false;
          } else {
-            GL20.glShaderSource(shaderID, pzopt.SpriteFilter.patchShader(this.fileName, pzopt.Ssr.patchShader(this.fileName, pzopt.CloudShadow.patchShader(this.fileName, pzopt.PixelLight.patchShader(this.fileName, pzopt.Hdr.patchShader(this.fileName, pzopt.Grade.patchShader(this.fileName, processedCode))))))); // pzopt: HDR output, the world composite shader gets its expansion appended (after the colour grade, pzopt.Grade); pixelLight, the chunk composite shader lights each pixel; cloudShadows, the chunk composite shades each pixel under a cloud; reflections, the water shaders look up the scene; sprite filter, the chunk composite's variants per zoom
+            processedCode = pzopt.Grade.patchShader(this.fileName, processedCode); // pzopt: colour grading before HDR expansion
+            processedCode = pzopt.Hdr.patchShader(this.fileName, processedCode); // pzopt: HDR expansion
+            processedCode = pzopt.PixelLight.patchShader(this.fileName, processedCode); // pzopt: per-pixel lighting
+            processedCode = pzopt.CloudShadow.patchShader(this.fileName, processedCode); // pzopt: cloud shadows
+            processedCode = pzopt.Ssr.patchShader(this.fileName, processedCode); // pzopt: reflections
+            processedCode = pzopt.SpriteFilter.patchShader(this.fileName, processedCode); // pzopt: filter variants capture sources before ownership wrapping
+            processedCode = pzopt.ChunkFloor.patchShader(this.fileName, processedCode, this.unitType == ShaderUnit.Type.Frag); // pzopt: retain source floors after colour rewriting
+            GL20.glShaderSource(shaderID, processedCode); // pzopt: the composed shader source
             GL20.glCompileShader(shaderID);
             ShaderProgram.printLogInfo(shaderID);
             this.glId = shaderID;

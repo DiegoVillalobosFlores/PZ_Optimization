@@ -3864,6 +3864,7 @@ See `docs/findings-tree-lighting-2026-09-25.md`.
   straight up), so a tree near the player (swaying in the wind, fading, translucent: never baked) keeps the shaded trunk
   and lower crown its baked neighbours have. Everything else about the quad (corners, wind distortion, uv, depth, stencil
   passes) is unchanged; with both keys off, or drawing into a chunk texture, the stock single quad is drawn.
+
 ## Driving smoothness (2026-09-26: `vehicleSmooth`, `driveCameraLate`, `driveLookSmooth`, `cameraScreenPixels`, `frameClockSmooth`, `physicsStepHz`, `physicsStepMode`; pzopt.VehicleSmooth, pzopt.DriveCamera, pzopt.FrameClock)
 
 Write-up: `docs/findings-car-jitter-2026-09-26.md` (the maintainer's "micro rubber banding" of the car while driving).
@@ -4020,3 +4021,40 @@ direct-sun share and the wall fixes in `pzopt.ChunkAo`'s kernel.
 ### zombie.iso.weather.fx.WeatherFxMask
 - The stock screen-space cloud layer is skipped (and does not keep the weather mask awake) while
   `CloudShadow.replaceStock` (`cloudReplaceStock`, off by default).
+
+## Cached source-floor ownership (2026-09-26; pzopt.ChunkFloor)
+
+The user reports that the fix appears to resolve the issue after a baseline comparison;
+the local game remains on the baseline by request.
+
+### zombie.core.opengl.ShaderUnit
+- `compile`: preserve the upstream order of colour grading, HDR, PPL, cloud shadows, reflections and
+  sprite filtering, then append the source-level output to native fragment shaders through `ChunkFloor`.
+  Sprite-filter variants capture sources before ownership wrapping, so their tile variants receive the
+  output exactly once. Existing colour outputs remain at locations 0/1; the integer tag uses location 2.
+  Chunk composites, including the sprite-filter variant, do not write ownership. The hook is inactive
+  without PPL's composite mode and OpenGL 4.2 support.
+
+### zombie.core.textures.TextureDraw
+- `run`: after the native chunk framebuffer begin/clear, start ownership recording for mixed-level
+  caches. Stop recording before the native framebuffer end. These hooks follow the render-thread
+  command stream, including tree appends, rather than reading mutable game-thread draw state.
+
+### zombie.core.textures.TextureID
+- `destroy`: release an associated ownership texture before retiring its parent depth texture.
+  Pooled framebuffers retain their tags with their depth textures; reuse clears tags on a full bake.
+
+### zombie.iso.fboRenderChunk.FBORenderCell
+- `renderOneLevel`: queue the level before drawing its cached geometry, and stop tag writes before
+  the top level's colour-only AO work.
+- `pzoptBakeTrees`, `pzoptQueueTreeAppend`, `pzoptAddTreeTexture`: retain each tree square's level in
+  its queued quad. `TreeBake.Drawer` flushes pending vertices before changing the source-level block,
+  so trees drawn after both floors, or appended into a neighbour, do not inherit the last floor.
+
+### zombie.core.rendering.ShaderBufferData (new override)
+- `BufferUtility.GetUniforms`: with overrides enabled and OpenGL 3.1 support, omit members of named
+  uniform blocks from the ordinary-uniform list. Those members have no ordinary uniform location and
+  are updated through their buffers. Otherwise the model loader tries to construct a `ShaderParameter`
+  for `ChunkFloor`'s unsigned tag, gets null and crashes during startup. Ordinary uniforms retain their
+  original order and handling; the shader-storage instance-buffer path is unchanged. The disabled path
+  retains native enumeration. Only this nested method changes behavior.

@@ -488,6 +488,16 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   in-game `devCapture` (the desktop recorder showed a browser window over the game), `harness/stitch-darkness.py`,
   `darkness-card-gif.py`, `menu-gifs.py` kind `pane`. Cost runs need their own `-Dpzopt.userOptionsFile` (the desktop's
   tab file turns on HDR, DLSS and AO).
+- Sprite filtering (2026-09-26, candidate A, `docs/findings-sprite-filter-2026-09-26.md`, off by default, Enhancements tab
+  "Sprite filtering", live): `spriteFilter=sharp` (`pzopt.SpriteFilter`): texel-aware anti-aliased point sampling zoomed in at
+  non-integer scales (0.75), stock point sampling at whole multiples and 1:1, zoomed out one explicit mip level
+  `floor(log2(texels a pixel))` with two adaptive diagonal taps (`spriteFilterMin=rgssa2`) + an empty-area probe, the bake mip
+  chain trimmed to 2 levels; per-frame tile variants; per-zoom program variants swapped in by re-pointing the game's own
+  StartShader (TextureDraw), compiled after a swap on settings change. Result: +15 % (0.75) to +30 % (1.5) detail on a held frame,
+  +25 % in motion at 2.5 with stock's shimmer per detail; composite GPU at or under stock (0.75 +0.4 us, drive -0.3 us, spin
+  1.75 / 2.5 -59 / -147 us); drive tails = stock. Dropped: Golus's RGSS as published (+203 us), level-0 taps past 2x (seams +
+  bandwidth), Lanczos level 1 (+96 us composite on NVIDIA). Rigs: `devSpriteFilterCycle` / `ShotModes` / `ShotAb`,
+  `harness/spritefilter/`.
 - Open plans: `docs/plan-drive-game-thread.md` (2026-09-26: late frames while driving through town), `docs/plan-graphics-enhancements.md` (2026-09-25: visual features; items 1, 2, 4 and candidate B shipped by 2026-09-26), `docs/plan-game-load.md`, `docs/plan-vulkan-renderer.md`, `docs/plan-resource-use.md`,
   `docs/plan-zombie-multithread.md` (2026-09-22: the rest of the zombie simulation on all cores, phased).
   The game-thread optimization plans were dropped on 2026-09-21 at the maintainer's request.

@@ -1600,18 +1600,19 @@ public final class FBORenderCell {
       FBORenderCorpses.getInstance().update();
       FBORenderItems.getInstance().update();
       this.pzoptFlushTreeAppends(playerIndex, Core.getInstance().getZoom(playerIndex)); // pzopt: treeAppend, before the textures are composited
-      pzopt.PixelLight.bakeEnd(); // pzopt: pixelLight, no square stays white past the bakes
+      pzopt.PixelLight.bakeEnd(); pzopt.SpriteFilter.bakeEnd(); // pzopt: pixelLight; sprite filter, the finished texture gets its sharp level 1, no square stays white past the bakes
       pzopt.ChunkAo.flush(playerIndex); // pzopt: ambient occlusion, this frame's budget of AO computes, before the textures are composited
       pzopt.Ssr.beforeComposite(playerIndex, this.perPlayerData[playerIndex].onScreenChunks); // pzopt: reflections, the water square map and the scatter's frame, ahead of the chunk composite
       pzopt.PixelLight.beforeComposite(playerIndex, this.perPlayerData[playerIndex].onScreenChunks); // pzopt: pixelLight, the lattice uploads and the camera, ahead of the chunk composite that lights each pixel
-      pzopt.GpuSections.begin("composite"); /* pzopt: GPU section: chunk textures into the combined FBO and onto the screen */
+      pzopt.SpriteFilter.beforeComposite(playerIndex); // pzopt: sprite filter, this frame's composite program for the zoom
+      pzopt.GpuSections.begin(pzopt.SpriteFilter.section("composite")); /* pzopt: GPU section: chunk textures into the combined FBO and onto the screen */
       if (pzopt.Config.COMPOSITE_SHADER_RUN && pzopt.Overrides.enabled() && !DebugOptions.instance.fboRenderChunk.combinedFbo.getValue()
             && DebugOptions.instance.fboRenderChunk.renderChunkTextures.getValue()) { // pzopt: compositeShaderRun
          this.pzoptCompositeChunks(); // pzopt
       } else { // pzopt
          FBORenderChunkManager.instance.endFrame();
       } // pzopt
-      pzopt.GpuSections.end("composite");
+      pzopt.GpuSections.end(pzopt.SpriteFilter.section("composite")); // pzopt: sprite filter, devSpriteFilterAlternate splits the section
       pzopt.Ssr.afterComposite(); // pzopt: reflections, dev timing of the composite with its scatter
       pzopt.AmbientOcclusion.queue(playerIndex); // pzopt: ambient occlusion on the static world, before anything else is drawn over it
       pzopt.PixelLight.afterComposite(playerIndex); // pzopt: pixelLight, the per-pixel light pass (pass mode) and the dev dumps, before anything else is drawn over the static world
@@ -2110,7 +2111,7 @@ public final class FBORenderCell {
                if (pzoptDraw != null) {
                   // stale but complete texture: same as the clean path below
                   FBORenderChunkManager.instance.renderChunk = pzoptDraw;
-                  FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, false); pzopt.PixelLight.bakeEnd(); // pzopt: pixelLight
+                  FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, false); pzopt.PixelLight.bakeEnd(); pzopt.SpriteFilter.bakeEnd(); // pzopt: pixelLight; sprite filter, the finished texture gets its sharp level 1
                   if (!renderLevels.getCachedSquares_AnimatedAttachments(level).isEmpty()) {
                      perPlayerData1.addChunkWith_AnimatedAttachments(c);
                   }
@@ -2140,6 +2141,7 @@ public final class FBORenderCell {
          if (isDirty && canRender && pzopt.BakeMips.ON && FBORenderChunkManager.instance.renderChunk != null) { // pzopt: bakeMipLevels
             pzopt.BakeMips.onBake(FBORenderChunkManager.instance.renderChunk, FBORenderChunkManager.instance.renderChunk.getTexture()); // pzopt
          } // pzopt
+         if (isDirty && canRender && FBORenderChunkManager.instance.renderChunk != null) pzopt.SpriteFilter.bakeBegin(FBORenderChunkManager.instance.renderChunk.getTexture()); // pzopt: sprite filter, the texture's sharp level 1 after the bake
          if (DebugOptions.instance.delayObjectRender.getValue()) {
             canRender = frameNo == c.loadedFrame || frameNo >= c.renderFrame;
          }
@@ -2509,7 +2511,7 @@ public final class FBORenderCell {
                   }
 
                   if (!renderObjects) {
-                     FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, false); pzopt.PixelLight.bakeEnd(); // pzopt: pixelLight
+                     FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, false); pzopt.PixelLight.bakeEnd(); pzopt.SpriteFilter.bakeEnd(); // pzopt: pixelLight; sprite filter, the finished texture gets its sharp level 1
                      break label658;
                   }
 
@@ -2706,7 +2708,7 @@ public final class FBORenderCell {
                   pzopt.ChunkAo.bakeEnd(FBORenderChunkManager.instance.renderChunk, c, playerIndex, zoom, pzopt.ChunkAo.geometryDirty(renderLevels, level, zoom)); // pzopt
                } // pzopt
                pzopt.GpuSections.begin("bake.end"); // pzopt: GPU sub-section (unbind, mipmaps of the top level)
-               FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, true); pzopt.PixelLight.bakeEnd(); // pzopt: pixelLight
+               FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, true); pzopt.PixelLight.bakeEnd(); pzopt.SpriteFilter.bakeEnd(); // pzopt: pixelLight; sprite filter, the finished texture gets its sharp level 1
                pzopt.GpuSections.end("bake.end"); // pzopt: GPU sub-section
                pzopt.GpuSections.end("bake"); // pzopt: GPU section
                return;
@@ -2716,7 +2718,7 @@ public final class FBORenderCell {
                var17.close();
             }
          } else {
-            FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, false); pzopt.PixelLight.bakeEnd(); // pzopt: pixelLight
+            FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, false); pzopt.PixelLight.bakeEnd(); pzopt.SpriteFilter.bakeEnd(); // pzopt: pixelLight; sprite filter, the finished texture gets its sharp level 1
             if (!renderLevels.getCachedSquares_AnimatedAttachments(level).isEmpty()) {
                perPlayerData1.addChunkWith_AnimatedAttachments(c);
             }
@@ -5021,7 +5023,7 @@ public final class FBORenderCell {
       }
       if (draw != null) {
          FBORenderChunkManager.instance.renderChunk = draw;
-         FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, false); pzopt.PixelLight.bakeEnd(); // pzopt: pixelLight
+         FBORenderChunkManager.instance.endRenderChunkLevel(c, level, zoom, false); pzopt.PixelLight.bakeEnd(); pzopt.SpriteFilter.bakeEnd(); // pzopt: pixelLight; sprite filter, the finished texture gets its sharp level 1
          if (!renderLevels.getCachedSquares_AnimatedAttachments(level).isEmpty()) {
             perPlayerData1.addChunkWith_AnimatedAttachments(c);
          }

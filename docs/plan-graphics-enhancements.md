@@ -273,7 +273,8 @@ post-process).
 
 Ordered by (player demand x fit x 1 / cost). Each says what it needs, what it costs, and where it hooks.
 
-**A. Sprite filtering that ends the blur (demand #2, #6).** Magnified (zoomed in): texel-aware anti-aliased point
+**A. Sprite filtering that ends the blur (demand #2, #6).** **Done 2026-09-26** (`spriteFilter`, pzopt.SpriteFilter, off by default, Enhancements tab): see
+`docs/findings-sprite-filter-2026-09-26.md`. The text below is the original plan. Magnified (zoomed in): texel-aware anti-aliased point
 sampling (a hard texel edge smoothed over exactly one screen pixel) keeps sprite edges crisp without shimmer;
 minified (zoomed out, driving): shader-supersampled mips instead of trilinear for high-contrast tile art. One
 sampler change in the chunk composite and the per-frame sprite path, plus an Optimizations-tab combo (nearest /

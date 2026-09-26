@@ -614,6 +614,24 @@ local ENHANCEMENT_SECTIONS = {
         },
     },
     {
+        title = "Sprite filtering (sharp world art when zoomed in or out)", clip = "upscale",
+        entries = {
+            { key = "spriteFilter", label = "Sprite filtering",
+              choices = { "stock", "sharp", "nearest" },
+              note = { stock = "the game's own (soft at 75 % zoom and when zoomed out)", sharp = "texel-aware: crisp edges without shimmer", nearest = "hard pixels" },
+              tip = "How the world's art is scaled to your zoom. The game draws it sharp at 100 % and 50 %, soft at 75 % (a linear blur) and when zoomed out (a blend of the full picture and a blurred half-size copy: the blurry look while driving). Sharp: zoomed in, every texel of the art stays a hard square and only the one screen pixel an edge crosses is blended by how much of it the texel covers, so edges are crisp at any zoom and do not crawl while the camera glides; zoomed out, four samples per pixel from a sharper copy of the art keep fences, window frames and road lines sharp without shimmer. At 100 % the picture is the game's own. Nearest: hard pixels at every zoom-in step (75 % included), no blending. Costs next to nothing (the world picture is sampled by a variant of the same program, picked once a frame for the zoom). Windows and Linux (not on macOS, OpenGL 2.1); with per-pixel lighting on it applies on the next launch." },
+            { key = "spriteFilterMin", label = "Sprite filtering: zoomed out",
+              choices = { "rgssa2", "rgssa", "floor", "rgss4", "trilinear" },
+              note = { rgssa2 = "adaptive, two samples (default)", rgssa = "adaptive, four samples", floor = "one sample, sharpest", rgss4 = "four samples, steadiest, softer", trilinear = "the game's own blend" },
+              tip = "How the sharp filter shrinks the art when you zoom out. The game blends a half-size and a quarter-size copy of the art (soft); the sharp filter reads the one copy that fits the zoom. Adaptive spreads two (or four) samples as the zoom approaches the next copy, where fine lines would otherwise shimmer; one sample is the sharpest and cheapest with a little grain; four fixed samples is the steadiest and softest. The default costs less than the game's own blend." },
+            { key = "spriteFilterSharpnessPct", label = "Sprite filtering: edge sharpness zoomed in (%)",
+              choices = { "100", "150", "200", "300" }, note = { ["100"] = "exact one-pixel edges (default)" },
+              tip = "100 blends each texel edge over exactly one screen pixel, the smoothest motion. Higher narrows the blend: harder edges, a little more crawl while the camera glides." },
+            { key = "spriteFilterSprites", label = "Sprite filtering: also the tiles drawn per frame",
+              tip = "The tiles the game draws every frame instead of into the chunk pictures (open doors, items, things near the cut-away walls) get the same filtering, so they match the rest of the world." },
+        },
+    },
+    {
         title = "HDR output (Linux with HDR on under Wayland, macOS)", clip = "hdr",
         entries = {
             { key = "hdrAuto", label = "HDR output: automatic",
@@ -1191,6 +1209,8 @@ local EFFECTS = {
     darknessFloorPct = {},
     memoryTint = {},
     colorGrading = { gpu = -1 },
+    spriteFilter = { gpu = 1 },
+    spriteFilterMin = { gpu = 1 },
     pixelLight = { cpu = -1, gpu = 1, vram = 1 },
     pplPointLights = { gpu = 1 },
     pplShadows = { gpu = 2 },

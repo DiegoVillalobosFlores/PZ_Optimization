@@ -186,6 +186,8 @@ public final class Harness {
    private static int burstTaken;
    private static long shotHoldNs;
    private static boolean shotRequested, shot2Requested;
+   /** Seconds into the shot hold (-1 before it): same-run A/B rigs switch between the two captures (at 2 s and 4 s). */
+   public static volatile float shotHeldS = -1f;
    private static float settle = 15f;
    private static final List<float[]> legs = new ArrayList<>(); // {dx, dy, length}
    private static int leg = 0;
@@ -825,6 +827,7 @@ public final class Harness {
          Log.info("harness: holding the camera at t=" + (int)t + "s for the screenshot (x=" + (int)x + ",y=" + (int)y + ", facing " + (int)turnAngle + ")");
       }
       float held = (nowNs - shotHoldNs) / 1e9f;
+      shotHeldS = held;
       if (!shotRequested && held >= 2f) {
          shotRequested = true;
          try {

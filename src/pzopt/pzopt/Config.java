@@ -931,6 +931,11 @@ public final class Config {
    public static final String DARKNESS_FLOOR_TINT = string("darknessFloorTint", "0.92,0.98,1.12"); // colour of the darkness floor's lift (normalised to luminance 1)
    public static final int DEV_DARK_ALTERNATE = integer("devDarkAlternate", 0); // dev: every N frames the render-side part (grade + remembered-places pass) flips on / off; GPU sections screen.on/off, vispoly.on/off
    public static final boolean DEV_DARK_STATS = bool("devDarkStats", false); // dev: a darkness / grading stats line every 10 s
+   public static final int DEV_SPRITE_FILTER_ALTERNATE = integer("devSpriteFilterAlternate", 0); // dev: every N frames the sprite filter flips on / off; GPU sections composite.on / composite.off
+   public static final boolean DEV_SPRITE_FILTER_SHOT_AB = bool("devSpriteFilterShotAb", false); // dev: with --shot-at, stock until 3 s into the hold: shot-game.png stock, shot2-game.png with spriteFilter
+   public static final String DEV_SPRITE_FILTER_CYCLE = string("devSpriteFilterCycle", ""); // dev: with devSpriteFilterAlternate, cycle these entries (stock, nearest, rgss4, rgss4+skip, rgss2, bias, trilinear); GPU section composite.<entry>
+   public static final String DEV_SPRITE_FILTER_SHOT_MODES = string("devSpriteFilterShotModes", ""); // dev: with --shot-at, these cycle entries one after the other through the hold, four slots clear of its screenshots (logged; pair with devCapture, harness/spritefilter/modes.py)
+   public static final boolean DEV_SPRITE_FILTER_STATS = bool("devSpriteFilterStats", false); // dev: a sprite-filter line every 10 s (mode, frames per zoom regime, variants)
    public static final boolean DEV_GRADE_TRACE = bool("devGradeTrace", false); // dev: a console line per LUT bake (look + weights)
    public static final int DEV_GRADE_ABLATE = integer("devGradeAblate", 0); // dev: cost ablation of the grade shader (0 full, 1 no shaper, 2 no LUT fetch, 3 wrapper only)
    public static final int DEV_GRADE_REBAKE_MS = integer("devGradeRebakeMs", 0); // dev: force a LUT bake + upload this often (upload cost rig)
@@ -957,6 +962,18 @@ public final class Config {
    public static volatile boolean COLOR_GRADING; // time-of-day / weather LUT
    public static volatile int COLOR_GRADING_PCT; // strength of the grade
    public static volatile int COLOR_GRADING_NIGHT_PCT; // strength of the night-vision (Purkinje) shift within it
+   // Candidate A (2026-09-26, pzopt.SpriteFilter): how the chunk composite samples the baked world.
+   public static volatile String SPRITE_FILTER; // stock | sharp (texel-aware: anti-aliased point sampling zoomed in, supersampled mips zoomed out) | nearest (point sampling at every magnified zoom)
+   public static volatile String SPRITE_FILTER_MIN; // sharp, zoomed out: the taps read one mip level, floor(log2(texels a pixel)): rgssa2 (two diagonal taps spread by how far the pixel exceeds that level's texel; default) | rgssa (four rotated-grid taps spread the same way) | floor (one bilinear tap) | rgss4 (the full grid) | rgss2 | bias (one trilinear tap half a level sharp) | trilinear (stock)
+   public static volatile int SPRITE_FILTER_SHARPNESS_PCT; // sharp, zoomed in: 100 = a texel edge blended over exactly one screen pixel (box coverage); 200 = half a pixel
+   public static volatile boolean SPRITE_FILTER_SPRITES; // sharp: the tiles drawn per frame (outside the chunk textures) get the same filtering
+   public static volatile String SPRITE_FILTER_KERNEL; // sharp, zoomed in: box (linear ramp over the edge pixel: exact coverage) | smooth (smoothstep ramp)
+   public static volatile boolean SPRITE_FILTER_MIP_TRIM; // sharp: chunk textures build only the mip levels the sharper minification reads (1 instead of 3 at the widest zoom), less GPU per bake
+   public static volatile int SPRITE_FILTER_LOD_BIAS_PCT; // sharp, zoomed out: the taps read level floor(log2(texels a pixel) - this / 100); 0 = level 1 from 2x (cheapest), 50 = level 0 up to 2.83x (sharper, more bandwidth)
+   public static volatile boolean SPRITE_FILTER_INTEGER_AA; // sharp: the edge blend also at whole-multiple zooms (50 %, 25 %), where point sampling is already exact (smoother sub-pixel glides, a little softer)
+   public static volatile boolean SPRITE_FILTER_SHARP_MIPS; // sharp, zoomed out 2x and more: mip level 1 of each baked chunk texture is a Lanczos-2 downsample instead of the 2x2 box (pzopt.SpriteMips)
+   public static volatile boolean SPRITE_FILTER_LINEAR_LIGHT; // sharp, zoomed out: the taps (and the sharp mip level) averaged in linear light (gamma 2), so thin bright lines keep their brightness; stock filters the encoded values
+   public static volatile boolean SPRITE_FILTER_SKIP_EMPTY; // sharp, zoomed out: one coarse probe skips the taps where the texture is empty
    public static volatile boolean OVERLAY_SAMPLING; // measure at all (ring, GL timer queries, sampler thread); off by default since 2026-09-21
    public static volatile boolean OVERLAY;
    public static volatile boolean OVERLAY_LOG;
@@ -1039,6 +1056,17 @@ public final class Config {
       COLOR_GRADING = bool("colorGrading", false);
       COLOR_GRADING_PCT = integer("colorGradingPct", 100);
       COLOR_GRADING_NIGHT_PCT = integer("colorGradingNightPct", 100);
+      SPRITE_FILTER = string("spriteFilter", "stock").trim().toLowerCase(java.util.Locale.ROOT);
+      SPRITE_FILTER_MIN = string("spriteFilterMin", "rgssa2").trim().toLowerCase(java.util.Locale.ROOT);
+      SPRITE_FILTER_SHARPNESS_PCT = integer("spriteFilterSharpnessPct", 100);
+      SPRITE_FILTER_SKIP_EMPTY = bool("spriteFilterSkipEmpty", true);
+      SPRITE_FILTER_LOD_BIAS_PCT = Math.max(0, Math.min(100, integer("spriteFilterLodBiasPct", 0)));
+      SPRITE_FILTER_SPRITES = bool("spriteFilterSprites", true);
+      SPRITE_FILTER_KERNEL = string("spriteFilterKernel", "box").trim().toLowerCase(java.util.Locale.ROOT);
+      SPRITE_FILTER_MIP_TRIM = bool("spriteFilterMipTrim", true);
+      SPRITE_FILTER_INTEGER_AA = bool("spriteFilterIntegerAa", false);
+      SPRITE_FILTER_SHARP_MIPS = bool("spriteFilterSharpMips", false);
+      SPRITE_FILTER_LINEAR_LIGHT = bool("spriteFilterLinearLight", false);
       OVERLAY_SAMPLING = bool("overlaySampling", false);
       OVERLAY = bool("overlay", false);
       OVERLAY_LOG = bool("overlayLog", false);

@@ -4,6 +4,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
@@ -16,6 +19,11 @@ import org.lwjgl.opengl.GL30;
  * RGBA rows (bottom-up) to {@code ~/Zomboid/pzopt-capture/frames.rgba}; {@code index.txt} holds the size and one epoch ms
  * per frame. {@code harness/ppl/capture.py} turns it into PNGs and temporal metrics. A fifth field {@code gray} writes
  * one luma byte per pixel to {@code frames.gray} instead (a quarter of the bytes: minute-long walks on the laptops).
+ * A field {@code crop=x:y:w:h} (screen pixels, top-left origin; 2026-09-26, the sprite-filter video) reads that region
+ * of the back buffer 1:1 instead of the scaled whole screen (sharpness comparisons: nothing resampled, a quarter of the
+ * bytes of a 5K frame for a 1918x1400 pane); the scale field is ignored then. A field {@code ram} keeps every frame
+ * in native memory until the writer has it on disk (an unbounded queue: nothing dropped when the disk is slower than
+ * the capture) and holds the JVM's exit until the writer is done (at most 90 s).
  */
 public final class FrameCapture {
    private FrameCapture() {
@@ -25,7 +33,9 @@ public final class FrameCapture {
    private static long worldUpNs, lastNs;
    private static int fbo, tex, w, h, frames;
    private static boolean done, failed, gray;
-   private static final ArrayBlockingQueue<Object[]> QUEUE = new ArrayBlockingQueue<>(64);
+   private static int cropX = -1, cropY, cropW, cropH;
+   private static BlockingQueue<Object[]> QUEUE = new ArrayBlockingQueue<>(64);
+   private static boolean ram; // field "ram": frames held in native memory until written (no drops on a slow disk)
    private static Thread writer;
 
    /** Render thread, Display.swapBuffers, before the swap. */
@@ -48,7 +58,21 @@ public final class FrameCapture {
          seconds = p.length > 1 ? Float.parseFloat(p[1].trim()) : 10F;
          fps = p.length > 2 ? Float.parseFloat(p[2].trim()) : 30F;
          scale = (p.length > 3 ? Float.parseFloat(p[3].trim()) : 50F) / 100F;
-         gray = p.length > 4 && "gray".equalsIgnoreCase(p[4].trim());
+         for (int i = 4; i < p.length; i++) {
+            String f = p[i].trim();
+            if ("gray".equalsIgnoreCase(f)) {
+               gray = true;
+            } else if ("ram".equalsIgnoreCase(f)) {
+               ram = true;
+               QUEUE = new LinkedBlockingQueue<>();
+            } else if (f.startsWith("crop=")) {
+               String[] c = f.substring(5).split(":");
+               cropX = Integer.parseInt(c[0]);
+               cropY = Integer.parseInt(c[1]);
+               cropW = Integer.parseInt(c[2]);
+               cropH = Integer.parseInt(c[3]);
+            }
+         }
       }
       if (zombie.iso.IsoWorld.instance == null || zombie.iso.IsoWorld.instance.currentCell == null) {
          return;
@@ -73,8 +97,15 @@ public final class FrameCapture {
       lastNs = now;
       int sw = org.lwjglx.opengl.Display.getWidth(), sh = org.lwjglx.opengl.Display.getHeight();
       if (fbo == 0) {
-         w = Math.max(16, Math.round(sw * scale));
-         h = Math.max(16, Math.round(sh * scale));
+         if (cropX >= 0) {
+            cropX = Math.max(0, Math.min(cropX, sw - 16));
+            cropY = Math.max(0, Math.min(cropY, sh - 16));
+            w = Math.min(cropW, sw - cropX);
+            h = Math.min(cropH, sh - cropY);
+         } else {
+            w = Math.max(16, Math.round(sw * scale));
+            h = Math.max(16, Math.round(sh * scale));
+         }
          tex = GL11.glGenTextures();
          GL11.glBindTexture(GL11.GL_TEXTURE_2D, tex);
          GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, w, h, 0, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, (ByteBuffer)null);
@@ -89,6 +120,16 @@ public final class FrameCapture {
          writer = new Thread(FrameCapture::write, "pzopt-capture");
          writer.setDaemon(true);
          writer.start();
+         if (ram) {
+            Thread w0 = writer;
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+               try {
+                  QUEUE.offer(new Object[0]); // an end mark if the window was cut short by the quit
+                  w0.join(90_000L);
+               } catch (InterruptedException ignored) {
+               }
+            }, "pzopt-capture-drain"));
+         }
       }
       int prevRead = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING), prevDraw = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
       GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, 0);
@@ -96,9 +137,14 @@ public final class FrameCapture {
       GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, fbo);
       boolean scissor = GL11.glIsEnabled(GL11.GL_SCISSOR_TEST);
       GL11.glDisable(GL11.GL_SCISSOR_TEST);
-      GL30.glBlitFramebuffer(0, 0, sw, sh, 0, 0, w, h, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_LINEAR);
+      if (cropX >= 0) {
+         int y0 = sh - cropY - h; // GL rows are bottom-up
+         GL30.glBlitFramebuffer(cropX, y0, cropX + w, y0 + h, 0, 0, w, h, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_NEAREST);
+      } else {
+         GL30.glBlitFramebuffer(0, 0, sw, sh, 0, 0, w, h, GL11.GL_COLOR_BUFFER_BIT, GL11.GL_LINEAR);
+      }
       GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, fbo);
-      ByteBuffer b = BufferUtils.createByteBuffer(w * h * 4);
+      ByteBuffer b = ram ? MemoryUtil.memAlloc(w * h * 4) : BufferUtils.createByteBuffer(w * h * 4);
       GL11.glReadPixels(0, 0, w, h, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, b);
       GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, prevRead);
       GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, prevDraw);
@@ -133,6 +179,9 @@ public final class FrameCapture {
                   int r = b.get(i * 4) & 255, g = b.get(i * 4 + 1) & 255, bl = b.get(i * 4 + 2) & 255;
                   row[i] = (byte)((r * 77 + g * 150 + bl * 29) >> 8);
                }
+               if (ram) {
+                  MemoryUtil.memFree(b);
+               }
                out.write(row);
                idx.write(e[1] + "\n");
                continue;
@@ -141,6 +190,9 @@ public final class FrameCapture {
                row = new byte[b.capacity()];
             }
             b.get(0, row);
+            if (ram) {
+               MemoryUtil.memFree(b);
+            }
             out.write(row);
             idx.write(e[1] + "\n");
          }

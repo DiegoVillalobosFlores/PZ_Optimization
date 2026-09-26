@@ -495,7 +495,7 @@ public final class TextureID extends Asset implements IDestroyable, Serializable
          }
 
          GL11.glTexParameteri(3553, 10241, this.glMinFilter);
-         GL11.glTexParameteri(3553, 10240, this.glMagFilter);
+         GL11.glTexParameteri(3553, 10240, pzopt.SpriteFilter.magFilter(this.glMagFilter)); // pzopt: sprite filter, a chunk texture in the composite
          if ((this.flags & 64) != 0
             && DebugOptions.instance.isoSprite.nearestMagFilterAtMinZoom.getValue()
             && this.isMinZoomLevel()

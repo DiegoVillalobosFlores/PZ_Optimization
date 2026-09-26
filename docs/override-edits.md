@@ -3954,3 +3954,43 @@ default, all live from the Enhancements tab.
 - The GPU section names `screen` and `vispoly` go through `pzopt.Darkness.section`: unchanged normally, suffixed
   `.on` / `.off` with `devDarkAlternate` so the grade and the remembered-places pass are timed against the stock paths
   in one run.
+
+## Sprite filtering (`spriteFilter`, `spriteFilterMin`, `spriteFilterSharpnessPct`, `spriteFilterKernel`, `spriteFilterSprites`, `spriteFilterMipTrim`, `spriteFilterSkipEmpty`, 2026-09-26; pzopt.SpriteFilter)
+
+Candidate A of `docs/plan-graphics-enhancements.md`: how the chunk composite (and the tiles drawn per frame) sample the
+baked world art. Off (`stock`) by default; every edit is a no-op then.
+
+### zombie.core.opengl.ShaderUnit
+- The shader source goes through `pzopt.SpriteFilter.patchShader` last (after SSR's patch): it keeps copies of the stock
+  `chunkShader`, `tileWithDepth` and `opaqueWithDepth` sources and returns them, with their one `DIFFUSE` fetch replaced
+  by `pzsfFetch` and a regime's `#define`s, for the placeholder programs `pzopt_sfChunk`, `pzopt_sfTile` and
+  `pzopt_sfOpaque`; with `spriteFilter=sharp` at launch, pixel light's composite programs get the self-selecting fetch.
+  The game's own programs are returned unchanged.
+
+### zombie.core.textures.TextureDraw
+- `run`, `StartShader`: the program id goes through `pzopt.SpriteFilter.remap` first and the rest of the case (the
+  draw census, `glUseProgramObjectARB`, the uniform cache, the `ShaderMap` lookup and `startRenderThread`) uses the
+  result: the chunk composite program becomes this frame's zoom variant, `tileWithDepth` / `opaqueWithDepth` their
+  per-frame variants while the world framebuffer is bound outside a chunk bake; every other id is returned as is.
+  `remap` also closes the composite's filter window (below).
+
+### zombie.viewCone.ChunkRenderShader
+- `startRenderThread` ends with `pzopt.SpriteFilter.afterChunkStart()`: after the depth texture is bound, the next
+  texture bind (the chunk quad's colour texture) takes the composite's magnification filter.
+
+### zombie.core.textures.TextureID
+- `assignFilteringFlags`: the magnification filter goes through `pzopt.SpriteFilter.magFilter` (the texture's own
+  unless a chunk texture is bound inside the composite's window: GL_LINEAR for the texel-aware variants, GL_NEAREST for
+  `spriteFilter=nearest`). The same two glTexParameteri calls the game makes on every bind; no extra GL call.
+
+### zombie.iso.fboRenderChunk.FBORenderCell
+- `pzopt.SpriteFilter.beforeComposite(playerIndex)` right before the composite's GPU section: the zoom over the render
+  scale picks this frame's variant (none at 1:1), queued to the render thread in stream order. The section name goes
+  through `pzopt.SpriteFilter.section` (`composite.on` / `.off` with `devSpriteFilterAlternate`).
+- `pzopt.BakeMips` (not an override) asks `pzopt.SpriteFilter.mipLevelsNeeded` how many mip levels a bake builds
+  (`spriteFilterMipTrim`).
+
+### zombie.core.opengl.RenderThread
+- After the swap (next to `GlNames.refill`), `pzopt.SpriteFilter.afterSwap()`: when the configured sprite-filter settings
+  change (boot, Apply), the variant programs they need are compiled there, outside the world frame (a program is ~0.8 s
+  on first use: a hitch the first time the player zooms otherwise). No-op when the filter is off or nothing changed.

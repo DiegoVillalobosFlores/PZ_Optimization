@@ -25,6 +25,7 @@ public class ChunkRenderShader extends Shader {
       this.getProgram().setValue("chunkDepth", texd.chunkDepth);
       pzopt.PixelLight.chunkDraw(this, texd); // pzopt: pixelLight, a chunk texture no light reaches switches to the light-free variant; the first draw of a frame on a program sets its light uniforms (viewport as drawn)
       pzopt.Ssr.chunkDraw(texd); // pzopt: reflections, the composite's scatter uniforms (once per program per frame)
+      pzopt.SpriteFilter.afterChunkStart(); // pzopt: sprite filter, the chunk texture's bind that follows takes the composite's magnification filter
    }
 
    public void onCompileSuccess(ShaderProgram sender) {

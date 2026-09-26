@@ -531,11 +531,12 @@ public final class TextureDraw {
             IndieGL.glTexParameteriActual(this.a, this.b, this.c);
             break;
          case StartShader:
-            if (pzopt.DrawStats.ON) pzopt.DrawStats.shaderStart(this.a); // pzopt: instrumented runs, draw-call census
-            ShaderHelper.glUseProgramObjectARB(this.a);
-            boolean pzoptSame = pzopt.UniformCache.ON && pzopt.UniformCache.startProgram(this.a); // pzopt: uniformCache
-            if (Shader.ShaderMap.containsKey(this.a)) {
-               Shader pzoptShader = (Shader)Shader.ShaderMap.get(this.a); // pzopt
+            int pzoptProgram = pzopt.SpriteFilter.remap(this.a); // pzopt: sprite filter, the chunk composite runs this frame's zoom variant
+            if (pzopt.DrawStats.ON) pzopt.DrawStats.shaderStart(pzoptProgram); // pzopt: instrumented runs, draw-call census
+            ShaderHelper.glUseProgramObjectARB(pzoptProgram); // pzopt: sprite filter
+            boolean pzoptSame = pzopt.UniformCache.ON && pzopt.UniformCache.startProgram(pzoptProgram); // pzopt: uniformCache
+            if (Shader.ShaderMap.containsKey(pzoptProgram)) { // pzopt: sprite filter
+               Shader pzoptShader = (Shader)Shader.ShaderMap.get(pzoptProgram); // pzopt
                if (pzoptSame && pzoptShader instanceof zombie.tileDepth.TileDepthShader) { // pzopt: uniformCache, its samplers (0 / 1) are set on this program already
                   zombie.core.skinnedmodel.model.VertexBufferObject.setModelViewProjection(pzoptShader.getProgram()); // pzopt: the rest of TileDepthShader.startRenderThread
                   pzopt.UniformCache.samplerSkips++; // pzopt

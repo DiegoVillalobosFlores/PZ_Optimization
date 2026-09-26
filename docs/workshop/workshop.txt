@@ -103,6 +103,6 @@ description=[img]https://da.gd/iAn9ao[/img]
 description=All of them measure within noise of stock: [b]Project Zomboid Optimiser[/b] (Lua debug toggles, shader copies), [b]Tempo[/b] (chunk finalizing), [b]Multi-Cpu Enhance[/b] (ParallelGC: 300 ms pauses, worse than stock), [b]Every Texture Optimized[/b] (VRAM, not frame time), [b]Lugli[/b] and [b]Zed's Better FPS[/b] (ZombieBuddy patches off the per-frame drawing). This item: 481 / 246 / 456 fps, p99 8.8 / 13.8 / 8.5 ms.
 description=
 description=[h1]This build[/h1]
-description=Game revision b0bbce05d5 (Build 42.20.4), repository commit 10bbe1a, 637 files, zip sha256 00171078a441d92ee55a2aebc1bbdac6540b63b18707f7b97455043f44f94d72.
+description=Game revision b0bbce05d5 (Build 42.20.4), repository commit 1e023a1, 637 files, zip sha256 3ecc48288ca47f5e36a72538417b337942c3289fb5227bc5772f6d11ed1a3d30.
 tags=Build 42;
 visibility=public

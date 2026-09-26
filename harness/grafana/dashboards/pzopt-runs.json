@@ -1049,7 +1049,7 @@
   },
   {
    "type": "row",
-   "title": "Trends (one point per run, series = label)",
+   "title": "Trends (one point per run, series = label or machine)",
    "collapsed": false,
    "panels": [],
    "id": 4,
@@ -1078,7 +1078,7 @@
      "rawQuery": true,
      "editorMode": "code",
      "format": "time_series",
-     "rawSql": "SELECT started AS time, label AS metric, fps_mean AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND fps_mean IS NOT NULL ORDER BY 1",
+     "rawSql": "WITH t AS (SELECT started, label, machine, enabled, fps_mean AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND fps_mean IS NOT NULL)\nSELECT started AS time, CASE WHEN (SELECT count(DISTINCT label) FROM t) <= 20 THEN label\n  ELSE machine || CASE WHEN enabled IS FALSE THEN ' \u00b7 stock' ELSE ' \u00b7 optimized' END END AS metric, value FROM t ORDER BY 1",
      "hide": false
     }
    ],
@@ -1159,7 +1159,7 @@
      "rawQuery": true,
      "editorMode": "code",
      "format": "time_series",
-     "rawSql": "SELECT started AS time, label AS metric, p99_ms AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND p99_ms IS NOT NULL ORDER BY 1",
+     "rawSql": "WITH t AS (SELECT started, label, machine, enabled, p99_ms AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND p99_ms IS NOT NULL)\nSELECT started AS time, CASE WHEN (SELECT count(DISTINCT label) FROM t) <= 20 THEN label\n  ELSE machine || CASE WHEN enabled IS FALSE THEN ' \u00b7 stock' ELSE ' \u00b7 optimized' END END AS metric, value FROM t ORDER BY 1",
      "hide": false
     }
    ],
@@ -1244,7 +1244,7 @@
      "rawQuery": true,
      "editorMode": "code",
      "format": "time_series",
-     "rawSql": "SELECT started AS time, label AS metric, p99_9_ms AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND p99_9_ms IS NOT NULL ORDER BY 1",
+     "rawSql": "WITH t AS (SELECT started, label, machine, enabled, p99_9_ms AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND p99_9_ms IS NOT NULL)\nSELECT started AS time, CASE WHEN (SELECT count(DISTINCT label) FROM t) <= 20 THEN label\n  ELSE machine || CASE WHEN enabled IS FALSE THEN ' \u00b7 stock' ELSE ' \u00b7 optimized' END END AS metric, value FROM t ORDER BY 1",
      "hide": false
     }
    ],
@@ -1329,7 +1329,7 @@
      "rawQuery": true,
      "editorMode": "code",
      "format": "time_series",
-     "rawSql": "SELECT started AS time, label AS metric, gpu_pct AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND gpu_pct IS NOT NULL ORDER BY 1",
+     "rawSql": "WITH t AS (SELECT started, label, machine, enabled, gpu_pct AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND gpu_pct IS NOT NULL)\nSELECT started AS time, CASE WHEN (SELECT count(DISTINCT label) FROM t) <= 20 THEN label\n  ELSE machine || CASE WHEN enabled IS FALSE THEN ' \u00b7 stock' ELSE ' \u00b7 optimized' END END AS metric, value FROM t ORDER BY 1",
      "hide": false
     }
    ],
@@ -1396,7 +1396,7 @@
      "rawQuery": true,
      "editorMode": "code",
      "format": "time_series",
-     "rawSql": "SELECT started AS time, label AS metric, busiest_core_pct AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND busiest_core_pct IS NOT NULL ORDER BY 1",
+     "rawSql": "WITH t AS (SELECT started, label, machine, enabled, busiest_core_pct AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND busiest_core_pct IS NOT NULL)\nSELECT started AS time, CASE WHEN (SELECT count(DISTINCT label) FROM t) <= 20 THEN label\n  ELSE machine || CASE WHEN enabled IS FALSE THEN ' \u00b7 stock' ELSE ' \u00b7 optimized' END END AS metric, value FROM t ORDER BY 1",
      "hide": false
     }
    ],
@@ -1463,7 +1463,7 @@
      "rawQuery": true,
      "editorMode": "code",
      "format": "time_series",
-     "rawSql": "SELECT started AS time, label AS metric, chunk_p99_ms AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND chunk_p99_ms IS NOT NULL ORDER BY 1",
+     "rawSql": "WITH t AS (SELECT started, label, machine, enabled, chunk_p99_ms AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND chunk_p99_ms IS NOT NULL)\nSELECT started AS time, CASE WHEN (SELECT count(DISTINCT label) FROM t) <= 20 THEN label\n  ELSE machine || CASE WHEN enabled IS FALSE THEN ' \u00b7 stock' ELSE ' \u00b7 optimized' END END AS metric, value FROM t ORDER BY 1",
      "hide": false
     }
    ],
@@ -1528,7 +1528,7 @@
      "rawQuery": true,
      "editorMode": "code",
      "format": "time_series",
-     "rawSql": "SELECT started AS time, label AS metric, total_w AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND total_w IS NOT NULL ORDER BY 1",
+     "rawSql": "WITH t AS (SELECT started, label, machine, enabled, total_w AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND total_w IS NOT NULL)\nSELECT started AS time, CASE WHEN (SELECT count(DISTINCT label) FROM t) <= 20 THEN label\n  ELSE machine || CASE WHEN enabled IS FALSE THEN ' \u00b7 stock' ELSE ' \u00b7 optimized' END END AS metric, value FROM t ORDER BY 1",
      "hide": false
     }
    ],
@@ -1593,7 +1593,7 @@
      "rawQuery": true,
      "editorMode": "code",
      "format": "time_series",
-     "rawSql": "SELECT started AS time, label AS metric, j_per_frame AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND j_per_frame IS NOT NULL ORDER BY 1",
+     "rawSql": "WITH t AS (SELECT started, label, machine, enabled, j_per_frame AS value FROM runs WHERE $__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring} AND j_per_frame IS NOT NULL)\nSELECT started AS time, CASE WHEN (SELECT count(DISTINCT label) FROM t) <= 20 THEN label\n  ELSE machine || CASE WHEN enabled IS FALSE THEN ' \u00b7 stock' ELSE ' \u00b7 optimized' END END AS metric, value FROM t ORDER BY 1",
      "hide": false
     }
    ],

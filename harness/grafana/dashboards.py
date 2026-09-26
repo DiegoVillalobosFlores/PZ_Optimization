@@ -247,6 +247,18 @@ BOUND = """CASE
   ELSE 'headroom left' END"""
 
 
+# Nearly every run has its own label: one series per label gave each trend panel ~1,400 series and legend rows, and the
+# eight of them crashed the browser tab on the home dashboard. Past this many labels the series pool per machine and side.
+TREND_MAX_LABELS = 20
+
+
+def trend_sql(where, col):
+    """One point per run of `col`; series = label while few labels are in range, else machine · stock / optimized."""
+    return f"""WITH t AS (SELECT started, label, machine, enabled, {col} AS value FROM runs WHERE {where} AND {col} IS NOT NULL)
+SELECT started AS time, CASE WHEN (SELECT count(DISTINCT label) FROM t) <= {TREND_MAX_LABELS} THEN label
+  ELSE machine || CASE WHEN enabled IS FALSE THEN ' · stock' ELSE ' · optimized' END END AS metric, value FROM t ORDER BY 1"""
+
+
 def runs_dashboard():
     L = Layout()
     where = "$__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring}"
@@ -275,8 +287,8 @@ FROM runs WHERE {where} ORDER BY started DESC""",
             ov("chunk p99", unit="ms", decimals=0),
             ov("W", unit="watt", decimals=0), ov("J/frame", unit="joule", decimals=3),
         ]), 24, 14)
-    L.row("Trends (one point per run, series = label)")
-    trend = lambda col: f"SELECT started AS time, label AS metric, {col} AS value FROM runs WHERE {where} AND {col} IS NOT NULL ORDER BY 1"  # noqa: E731
+    L.row("Trends (one point per run, series = label or machine)")
+    trend = lambda col: trend_sql(where, col)  # noqa: E731
     L.add(ts_panel("fps (route mean)", [q(trend("fps_mean"))], unit="none", points=True, point_size=7, thresholds=[("transparent", None), ("green", 240)], legend="right"), 12, 9)
     L.add(ts_panel("p99 frame time", [q(trend("p99_ms"))], points=True, point_size=7, thresholds=[("transparent", None), ("orange", 10)], legend="right", log=True), 12, 9)
     L.add(ts_panel("p99.9 frame time", [q(trend("p99_9_ms"))], points=True, point_size=7, thresholds=[("transparent", None), ("red", 16.7)], legend="right", log=True), 12, 9)

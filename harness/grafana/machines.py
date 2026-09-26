@@ -88,9 +88,9 @@ FROM runs WHERE {mine} AND $__timeFilter(started) ORDER BY resolution, opengl, g
         else:
             L.add(copy.deepcopy(p), p["gridPos"]["w"], p["gridPos"]["h"])
 
-    L.row("Hardware use (one point per run, series = label)")
+    L.row("Hardware use (one point per run, series = label or machine)")
     where = (f"$__timeFilter(started) AND {mine} AND coalesce(mode, '') IN (${{mode:sqlstring}}) AND label ~ ${{label:sqlstring}}")
-    trend = lambda col: f"SELECT started AS time, label AS metric, {col} AS value FROM runs WHERE {where} AND {col} IS NOT NULL ORDER BY 1"  # noqa: E731
+    trend = lambda col: D.trend_sql(where, col)  # noqa: E731
     pts = dict(points=True, point_size=7, legend="right")
     L.add(D.ts_panel("Game thread busy (route mean)", [D.q(trend("game_thread_pct"))], unit="percent", minv=0, maxv=100, **pts,
                      desc="pzopt-threads.out: the game thread's CPU share; ≥ 90 % means the game thread is the wall."), 12, 8)

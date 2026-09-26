@@ -3,6 +3,7 @@ package pzopt;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
+import java.nio.FloatBuffer;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
@@ -25,12 +26,10 @@ import zombie.iso.LightingJNI;
  *
  * The SDR frame is albedo x light, both squeezed into 0..1, so an expansion keyed on pixel brightness lifts pale paint
  * as much as a lamp-lit floor (first night sweep, 2026-09-24: the cream rug tiles and the player's legs went HDR, the
- * torch beam did not). The engine knows the light per grid square (JNILighting's lightInfo, what the renderer turns into
- * vertex colours), so on the game thread, once per frame, the visible squares of the player's floor are read from that
- * cache (a private-field read, no JNI call, no dirty-bit side effects: the values are exactly the ones this frame's
- * render used) into a small RGBA8 texture: rgb = the square's light, a = its excess over the frame's ambient (the median
- * light of the visible squares, so at night lamps, torches, headlights and fires stand out and in daylight nothing
- * does). The composite maps each pixel back to its iso square through an affine transform (world texture UV -> world
+ * torch beam did not). A worker reads JNILighting's cached corner colours on the player's floor, without JNI calls or
+ * dirty-bit side effects. The small RGBA8 texture stores rgb = the square's light, a = its absolute excess over the local ambient
+ * around that square, within its own room. The reference is independent of the player, camera bounds and visibility.
+ * The composite maps each pixel back to its iso square through an affine transform (world texture UV -> world
  * px -> iso x/y on the player's floor) and scales the pixel by a gain that grows with that excess: lit surfaces get
  * brighter in proportion, their colours intact, dark paint stays dark.
  */
@@ -67,9 +66,12 @@ public final class HdrLight {
       final int[] hist = new int[256], histSeen = new int[256], histCould = new int[256];
       /** per texel: the analytic intensity of the lights reaching the square and its colour (see build) */
       final float[] an = new float[MAX * MAX], ar = new float[MAX * MAX], ag = new float[MAX * MAX], ab = new float[MAX * MAX], tmp = new float[MAX * MAX];
-      /** per texel: sun exposure (outdoors x the square's light), blurred; uploaded as the aux map (R8) */
+      /** Per texel: sun exposure (outdoors x the square's light), blurred; red in the aux map. */
       final float[] sun = new float[MAX * MAX];
-      final ByteBuffer aux = BufferUtils.createByteBuffer(MAX * MAX);
+      /** Per texel: the ambient reference from that square's own room, never the player's room. */
+      final float[] localAmbient = new float[MAX * MAX];
+      /** RG16F aux map: sun exposure and local mean linear luminance for night amplification. */
+      final FloatBuffer aux = BufferUtils.createFloatBuffer(MAX * MAX * 2);
       final java.util.concurrent.atomic.AtomicInteger state = new java.util.concurrent.atomic.AtomicInteger(FREE);
       // the region read: squares x0 .. x0 + w * step, y0 .. y0 + h * step on floor z
       int x0, y0, w, h, step, z;
@@ -94,20 +96,22 @@ public final class HdrLight {
 
    private static final Frame[] RING = {new Frame(), new Frame(), new Frame(), new Frame()};
    static volatile boolean ready;
-   /** the last built map's median light, squares read and max excess (Hdr's frame dumps) */
+   /** The last built map's mean local reference (diagnostic only), squares read and max excess. */
    static volatile float lastAmbient;
    static volatile int lastCounted, lastSeen, lastMaxExcess;
+   static volatile float lastNightMin, lastNightMax;
    /** devHdrTraceMs: squares in the line of sight whatever the facing (JNILighting vis bit 4), the medians of all / seen / those */
    static volatile int lastCould, lastMedAll, lastMedSeen, lastMedCould;
    static final float[] mapping = new float[6];
-   /** the ambient the excess is measured against, eased over time (worker thread only) */
-   private static float ambEased = -1F;
-   private static long ambEasedNs;
+   /** Uploaded coverage in normalized texture coordinates; render thread only. */
+   static float mapWidthUV, mapHeightUV;
+   static int mapZ;
    private static int tex, auxTex;
    static final int AUX_UNIT = 2;
    private static final byte[] ZERO = new byte[MAX * MAX * 4];
    public static long buildNs, builds;
    private static int logged;
+   private static final HdrExposure.LocalAmbient LOCAL_AMBIENT = new HdrExposure.LocalAmbient();
    private static final java.util.concurrent.ExecutorService WORKER = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
       Thread t = new Thread(r, "pzopt-hdr-light");
       t.setDaemon(true);
@@ -167,7 +171,7 @@ public final class HdrLight {
          done.m[4] = v[2] - v[0];
          done.m[5] = v[0];
          if (logged++ % 1200 == 0) {
-            Log.info(String.format("hdr light: map %dx%d (step %d) at %d,%d z=%d, %d squares read, median light %.3f, max excess %d, %d texels > 10%%, zoom %.2f,"
+            Log.info(String.format("hdr light: map %dx%d (step %d) at %d,%d z=%d, %d squares read, mean local reference %.3f, max excess %d, %d texels > 10%%, zoom %.2f,"
                   + " worker build %.3f ms, game thread %.3f ms avg", done.w, done.h, done.step, done.x0, done.y0, z, done.counted, done.ambient, done.maxExcess,
                   done.lit, zoom, done.buildNs / 1e6, builds > 0 ? buildNs / 1e6 / builds : 0.0));
          }
@@ -222,6 +226,16 @@ public final class HdrLight {
       long t0 = System.nanoTime();
       try {
          int x0 = f.x0, y0 = f.y0, w = f.w, h = f.h, step = f.step, z = f.z;
+         float nightCap = Hdr.nightCap();
+         float daylightFloor = 1F - nightCap;
+         Hdr.Tune tune = Hdr.tune;
+         LOCAL_AMBIENT.prepare(cell, x0, y0, w, h, step, z, tune.gamma);
+         f.aux.clear();
+         // Missing squares must not enable night gain. Keep unused sun exposure at zero.
+         for (int i = 0; i < w * h; i++) {
+            f.aux.put(i * 2, 0F).put(i * 2 + 1, 1F);
+         }
+         float nightMin = 1F, nightMax = 0F;
          ByteBuffer d = f.data;
          d.clear(); // the previous upload left the limit at that map's size
          int[] hist = f.hist;
@@ -235,6 +249,8 @@ public final class HdrLight {
          d.put(0, ZERO, 0, w * h * 4);
          java.util.Arrays.fill(f.an, 0, w * h, 0F);
          java.util.Arrays.fill(f.sun, 0, w * h, 0F);
+         java.util.Arrays.fill(f.localAmbient, 0, w * h, 1F);
+         float ambientSum = 0F;
          int counted = 0;
          int xEnd = x0 + w * step, yEnd = y0 + h * step;
          for (int cy = Math.floorDiv(y0, 8); cy <= Math.floorDiv(yEnd - 1, 8); cy++) {
@@ -283,6 +299,13 @@ public final class HdrLight {
                      }
                      int t = ((y - y0) / step) * w + (x - x0) / step;
                      int o = t * 4;
+                     f.localAmbient[t] = LOCAL_AMBIENT.at(x, y, daylightFloor);
+                     ambientSum += f.localAmbient[t];
+                     float luminance = LOCAL_AMBIENT.meanLuminance;
+                     f.aux.put(t * 2 + 1, luminance);
+                     float night = HdrExposure.night(luminance, tune.nightLo, tune.nightHi, nightCap);
+                     nightMin = Math.min(nightMin, night);
+                     nightMax = Math.max(nightMax, night);
                      d.put(o, (byte)r).put(o + 1, (byte)g).put(o + 2, (byte)b);
                      // the lights the native lighting found reaching this square (occlusion done there): an unclamped
                      // intensity that peaks at each source, (1 - d / radius)^2 per light, summed in colour. The vertex
@@ -314,43 +337,26 @@ public final class HdrLight {
                }
             }
          }
-         // ambient = median light of the sampled squares; alpha = excess over it, 0..1 of the remaining range
-         // over the squares the player sees now: the unseen ones are drawn darkened (fog of war) and pulled the median
-         // of a sunny day to 0.54, so all sunlit ground counted as lamp-lit and got the light gain (hdr35: 1.5x).
-         // That median follows the view cone, so by day it is floored at the climate's daylight: indoors it swung with the
-         // facing between the dim room (0.2-0.4: every lamp and window pool at full gain, plus bloom) and 1.0 (the cone on
-         // a wall, under 64 squares, or out of a window: nothing), the flip report of lights blooming only while facing north
-         // (runs flip-hdrnorth-walk-*). In daylight nothing stands out, as designed; the night keeps the median, blended
-         // from all squares to the seen ones by the seen count (the old hard switch at 64 flipped with the facing too) and
-         // eased over ~0.4 s so turning fades the gain instead of popping it.
-         float seenW = Math.min(1F, seen / 64F);
-         float target = Math.max(1F - Hdr.nightCap(), ((1F - seenW) * median(hist, counted) + seenW * median(histSeen, seen)) / 255F);
-         long now = System.nanoTime();
-         if (ambEased < 0F || now - ambEasedNs > 1_000_000_000L) {
-            ambEased = target; // first map, or after a pause
-         } else {
-            ambEased += (target - ambEased) * (1F - (float)Math.exp(-(now - ambEasedNs) / 0.4e9));
-         }
-         ambEasedNs = now;
-         float amb = ambEased;
+         // This mean is diagnostic only. Applying it to all texels would let one room's switch
+         // change another room's HDR gain. Each texel below uses its own local reference.
+         float amb = counted > 0 ? ambientSum / counted : 1F;
          float hot = Math.max(0F, Math.min(1F, Hdr.tune.lightHot));
          // the per-square light lists are all-or-nothing at a cone's edge or a wall: a separable 5-tap blur (~2 squares)
          // keeps the analytic field from cutting a hard edge into the smooth vertex light (hdrcmp-ours, 09:25)
          blur5(f.an, f.tmp, w, h);
          blur5(f.sun, f.tmp, w, h);
-         f.aux.clear();
          for (int i = 0, n = w * h; i < n; i++) {
-            f.aux.put(i, (byte)clamp255(f.sun[i]));
+            f.aux.put(i * 2, clamp255(f.sun[i]) / 255F);
          }
-         f.aux.position(0).limit(w * h);
-         float span = Math.max(1F - amb, 0.05F);
+         f.aux.position(0).limit(w * h * 2);
          int maxExcess = 0, lit = 0;
          for (int i = 0, n = w * h; i < n; i++) {
             int r = d.get(i * 4) & 0xFF, g = d.get(i * 4 + 1) & 0xFF, b = d.get(i * 4 + 2) & 0xFF;
             // the light's strength is its largest channel: by luminance a fire's orange counts at a fraction of a white
             // torch (red weighs 0.21) and the fire-lit ground got almost no gain (hdrcmp-ours, 09:25)
             float l = Math.max(r, Math.max(g, b)) / 255F;
-            float ex = Math.max(0F, l - amb) / span;
+            // Keep absolute excess: normalization by 1 - ambient would restore full gain from tiny drops.
+            float ex = Math.max(0F, l - f.localAmbient[i]);
             // alpha: how lit (vertex excess) x how close to a source (analytic, 0..1, weighted by lightHot)
             float an = Math.min(1F, f.an[i]);
             int e = clamp255(ex * (1F - hot + hot * an));
@@ -376,12 +382,16 @@ public final class HdrLight {
             lastMedCould = median(histCould, could);
          }
          lastMaxExcess = maxExcess;
+         lastNightMin = counted > 0 ? nightMin : 0F;
+         lastNightMax = nightMax;
          f.lit = lit;
          f.buildNs = System.nanoTime() - t0;
          f.state.set(Frame.BUILT);
       } catch (Throwable t) {
          Log.warn("hdr light: build failed: " + t);
          f.state.set(Frame.FREE);
+      } finally {
+         LOCAL_AMBIENT.clear();
       }
    }
 
@@ -419,7 +429,7 @@ public final class HdrLight {
 
    /** Render thread: bind the last uploaded light map before sampling it, preserving the active texture unit. */
    static boolean bind() {
-      if (tex == 0 || !ready) {
+      if (tex == 0 || !ready || !HdrExposure.matchesFloor(mapZ)) {
          return false;
       }
       // Chunk AO also uses this unit; a floor change can leave no new map to upload and restore its binding.
@@ -431,9 +441,9 @@ public final class HdrLight {
       return true;
    }
 
-   /** Render thread, the composite: the aux (sun) map on its unit. */
+   /** Render thread: rebind the aux (sun and local luminance) map before any HDR pass samples it. */
    static boolean bindAux() {
-      if (auxTex == 0 || !ready) {
+      if (auxTex == 0 || !ready || !HdrExposure.matchesFloor(mapZ)) {
          return false;
       }
       int prevActive = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
@@ -464,14 +474,14 @@ public final class HdrLight {
       if (auxTex == 0) {
          auxTex = GL11.glGenTextures();
          GL11.glBindTexture(GL11.GL_TEXTURE_2D, auxTex);
-         GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_R8, MAX, MAX, 0, GL11.GL_RED, GL11.GL_UNSIGNED_BYTE, BufferUtils.createByteBuffer(MAX * MAX));
+         GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_RG16F, MAX, MAX, 0, GL30.GL_RG, GL11.GL_FLOAT, BufferUtils.createFloatBuffer(MAX * MAX * 2));
          GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
          GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
          GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, 0x812F);
          GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, 0x812F);
       }
       GL11.glBindTexture(GL11.GL_TEXTURE_2D, auxTex);
-      GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, f.w, f.h, GL11.GL_RED, GL11.GL_UNSIGNED_BYTE, f.aux);
+      GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, f.w, f.h, GL30.GL_RG, GL11.GL_FLOAT, f.aux);
       GL11.glBindTexture(GL11.GL_TEXTURE_2D, tex);
       GL11.glPixelStorei(0x0CF2, 0);
       GL11.glPixelStorei(GL11.GL_UNPACK_ALIGNMENT, 4);
@@ -479,6 +489,9 @@ public final class HdrLight {
       Texture.lastTextureID = -1;
       // the map uses the top-left f.w x f.h texels of the MAX x MAX texture
       float sx = (float)f.w / MAX, sy = (float)f.h / MAX;
+      mapWidthUV = sx;
+      mapHeightUV = sy;
+      mapZ = f.z;
       mapping[0] = f.m[0] * sx;
       mapping[1] = f.m[1] * sx;
       mapping[2] = f.m[2] * sx;

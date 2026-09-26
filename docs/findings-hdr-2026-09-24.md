@@ -290,6 +290,64 @@ SDR decode), so the HDR container at expansion 0 reproduces the SDR window exact
   Night-torch spin (`flip-hdrnorth-night-fix-*` vs `flip-hdrnorth-trace-*`): the torch / lamps keep `maxExcess` 255 in
   every facing; the reference's swing by facing narrows (N 0.165-0.278 -> 0.166-0.243, SE max 0.396 -> 0.201).
 
+## Local exposure reference (2026-09-26, confirmed on native Linux)
+
+A native Linux capture at 3839×2159 showed the night key changing from 0 to 1 while the player held a
+26° facing angle and zoomed. The map's ambient reference also changed as its sampled area expanded.
+The absolute-excess correction prevents small ambient drops from producing full light gain, but does
+not remove these camera-dependent exposure inputs.
+
+`HdrExposure` samples fixed nine-by-nine world-space neighborhoods, restricted to the sampled square's
+floor and room (or outdoors). It reads cached native `lightLevel` and the non-directional source list, not
+`lightInfo` or vertex colors: inspection of `libLighting64.so` for revision `b0bbce05d5` showed that
+`CalcLightInfo` multiplies its RGB by visibility darkening, while the packed `lightLevel` is exported
+separately. Native channel order is R in the low byte. The source estimate uses maximum channel
+contributions with linear falloff; native source membership supplies wall occlusion. Directional lights
+remain in the rendered light map, but are excluded from the reference estimator.
+
+The user reported rotation and zoom fixed, but switching off the current room overexposed other rooms.
+The trace showed the shared ambient reference falling from 0.898 to 0.440 while maximum excess rose
+from 26 to 143; the night key stayed at zero. Applying the player's room reference to the entire map
+was therefore still incorrect.
+
+Each map square now uses the median of its own nine-by-nine neighborhood, restricted to its room,
+with the existing daylight floor. The worker caches unmasked light at full square resolution, including
+a four-square halo outside the map, so zoom-dependent map bounds and sampling steps cannot change
+the neighborhood. References respond to local lighting directly, without shared temporal easing.
+Missing center lighting disables excess rather than counting as darkness. Room references are released
+after each build. `localAmbientMean` in the trace is a diagnostic mean, not a shared exposure input.
+
+The door follow-up exposed the other shared input: at position 6963,5579,1, facing east and zoom 0.5,
+player-local luminance repeatedly changed between 0.2420 and 0.0053, switching the global night key
+between 0 and 1 while maximum light excess remained 115. The night key must also be spatial.
+
+The aux map now stores sun exposure in red and each neighborhood's mean linear luminance in green
+(RG16F). The world composite, bloom and alpha-gain paths derive the night key at the pixel's world
+location, capped by climate daylight. Above-floor surfaces use the brighter reference along the existing
+light-map reach. Missing data and coordinates outside uploaded coverage disable night gain; sampling
+clamps to uploaded texel centers to avoid old map contents. Every consuming pass rebinds the aux map.
+A floor snapshot queued in draw order rejects maps from the previous floor while the replacement builds.
+The map is built even with lamp enhancement disabled, because night amplification also needs it.
+
+Player-local and frame-average readings are diagnostic only. The trace labels the former `playerNight`
+and `playerExposure`, and reports the built map's night-key range separately. `HdrExposureTest` covers
+adjacent-room isolation for both inputs, map coverage, outdoors, missing data, floor selection and source
+math. Headless EGL checks compiled the world, bloom and alpha-gain shaders and verified the door scenario
+with synthetic lighting inputs, plus bounds, vertical reach and unchanged neighboring-room bloom.
+The user confirmed that the reported artifacts were resolved. The subsequent native Linux/Wayland
+capture at 3839×2159 covered rotation, zoom and both floors. No HDR shader/build/upload failures were
+logged, and the recorded GL error checks were clear.
+
+| Logged measurement | Result |
+|---|---|
+| HDR trace coverage | 145 samples; zoom 0.25–1.0; floors 0 and 1 |
+| Sampled worker build time after startup | 0.092–0.591 ms |
+| First worker build | 5.360 ms |
+| Later reported game-thread queue average | 0.002 ms |
+
+These are sparse CPU timing records, not a frame-time or GPU benchmark. Windows and macOS runtime
+validation remains outstanding. The temporary local `devHdrTraceMs` override was removed after confirmation.
+
 ## State (2026-09-24 10:10)
 
 `hdr=true` on KDE Plasma 6 with HDR on gives: UI at the desktop's white, the world as SDR in daylight, lamp / torch /

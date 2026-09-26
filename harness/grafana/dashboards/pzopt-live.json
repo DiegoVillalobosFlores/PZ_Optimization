@@ -94,7 +94,8 @@
         "value": null
        }
       ]
-     }
+     },
+     "noValue": "\u2013"
     },
     "overrides": []
    },
@@ -162,6 +163,7 @@
        }
       ]
      },
+     "noValue": "no game running",
      "decimals": 2
     },
     "overrides": []
@@ -242,6 +244,7 @@
        }
       ]
      },
+     "noValue": "no game running",
      "decimals": 0
     },
     "overrides": []
@@ -651,7 +654,9 @@
       "cellOptions": {
        "type": "auto"
       },
-      "filterable": false
+      "filterable": false,
+      "inspect": true,
+      "wrapHeaderText": true
      }
     },
     "overrides": [
@@ -853,6 +858,7 @@
        }
       ]
      },
+     "noValue": "no game running",
      "decimals": 2
     },
     "overrides": []
@@ -980,7 +986,7 @@
      "rawQuery": true,
      "editorMode": "code",
      "format": "table",
-     "rawSql": "WITH a AS (SELECT stack_id, sum(samples) AS c FROM live_stacks WHERE t > now() - interval '10 seconds' GROUP BY 1),\nf AS (SELECT d.frames, a.c FROM a JOIN stack_defs d ON d.id = a.stack_id),\nn AS (SELECT f.frames[1:i] AS path, sum(f.c) AS value, sum(f.c) FILTER (WHERE i = cardinality(f.frames)) AS self\n      FROM f, generate_series(0, cardinality(f.frames)) AS i GROUP BY 1)\nSELECT cardinality(path) AS level, value, coalesce(self, 0) AS self, coalesce(path[cardinality(path)], 'all') AS label FROM n ORDER BY path",
+     "rawSql": "WITH a AS (SELECT stack_id, sum(samples) AS c FROM live_stacks WHERE t > now() - interval '10 seconds' GROUP BY 1),\nf AS (SELECT d.frames, a.c FROM a JOIN stack_defs d ON d.id = a.stack_id),\nn AS (SELECT f.frames[1:i] AS path, sum(f.c) AS value, sum(f.c) FILTER (WHERE i = cardinality(f.frames)) AS self\n      FROM f, generate_series(0, cardinality(f.frames)) AS i GROUP BY 1)\nSELECT level, value, self, label FROM (\n  SELECT cardinality(path) AS level, value, coalesce(self, 0) AS self, coalesce(path[cardinality(path)], 'all') AS label, path FROM n\n  -- nothing sampled: one placeholder root instead of a zero-row frame (the panel reports that as missing fields)\n  UNION ALL SELECT 0, 0, 0, 'no samples in this range', ARRAY[]::text[] WHERE NOT EXISTS (SELECT 1 FROM n)) z ORDER BY path",
      "hide": false
     }
    ],
@@ -1017,7 +1023,7 @@
      "rawQuery": true,
      "editorMode": "code",
      "format": "time_series",
-     "rawSql": "SELECT t AS time, device || ' ' || control AS metric, value FROM live_inputs WHERE control NOT IN ('x', 'y', 'wheel', 'lx', 'ly', 'rx', 'ry', 'lt', 'rt', 'hat') AND $__timeFilter(t) ORDER BY 1",
+     "rawSql": "WITH q AS (SELECT t AS time, device || ' ' || control AS metric, value FROM live_inputs WHERE control NOT IN ('x', 'y', 'wheel', 'lx', 'ly', 'rx', 'ry', 'lt', 'rt', 'hat') AND $__timeFilter(t))\nSELECT * FROM q UNION ALL SELECT $__timeTo()::timestamptz, 'no input recorded', 0 WHERE NOT EXISTS (SELECT 1 FROM q) ORDER BY 1",
      "hide": false
     }
    ],
@@ -1109,7 +1115,9 @@
       "cellOptions": {
        "type": "auto"
       },
-      "filterable": false
+      "filterable": false,
+      "inspect": true,
+      "wrapHeaderText": true
      }
     },
     "overrides": []

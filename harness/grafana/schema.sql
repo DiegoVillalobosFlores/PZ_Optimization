@@ -126,6 +126,13 @@ CREATE INDEX IF NOT EXISTS live_stacks_t ON live_stacks (t);
 CREATE INDEX IF NOT EXISTS live_stacks_stack_id ON live_stacks (stack_id);
 CREATE INDEX IF NOT EXISTS live_inputs_t ON live_inputs (t);
 
+-- the Steam Workshop item's public numbers, one snapshot every 30 min (workshop_stats.py, run by the follower): counts from
+-- the keyless Web API, rating / comments / awards from the item page (NULL when Steam rate-limits the page)
+CREATE TABLE IF NOT EXISTS workshop_stats (t timestamptz PRIMARY KEY, item bigint, subscribers integer,
+  lifetime_subscribers integer, favorites integer, lifetime_favorites integer, visitors integer, stars smallint,
+  ratings integer, comments integer, awards integer);
+
+
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'grafana') THEN

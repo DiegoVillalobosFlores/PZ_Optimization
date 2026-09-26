@@ -53,7 +53,7 @@ def main():
             "${other:sqlstring}": sql_list([other]), "${source:sqlstring}": sql_list([a.source]), "${thread:sqlstring}": sql_list(threads),
             "${machine:sqlstring}": sql_list(db("SELECT DISTINCT machine FROM runs") or ["desktop"]),
             "${mode:sqlstring}": sql_list(db("SELECT DISTINCT coalesce(mode, '') FROM runs") or [""]),
-            "${label:sqlstring}": "'.*'", "${search:sqlstring}": "''"}
+            "${label:sqlstring}": "'.*'", "${search:sqlstring}": "''", "${hmachine:sqlstring}": "'desktop'"}
     pw = (pathlib.Path.home() / ".config/pzopt/grafana-admin").read_text().strip()
     auth = "Basic " + base64.b64encode(f"admin:{pw}".encode()).decode()
     print(f"run={run} runs={runs} base={base} other={other} source={a.source}")

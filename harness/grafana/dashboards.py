@@ -12,7 +12,9 @@ Route time: the Run and Compare dashboards plot `rt` = 2000-01-01 00:00:00 UTC +
 route start, so 00:00:00 is the route start of every run and 23:59:xx is the settle before it.
 Edit this file, not the JSON; Grafana reloads the JSON within 10 s.
 """
+import datetime
 import json
+import re
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parent / "dashboards"
@@ -87,8 +89,9 @@ def ts_panel(title, targets, unit="ms", desc="", stack=False, points=False, bars
     }
 
 
-def stat_panel(title, sql, unit="none", thr=None, desc="", decimals=None, text_mode="value_and_name", overrides=(), color_mode="background", value_size=26):
-    d = {"unit": unit, "color": {"mode": "thresholds"}, "thresholds": steps(thr or [("text", None)])}
+def stat_panel(title, sql, unit="none", thr=None, desc="", decimals=None, text_mode="value_and_name", overrides=(), color_mode="background", value_size=26,
+               no_value="–"):
+    d = {"unit": unit, "color": {"mode": "thresholds"}, "thresholds": steps(thr or [("text", None)]), "noValue": no_value}
     if decimals is not None:
         d["decimals"] = decimals
     return {
@@ -101,7 +104,8 @@ def stat_panel(title, sql, unit="none", thr=None, desc="", decimals=None, text_m
 
 
 def table_panel(title, sql, desc="", overrides=(), transformations=(), sort=None, unit=None, cell=None):
-    d = {"custom": {"align": "auto", "cellOptions": cell or {"type": "auto"}, "filterable": False}}
+    d = {"custom": {"align": "auto", "cellOptions": cell or {"type": "auto"}, "filterable": False, "inspect": True,
+                    "wrapHeaderText": True}}
     if unit:
         d["unit"] = unit
     return {
@@ -131,16 +135,30 @@ def ov(name, **props):
         p.append({"id": "custom.cellOptions", "value": {"type": "gauge", "mode": "basic", "valueDisplayMode": "text"}})
     if "link" in props:
         p.append({"id": "links", "value": [{"title": t, "url": u} for t, u in props["link"]]})
+    if props.get("wrap"):
+        p.append({"id": "custom.cellOptions", "value": {"type": "auto", "wrapText": True}})
     if "width" in props:
         p.append({"id": "custom.width", "value": props["width"]})
     if "color" in props:
         p.append({"id": "color", "value": {"mode": "fixed", "fixedColor": props["color"]}})
+    if props.get("color_text"):
+        p.append({"id": "custom.cellOptions", "value": {"type": "color-text"}})
     if "axis" in props:
         p.append({"id": "custom.axisPlacement", "value": props["axis"]})
     if "max" in props:
         p.append({"id": "max", "value": props["max"]})
     if "min" in props:
         p.append({"id": "min", "value": props["min"]})
+    if "mappings" in props:
+        p.append({"id": "mappings", "value": props["mappings"]})
+    if props.get("dash"):  # the stock twin of a line: same colour, dashed, thinner
+        p += [{"id": "custom.lineStyle", "value": {"fill": "dash", "dash": [8, 6]}}, {"id": "custom.lineWidth", "value": 2},
+              {"id": "custom.pointSize", "value": 5}]
+    if props.get("hidden_viz"):  # drawn invisibly on a hidden axis and kept out of the legend: only the tooltip shows it
+        p += [{"id": "custom.hideFrom", "value": {"viz": False, "legend": True, "tooltip": False}},
+              {"id": "custom.axisPlacement", "value": "hidden"}, {"id": "custom.lineWidth", "value": 0},
+              {"id": "custom.showPoints", "value": "never"}, {"id": "custom.fillOpacity", "value": 0},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "transparent"}}]
     if "hidden" in props:
         p.append({"id": "custom.hidden", "value": True})
     if "points" in props:
@@ -190,7 +208,10 @@ WITH a AS (SELECT stack_id, sum(samples) AS c FROM stacks WHERE {where} GROUP BY
 f AS (SELECT d.frames, a.c FROM a JOIN stack_defs d ON d.id = a.stack_id),
 n AS (SELECT f.frames[1:i] AS path, sum(f.c) AS value, sum(f.c) FILTER (WHERE i = cardinality(f.frames)) AS self
       FROM f, generate_series(0, cardinality(f.frames)) AS i GROUP BY 1)
-SELECT cardinality(path) AS level, value, coalesce(self, 0) AS self, coalesce(path[cardinality(path)], 'all') AS label FROM n ORDER BY path"""
+SELECT level, value, self, label FROM (
+  SELECT cardinality(path) AS level, value, coalesce(self, 0) AS self, coalesce(path[cardinality(path)], 'all') AS label, path FROM n
+  -- nothing sampled: one placeholder root instead of a zero-row frame (the panel reports that as missing fields)
+  UNION ALL SELECT 0, 0, 0, 'no samples in this range', ARRAY[]::text[] WHERE NOT EXISTS (SELECT 1 FROM n)) z ORDER BY path"""
 
 
 def flame_diff_sql(where_left, where_right):
@@ -202,8 +223,10 @@ f AS (SELECT d.frames, a.c, a.r FROM a JOIN stack_defs d ON d.id = a.stack_id),
 n AS (SELECT f.frames[1:i] AS path, sum(f.c + f.r) AS value, sum(f.r) AS value_right,
              sum(f.c + f.r) FILTER (WHERE i = cardinality(f.frames)) AS self, sum(f.r) FILTER (WHERE i = cardinality(f.frames)) AS self_right
       FROM f, generate_series(0, cardinality(f.frames)) AS i GROUP BY 1)
-SELECT cardinality(path) AS level, value, coalesce(self, 0) AS self, coalesce(path[cardinality(path)], 'all') AS label,
-  value_right AS "valueRight", coalesce(self_right, 0) AS "selfRight" FROM n ORDER BY path"""
+SELECT level, value, self, label, "valueRight", "selfRight" FROM (
+  SELECT cardinality(path) AS level, value, coalesce(self, 0) AS self, coalesce(path[cardinality(path)], 'all') AS label,
+    value_right AS "valueRight", coalesce(self_right, 0) AS "selfRight", path FROM n
+  UNION ALL SELECT 0, 0, 0, 'no samples in this range', 0, 0, ARRAY[]::text[] WHERE NOT EXISTS (SELECT 1 FROM n)) z ORDER BY path"""
 
 
 def flame_panel(title, sql, desc=""):
@@ -218,7 +241,11 @@ def logs_panel(title, sql, desc=""):
 
 
 def state_panel(title, sql, desc=""):
-    """Pressed / released per control; each change event holds until the next one."""
+    """Pressed / released per control; each change event holds until the next one. With no event in the range the query
+    returns one "no input recorded" row: a zero-row frame has no time field, which the panel reports as an error."""
+    body = re.sub(r"\s+ORDER BY 1\s*$", "", sql.strip())
+    sql = (f"WITH q AS ({body})\nSELECT * FROM q UNION ALL SELECT $__timeTo()::timestamptz, 'no input recorded', 0 "
+           "WHERE NOT EXISTS (SELECT 1 FROM q) ORDER BY 1")
     return {"type": "state-timeline", "title": title, "description": desc, "datasource": DS, "targets": [q(sql)],
             "fieldConfig": {"defaults": {"custom": {"fillOpacity": 80, "lineWidth": 0, "spanNulls": True},
                                          "color": {"mode": "thresholds"}, "thresholds": steps([("transparent", None), ("green", 0.5)]),
@@ -247,6 +274,232 @@ BOUND = """CASE
   ELSE 'headroom left' END"""
 
 
+# ------------------------------------------------------------------ Hero (top of the home dashboard)
+
+# Stock vs optimized on the desktop, for public visitors. A run counts when it is a valid measurement (analyze.py and
+# Jev's card; not Jev's verdict, whose "invalid" also means "below the cap with hardware idle"), path drives clean, no profiler (vmargs,
+# JFR) and no pzopt key beyond the measurement ones below (so A/B runs with a key switched off never count as
+# "optimized"); a stock run is enabled=false. Only exact scenes (mode, preset, flags, cap, game options, resolution,
+# renderer) run both ways enter, then they pool under a readable scene name; each side is the median of its newest 10.
+HERO_SCENES = r"""
+WITH r0 AS (
+  SELECT r.*, NOT enabled AS stock,
+    coalesce(substring(props from 'frameCapFps=(\d+)'), substring(opts->>'game_options' from 'frameRate=(\d+)'))::int AS cap_fps,
+    trim(regexp_replace(coalesce(opts->>'game_options', ''), '(frameRate|uncappedFPS)=\S*', '', 'g')) AS other_options
+  FROM runs r
+  WHERE machine = 'desktop' AND valid AND fps_mean IS NOT NULL
+    AND coalesce(judge #>> '{state,run,facts,valid_measurement}', 'true') = 'true'
+    AND coalesce(judge #>> '{state,run,drive,verdict}', 'valid') = 'valid'
+    -- no profiler attached (run.sh's own launch options, such as the released -Dpzopt.jit=steady, are fine)
+    AND coalesce(opts->>'vmargs', '') !~ '(agentpath|agentlib|javaagent|StartFlightRecording|NativeMemoryTracking)'
+    AND coalesce(opts->>'jfr', '0') = '0'
+    AND NOT EXISTS (SELECT 1 FROM regexp_split_to_table(coalesce(props, ''), '\s+') t
+                    WHERE t <> '' AND t !~ '^(instrument|overlay|uncappedFps|hdrAuto|frameCapFps|enabled)='
+                      AND t NOT IN ('upscaler=off', 'hotsaveStaged=false'))
+    -- the Optimizations tab file applies too and is not in props: an upscaler renders the world smaller, not a default
+    AND (NOT enabled OR coalesce(substring(scenario->>'settings' from 'upscaler=([a-z0-9]+)'), 'off') = 'off')
+    -- the daily re-measures of older builds (<bench>-<MMDD>-<n>, DAILY_BENCHES) are history: only the newest day's build is "current"
+    AND (label !~ '^(daily|dstorm|dspin|dlou|dhorde)-[0-9]{4}-' OR substring(label from '^[a-z]+-([0-9]{4})-')
+         = (SELECT max(substring(label from '^[a-z]+-([0-9]{4})-')) FROM runs WHERE label ~ '^(daily|dstorm|dspin|dlou|dhorde)-[0-9]{4}-'))
+),
+r1 AS (SELECT *, CASE WHEN props ~ 'uncappedFps=true' OR fps_mean < 0.9 * cap_fps THEN 'uncapped'  -- below its cap = uncapped
+                      WHEN cap_fps IS NOT NULL THEN cap_fps || ' fps cap' ELSE 'capped' END AS cap_label FROM r0),
+c AS (
+  SELECT r1.*,
+    concat_ws('|', mode, preset, flags, cap_label, other_options, resolution, opts->>'renderer') AS exact,
+    concat_ws(' · ',
+      -- the daily re-measures pass the scene flags instead of the preset: name those scenes by their start square
+      CASE WHEN flags ~ 'start=12450,1280' THEN 'Louisville horde' WHEN flags ~ 'showcase=horde' THEN 'Horde shooting, riverside'
+      ELSE CASE coalesce(nullif(preset, 'none'), mode)
+        WHEN 'louisville' THEN 'Louisville horde' WHEN 'storm' THEN 'Thunderstorm' WHEN 'storm-fog' THEN 'Storm + fog'
+        WHEN 'fog' THEN 'Heavy fog' WHEN 'night-torch' THEN 'Night, torch' WHEN 'night-dark' THEN 'Night'
+        WHEN 'helicopter' THEN 'Helicopter event' WHEN 'bench' THEN 'Rosewood'
+        -- kmh=193 is flat out: the car tops out near 122 km/h
+        WHEN 'drive' THEN 'Driving' || coalesce(' ' || least(substring(flags from 'kmh=(\d+)')::int, 120) || ' km/h', '')
+        ELSE preset END END,
+      CASE WHEN flags ~ 'weather=storm' AND coalesce(preset, '') NOT LIKE 'storm%' THEN 'thunderstorm' END,
+      CASE WHEN flags ~ 'fog=heavy' AND coalesce(preset, '') NOT IN ('fog', 'storm-fog') THEN 'heavy fog' END,
+      CASE WHEN flags ~ 'turn=' AND flags !~ 'start=12450,1280' AND mode = 'bench' AND coalesce(preset, '') IN ('', 'none') THEN 'spinning walk' END,
+      CASE WHEN flags ~ '(house|car)_alarm=' THEN 'alarms' END,
+      CASE WHEN flags ~ 'gunshots=[1-9]' THEN 'gunfire' END,
+      CASE WHEN flags ~ 'helicopter=true' AND coalesce(preset, '') <> 'helicopter' THEN 'helicopter' END,
+      cap_label) AS scene
+  FROM r1
+),
+m AS (SELECT *, row_number() OVER (PARTITION BY scene, stock ORDER BY started DESC) AS n FROM c
+      WHERE exact IN (SELECT exact FROM c GROUP BY 1 HAVING bool_or(stock) AND bool_or(NOT stock))),
+side AS (SELECT scene, stock, count(*) AS runs, max(started) AS newest,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY fps_mean) AS fps,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY fps_1pct_low) AS low,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY p99_ms) AS p99,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY p99_9_ms) AS p999,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY gpu_pct) AS gpu,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY busiest_core_pct) AS core
+         FROM m WHERE n <= 10 GROUP BY 1, 2),
+s AS (SELECT o.scene, st.runs AS st_runs, o.runs AS o_runs, greatest(st.newest, o.newest) AS newest,
+        st.fps AS st_fps, o.fps AS o_fps, st.low AS st_low, o.low AS o_low, st.p99 AS st_p99, o.p99 AS o_p99,
+        st.p999 AS st_p999, o.p999 AS o_p999, st.gpu AS st_gpu, o.gpu AS o_gpu, st.core AS st_core, o.core AS o_core
+      FROM side o JOIN side st ON st.scene = o.scene AND st.stock AND NOT o.stock),
+-- the headline: the clear 120 km/h drive (the daily chart's main line) when it was run both ways, else the scene with most pairs
+h AS (SELECT * FROM s ORDER BY scene = 'Driving 120 km/h · uncapped' DESC, least(st_runs, o_runs) DESC, newest DESC LIMIT 1)"""
+STOCK_C, OURS_C = "#8e8e8e", "#56a64b"
+# the daily chart's benches: label prefix, line name, colour (runs <prefix>-<MMDD>-<n>, stock <prefix>-stock-<n>)
+DAILY_BENCHES = [("daily", "120 km/h drive", OURS_C), ("dstorm", "120 km/h drive, fog + storm", "#5794F2"),
+                 ("dspin", "spin south, fog + storm", "#B877D9"), ("dlou", "Louisville horde", "#FF9830"),
+                 ("dhorde", "horde shooting, riverside", "#F2495C")]
+
+
+RELEASE_DAYS = json.loads((Path(__file__).resolve().parent / "release-days.json").read_text())
+
+
+def release_days():
+    """release-days.json: the days and the most notes any day has."""
+    days = RELEASE_DAYS["days"]
+    return days, max(len(d["notes"]) for d in days)
+
+
+def release_mappings(days, i):
+    """Value mappings YYYYMMDD -> the day's build (i None) or its i-th note, for the daily chart's tooltip rows."""
+    text = lambda d: f"build {d['build']}" if i is None else d["notes"][i]  # noqa: E731
+    return [{"type": "value", "options": {d["day"].replace("-", ""): {"text": text(d)}
+                                          for d in days if i is None or i < len(d["notes"])}}]
+
+
+def hero(L):
+    L.add({"type": "text", "title": "", "transparent": True, "options": {"mode": "markdown", "content": (
+        "## Project Zomboid, stock vs PZ Optimization\n"
+        "The same scene on the same desktop (Ryzen 7 9800X3D, RTX 4090, 5120×2160, native Linux), the stock game and the game "
+        "with the mod: medians of the newest 10 runs each way, updated as runs arrive. "
+        "[GitHub](https://github.com/xD3I/PZ_Optimization) · "
+        "[Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3805285544) · every run below this section")}}, 24, 3)
+    metrics = (("fps", "average fps ↑"), ("low", "1 % low fps ↑"), ("p99", "p99 frame time ↓"), ("p999", "p99.9 frame time ↓"))
+    side = lambda title, pre, color: stat_panel(  # noqa: E731
+        title, f"{HERO_SCENES}\nSELECT " + ", ".join(f'{pre}_{c} AS "{n}"' for c, n in metrics) + " FROM h",
+        decimals=1, color_mode="value", value_size=44, thr=[(color, None)],
+        desc="Medians over the newest 10 runs of the headline scene (named in the middle). Average fps: route mean; 1 % low: "
+             "the fps of the slowest 1 % of frames; p99 / p99.9: 99 % / 99.9 % of the frames are faster than this (stutter).",
+        overrides=[ov(n, unit="ms") for c, n in metrics if c.startswith("p")])
+    L.add(side("Stock game", "st", STOCK_C), 10, 7)
+    speed = stat_panel("Faster than stock", "", unit="suffix:×", decimals=1, color_mode="value", value_size=64,
+                       thr=[(OURS_C, None)], text_mode="value_and_name",
+                       desc="Average fps with the mod / average fps of the stock game, in the scene with the most runs both ways "
+                            "(its name above the number). Every scene measured both ways is in the table below.")
+    speed["targets"] = [q(f"{HERO_SCENES}\nSELECT now() AS time, scene AS metric, o_fps / st_fps AS value FROM h")]
+    speed["options"]["reduceOptions"]["fields"] = ""  # the numeric field only, named after the scene
+    speed["options"].update(orientation="vertical", text={"titleSize": 16, "valueSize": 64})
+    L.add(speed, 4, 7)
+    L.add(side("With PZ Optimization", "o", OURS_C), 10, 7)
+    # Each day's build (its last release; before 09-21 the day's last commit) re-measured on every bench it can run (the harness
+    # lives in the build: presets and scene flags appeared over the days), labels <bench>-<MMDD>-<n>, stock <bench>-stock-<n>,
+    # at default settings (release-days.json _doc). One line per bench, the stock game dashed in the same colour; boot and load
+    # (every run's load trace) on the right axis. The tooltip drops text columns, so what a day's build brought
+    # (release-days.json) comes as numeric fields (the day as YYYYMMDD, NULL where the day has fewer notes) drawn invisibly,
+    # whose value mappings are the texts: one tooltip row per note, labelled "•"
+    days, rows = release_days()
+    excluded = ", ".join(f"'{r}'" for r in RELEASE_DAYS.get("excluded", {})) or "''"
+    benches = [(k, n, c) for k, n, c in DAILY_BENCHES]
+    pat = "|".join(k for k, _, _ in benches)
+    daynum = "to_char(o.day, 'YYYYMMDD')::int"
+    note_cols = "".join(f",\n  CASE WHEN o.day IN ({', '.join(repr(d['day']) for d in days if len(d['notes']) > i) or 'NULL'}) "
+                        f"THEN {daynum} END AS \"{'•' + ' ' * i}\"" for i in range(rows))
+    med = "percentile_cont(0.5) WITHIN GROUP (ORDER BY {})"
+    ctes = f"""
+WITH d AS (SELECT substring(label from '({pat})-') AS b, substring(label from '(?:{pat})-([0-9]{{4}}|stock)-') AS k,
+             to_char(started, 'YYYY') AS y, run, fps_mean FROM runs
+           -- laptop runs come back from the queue as <machine>-<label>
+           WHERE label ~ '^((flip|dell|mac)-)?({pat})-([0-9]{{4}}|stock)-[0-9]+$' AND machine = ${{hmachine:sqlstring}}
+             AND valid AND fps_mean IS NOT NULL AND run NOT IN ({excluded})),"""
+    notes_ov = [ov("build", hidden_viz=True, mappings=release_mappings(days, None)),
+                *[ov("•" + " " * i, hidden_viz=True, mappings=release_mappings(days, i)) for i in range(rows)]]
+    first = datetime.date.fromisoformat(days[0]["day"])
+
+    def daily_chart(title, sql, desc, overrides, unit, decimals):
+        ts = ts_panel(title, [q(sql, "table")], unit=unit, points=True, point_size=9, fill=0, desc=desc + " Hover a day for what it released.",
+                      overrides=[*overrides, *notes_ov])
+        ts["fieldConfig"]["defaults"]["custom"].update(drawStyle="line", lineWidth=3, showPoints="always", spanNulls=True, insertNulls=False)
+        ts["fieldConfig"]["defaults"]["decimals"] = decimals
+        # 360 px: the tooltip (release notes rows) stays on a phone screen; longer notes wrap
+        ts["options"]["tooltip"] = {"mode": "multi", "sort": "none", "maxWidth": 360}
+        ts["options"]["legend"] = {"displayMode": "list", "placement": "bottom", "showLegend": True}
+        # its own window: every day of release-days.json plus two days of slack (regenerated when a day is added)
+        ts.update(timeFrom=f"{(datetime.date.today() - first).days + 3}d", hideTimeOverride=True)
+        return ts
+
+    bench_cols = "".join(f",\n  max(o.fps) FILTER (WHERE o.b = '{k}') AS \"{n}\","
+                         f" (SELECT fps FROM st WHERE st.b = '{k}') AS \"stock · {n}\"" for k, n, _ in benches)
+    L.add(daily_chart("Each day's build on the ${hmachine}: fps per benchmark", f"""{ctes}
+o AS (SELECT to_date(y || k, 'YYYYMMDD') AS day, b, {med.format('fps_mean')} AS fps FROM d WHERE k <> 'stock' GROUP BY 1, 2),
+st AS (SELECT b, {med.format('fps_mean')} AS fps FROM d WHERE k = 'stock' GROUP BY 1)
+SELECT o.day::timestamptz + interval '12 hours' AS time{bench_cols},
+  {daynum} AS "build"{note_cols}
+FROM o GROUP BY o.day ORDER BY o.day""",
+        "Each day's build (its last release) on one machine (history on: desktop RTX 4090 5120x2160, flip, dell, mac) at "
+        "default settings, uncapped, route-mean fps, median of the day's runs: the 120 km/h drive east on KY-60 from the "
+        "Rosewood bench save (clear, and in heavy fog with a thunderstorm), the spinning walk south through Rosewood in fog "
+        "and storm, the Louisville horde (~2,000 zombies) and the riverside horde shooting. A bench starts on the first day "
+        "whose harness could run it. Dashed: the stock game, the same every day.",
+        [o for k, n, c in benches for o in (ov(n, color=c, min=0), ov(f"stock · {n}", color=c, min=0, dash=True))], "none", 0), 24, 11)
+    # boot and load of every run above (its load trace: pzopt-loadtrace.out lines in events)
+    L.add(daily_chart("Each day's build on the ${hmachine}: boot and load time", f"""{ctes}
+e AS (SELECT run, min(t) AS t0, min(t) FILTER (WHERE text ~ 'continuing latest save') AS tc FROM events
+      WHERE run IN (SELECT run FROM d) GROUP BY run),
+lt AS (SELECT d.k, d.y, extract(epoch FROM e.tc - e.t0) AS boot,
+         extract(epoch FROM (SELECT min(x.t) FROM events x WHERE x.run = e.run AND x.t > e.tc AND x.text ~ 'world ready') - e.tc) AS load
+       FROM e JOIN d USING (run)),
+o AS (SELECT to_date(y || k, 'YYYYMMDD') AS day, {med.format('boot')} AS boot, {med.format('load')} AS load FROM lt
+      WHERE k <> 'stock' GROUP BY 1),
+ls AS (SELECT {med.format('boot')} AS boot, {med.format('load')} AS load FROM lt WHERE k = 'stock')
+SELECT o.day::timestamptz + interval '12 hours' AS time,
+  o.boot AS "boot", (SELECT boot FROM ls) AS "stock · boot", o.load AS "load", (SELECT load FROM ls) AS "stock · load",
+  {daynum} AS "build"{note_cols}
+FROM o ORDER BY o.day""",
+        "Boot (launch to the main menu) and load (Continue to the world ready) in seconds, median over every run of that "
+        "day's build on the machine (all benchmarks load the same bench save), lower is better. Dashed: the stock game.",
+        [ov("boot", color="#FADE2A", min=0), ov("stock · boot", color="#FADE2A", min=0, dash=True),
+         ov("load", color="#8AB8FF", min=0), ov("stock · load", color="#8AB8FF", min=0, dash=True)], "s", 1), 24, 8)
+    # the Workshop item's public numbers (workshop_stats.py, a snapshot every 30 min from the follower)
+    ws_url = "https://steamcommunity.com/sharedfiles/filedetails/?id=3805285544"
+    ws_desc = " Steam Workshop item 3805285544, a snapshot every 30 min."
+
+    def ws_panel(title, sql, desc, color, fmt="time_series", overrides=(), mappings=()):
+        p = stat_panel(title, "", decimals=0, color_mode="value", value_size=44, thr=[(color, None)], desc=desc + ws_desc,
+                       text_mode="value_and_name" if fmt == "table" else "value", overrides=overrides)
+        p["targets"] = [q(sql, fmt)]
+        p["options"].update(graphMode="area" if fmt == "time_series" else "none")
+        p["options"]["reduceOptions"]["fields"] = ""
+        p["fieldConfig"]["defaults"].update(mappings=list(mappings), unit="locale")  # 19,503, not 19503 / 19.5K
+        p["links"] = [{"title": "Steam Workshop page", "url": ws_url, "targetBlank": True}]
+        return p
+    L.add(ws_panel("Workshop subscribers", "SELECT t AS time, subscribers AS \"subscribers\" FROM workshop_stats ORDER BY t",
+                   "Current subscribers.", "#66c0f4"), 6, 5)
+    L.add(ws_panel("Star rating", """SELECT stars AS "rating", ratings AS "ratings" FROM workshop_stats
+WHERE stars IS NOT NULL ORDER BY t DESC LIMIT 1""", "Steam's star rating (the rounded stars of the item page) and how many players rated it.",
+                   "#F2CC0C", fmt="table", overrides=[ov("ratings", color="text")],
+                   mappings=[{"type": "value", "options": {str(n): {"text": "★" * n + "☆" * (5 - n)} for n in range(6)}}]), 6, 5)
+    L.add(ws_panel("Visitors", "SELECT t AS time, visitors AS \"unique visitors\" FROM workshop_stats ORDER BY t",
+                   "Unique visitors of the Workshop page.", "#66c0f4"), 6, 5)
+    L.add(ws_panel("Engagement", """SELECT favorites AS "favorites", comments AS "comments", awards AS "awards",
+  round(100.0 * subscribers / nullif(visitors, 0)) AS "visitors who subscribed %"
+FROM workshop_stats WHERE comments IS NOT NULL ORDER BY t DESC LIMIT 1""",
+                   "Favorites, comments and award reactions on the item page, and the share of unique visitors who are subscribed now.",
+                   "#66c0f4", fmt="table", overrides=[ov("visitors who subscribed %", unit="percent")]), 6, 5)
+    L.add(table_panel(
+        "Every scene measured both ways (desktop)", f"""{HERO_SCENES}
+SELECT scene, round((o_fps / st_fps)::numeric, 2) AS "×", st_fps AS "fps stock", o_fps AS "fps ours", st_low AS "1% low stock", o_low AS "1% low ours",
+  st_p99 AS "p99 stock", o_p99 AS "p99 ours", st_p999 AS "p99.9 stock", o_p999 AS "p99.9 ours",
+  st_gpu AS "GPU % stock", o_gpu AS "GPU % ours", st_core AS "busiest core % stock", o_core AS "busiest core % ours",
+  st_runs AS "runs stock", o_runs AS "runs ours", newest
+FROM s ORDER BY least(st_runs, o_runs) DESC, newest DESC""",
+        desc="Medians of the newest 10 valid runs per side. Utilization: GPU busy and the busiest CPU core (sysmon) over the route; "
+             "a side below its cap with neither near 100 % still has hardware left over.",
+        overrides=[ov("×", unit="suffix:×", decimals=2, color=OURS_C, color_text=True), ov("newest", unit="dateTimeAsIso", width=160),
+                   ov("scene", width=560, wrap=True),
+                   *[ov(n, decimals=1) for n in ("fps stock", "fps ours", "1% low stock", "1% low ours")],
+                   *[ov(n, unit="ms", decimals=1) for n in ("p99 stock", "p99 ours", "p99.9 stock", "p99.9 ours")],
+                   *[ov(n, unit="percent", decimals=0) for n in ("GPU % stock", "GPU % ours", "busiest core % stock", "busiest core % ours")],
+                   *[ov(n, color=OURS_C, color_text=True) for n in ("fps ours", "1% low ours", "p99 ours", "p99.9 ours")]]), 24, 5)
+
+
 # Nearly every run has its own label: one series per label gave each trend panel ~1,400 series and legend rows, and the
 # eight of them crashed the browser tab on the home dashboard. Past this many labels the series pool per machine and side.
 TREND_MAX_LABELS = 20
@@ -261,7 +514,9 @@ SELECT started AS time, CASE WHEN (SELECT count(DISTINCT label) FROM t) <= {TREN
 
 def runs_dashboard():
     L = Layout()
-    where = "$__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring}"
+    hero(L)
+    L.row("All runs")
+    where ="$__timeFilter(started) AND machine IN (${machine:sqlstring}) AND coalesce(mode, '') IN (${mode:sqlstring}) AND label ~ ${label:sqlstring}"
     L.add(stat_panel("Runs", color_mode="none", sql=f"SELECT count(*) AS runs, count(*) FILTER (WHERE valid) AS valid, count(*) FILTER (WHERE verdict = 'invalid' OR NOT valid) AS invalid FROM runs WHERE {where}"), 6, 4)
     L.add(stat_panel("Newest run", f"SELECT run, fps_mean AS fps, p99_ms AS \"p99 ms\", p99_9_ms AS \"p99.9 ms\", gpu_pct AS \"GPU %\", busiest_core_pct AS \"busiest core %\" FROM runs WHERE {where} ORDER BY started DESC LIMIT 1",
                      decimals=1, color_mode="none", value_size=20), 18, 4)
@@ -289,12 +544,14 @@ FROM runs WHERE {where} ORDER BY started DESC""",
         ]), 24, 14)
     L.row("Trends (one point per run, series = label or machine)")
     trend = lambda col: trend_sql(where, col)  # noqa: E731
-    L.add(ts_panel("fps (route mean)", [q(trend("fps_mean"))], unit="none", points=True, point_size=7, thresholds=[("transparent", None), ("green", 240)], legend="right"), 12, 9)
-    L.add(ts_panel("p99 frame time", [q(trend("p99_ms"))], points=True, point_size=7, thresholds=[("transparent", None), ("orange", 10)], legend="right", log=True), 12, 9)
-    L.add(ts_panel("p99.9 frame time", [q(trend("p99_9_ms"))], points=True, point_size=7, thresholds=[("transparent", None), ("red", 16.7)], legend="right", log=True), 12, 9)
-    L.add(ts_panel("GPU busy (route mean)", [q(trend("gpu_pct"))], unit="percent", points=True, point_size=7, minv=0, maxv=100, legend="right"), 12, 9)
-    L.add(ts_panel("Busiest core (route mean)", [q(trend("busiest_core_pct"))], unit="percent", points=True, point_size=7, minv=0, maxv=100, legend="right"), 12, 9)
-    L.add(ts_panel("Chunk latency p99 (enqueue → publish)", [q(trend("chunk_p99_ms"))], points=True, point_size=7, legend="right"), 12, 9)
+    TREND_DESC = (f"One point per run over the dashboard's time range: the route-window value from analyze.py. One series per run label while "
+                  f"at most {TREND_MAX_LABELS} labels are in range (narrow with the label regex), else one per machine · stock / optimized.")
+    L.add(ts_panel("fps (route mean)", [q(trend("fps_mean"))], unit="none", points=True, point_size=7, thresholds=[("transparent", None), ("green", 240)], legend="right", desc=TREND_DESC), 12, 9)
+    L.add(ts_panel("p99 frame time", [q(trend("p99_ms"))], points=True, point_size=7, thresholds=[("transparent", None), ("orange", 10)], legend="right", log=True, desc=TREND_DESC), 12, 9)
+    L.add(ts_panel("p99.9 frame time", [q(trend("p99_9_ms"))], points=True, point_size=7, thresholds=[("transparent", None), ("red", 16.7)], legend="right", log=True, desc=TREND_DESC), 12, 9)
+    L.add(ts_panel("GPU busy (route mean)", [q(trend("gpu_pct"))], unit="percent", points=True, point_size=7, minv=0, maxv=100, legend="right", desc=TREND_DESC), 12, 9)
+    L.add(ts_panel("Busiest core (route mean)", [q(trend("busiest_core_pct"))], unit="percent", points=True, point_size=7, minv=0, maxv=100, legend="right", desc=TREND_DESC), 12, 9)
+    L.add(ts_panel("Chunk latency p99 (enqueue → publish)", [q(trend("chunk_p99_ms"))], points=True, point_size=7, legend="right", desc=TREND_DESC), 12, 9)
     L.add(ts_panel("Power (route mean, whole machine)", [q(trend("total_w"))], unit="watt", points=True, point_size=7, legend="right",
                    desc="runs.total_w: sysmon's total_w (battery on battery, else CPU package or APU socket + discrete GPU), else the game's pzopt-power.out, else the Mac's macpower system_w. Empty without a CPU reading (scripts/power-access.sh for RAPL)."), 12, 9)
     L.add(ts_panel("Energy per frame (route)", [q(trend("j_per_frame"))], unit="joule", points=True, point_size=7, legend="right",
@@ -315,6 +572,7 @@ FROM runs WHERE {where} AND {BOUND} = 'headroom left' ORDER BY started DESC""",
         var_query("mode", "mode", "SELECT DISTINCT coalesce(mode, '') FROM runs ORDER BY 1", multi=True, include_all=True,
                   current={"text": "All", "value": "$__all"}),
         {"type": "textbox", "name": "label", "label": "label regex", "query": ".*", "current": {"text": ".*", "value": ".*"}, "hide": 0},
+        custom_var("hmachine", "history on", ["desktop", "flip", "dell", "mac"], "desktop"),
     ]
     return dashboard("pzopt-runs", "PZ runs", L, variables, desc="Every harness run imported by harness/grafana/ingest.py")
 
@@ -582,7 +840,13 @@ WHERE x.run IN ({RUNS}) AND x.kind = 'p' AND {IN_ROUTE} GROUP BY x.name, x.run O
     variables = [
         var_query("runs", "runs", "SELECT run FROM runs ORDER BY started DESC", multi=True),
         var_query("base", "base run", "SELECT run FROM runs WHERE run IN (${runs:sqlstring}) ORDER BY started"),
-        var_query("other", "vs run", "SELECT run FROM runs WHERE run IN (${runs:sqlstring}) AND run <> ${base:sqlstring} ORDER BY started"),
+        # with a single run picked, compare it with its previous run of the same label (else the newest other run),
+        # so the diff flame graph never reads "base vs ," with nothing on the right
+        var_query("other", "vs run", """SELECT run FROM (
+  SELECT run, started FROM runs WHERE run IN (${runs:sqlstring}) AND run <> ${base:sqlstring}
+  UNION ALL (SELECT run, started FROM runs WHERE run <> ${base:sqlstring}
+             AND NOT EXISTS (SELECT 1 FROM runs WHERE run IN (${runs:sqlstring}) AND run <> ${base:sqlstring})
+             ORDER BY label = (SELECT label FROM runs WHERE run = ${base:sqlstring}) DESC, started DESC LIMIT 1)) x ORDER BY started"""),
         custom_var("source", "profiler", ["game", "asprof", "jfr", "lua"], "game"),
     ]
     annos = [annotation("route end", f"SELECT {RT0} + make_interval(secs => route_seconds) AS time, run || ' route end' AS text FROM runs WHERE run IN ({RUNS}) AND route_seconds IS NOT NULL", "#73BF69")]
@@ -599,11 +863,11 @@ def live_dashboard():
     L.add(stat_panel("Last 5 s", f"""
 SELECT count(*) / nullif(sum(ms) / 1000, 0) AS fps, percentile_cont(0.99) WITHIN GROUP (ORDER BY ms) AS "p99 ms",
   percentile_cont(0.999) WITHIN GROUP (ORDER BY ms) AS "p99.9 ms", max(ms) AS "max ms", stddev(ms) AS "stdev ms"
-FROM live_overlay WHERE {last5}""", decimals=2, color_mode="none"), 10, 4)
+FROM live_overlay WHERE {last5}""", decimals=2, color_mode="none", no_value="no game running"), 10, 4)
     L.add(stat_panel("Utilization, last 5 s", f"""
 SELECT (SELECT avg(gpu_pct) FROM live_sysmon WHERE {last5}) AS GPU, (SELECT avg(busiest_core_pct) FROM live_sysmon WHERE {last5}) AS "busiest core",
   (SELECT avg(game_load) FROM live_overlay WHERE {last5}) AS "game thread", (SELECT avg(render_load) FROM live_overlay WHERE {last5}) AS "render thread" """,
-                     unit="percent", thr=UTIL_STEPS, decimals=0), 8, 4)
+                     unit="percent", thr=UTIL_STEPS, decimals=0, no_value="no game running"), 8, 4)
     L.add(ts_panel("Frame time", [q("SELECT t AS time, ms AS presented, gpu_ms AS GPU FROM live_overlay WHERE $__timeFilter(t) ORDER BY 1"),
                                   q("SELECT t AS time, ms AS \"game frame\" FROM live_frames WHERE $__timeFilter(t) ORDER BY 1", ref="B")],
                    log=True, thresholds=[("transparent", None), ("green", 4.167), ("orange", 10), ("red", 16.7)],
@@ -626,7 +890,7 @@ FROM live_gamethread WHERE kind = 'l' AND t > now() - interval '10 seconds' GROU
 SELECT coalesce((SELECT avg(total_w) FROM live_sysmon WHERE {last5}), (SELECT avg(total_w) FROM live_power WHERE {last5})) AS "total W",
   coalesce((SELECT avg(cpu_w) FROM live_sysmon WHERE {last5}), (SELECT avg(cpu_w) FROM live_power WHERE {last5})) AS "CPU W",
   coalesce((SELECT avg(gpu_w) FROM live_sysmon WHERE {last5}), (SELECT avg(gpu_w) FROM live_power WHERE {last5})) AS "GPU W",
-  (SELECT avg(total_w) / nullif(avg(fps), 0) FROM live_power WHERE {last5}) AS "J/frame" """, decimals=2, color_mode="none",
+  (SELECT avg(total_w) / nullif(avg(fps), 0) FROM live_power WHERE {last5}) AS "J/frame" """, decimals=2, color_mode="none", no_value="no game running",
                      desc="sysmon while a harness run is going, else the game's own sampler (pzopt-power.out, written while the overlay's frame log is on)"), 6, 8)
     L.add(ts_panel("Power", [q("SELECT t AS time, total_w AS \"total (sysmon)\", cpu_w AS \"CPU (sysmon)\", soc_w AS \"APU socket (sysmon)\", gpu_w AS \"GPU (sysmon)\", bat_w AS \"battery (sysmon)\" FROM live_sysmon WHERE $__timeFilter(t) ORDER BY 1"),
                              q("SELECT t AS time, total_w AS \"total (game)\", cpu_w AS \"CPU (game)\", soc_w AS \"APU socket (game)\", gpu_w AS \"GPU (game)\", bat_w AS \"battery (game)\" FROM live_power WHERE $__timeFilter(t) ORDER BY 1", ref="B")],

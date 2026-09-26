@@ -639,8 +639,8 @@
   },
   {
    "type": "timeseries",
-   "title": "Each day's build on the flip: fps per benchmark, boot and load",
-   "description": "Each day's build (its last release) on one machine (history on: desktop RTX 4090 5120x2160, flip, dell, mac) at default settings, uncapped, route-mean fps, median of the day's runs: the 120 km/h drive east on KY-60 from the Rosewood bench save (clear, and in heavy fog with a thunderstorm), the spinning walk south through Rosewood in fog and storm, the Louisville horde (~2,000 zombies) and the riverside horde shooting. A bench starts on the first day whose harness could run it. Dashed: the stock game, the same every day. Right axis: boot (launch to main menu) and load (Continue to world) in seconds. Hover a day for what it released.",
+   "title": "Each day's build on the flip: fps per benchmark",
+   "description": "Each day's build (its last release) on one machine (history on: desktop RTX 4090 5120x2160, flip, dell, mac) at default settings, uncapped, route-mean fps, median of the day's runs: the 120 km/h drive east on KY-60 from the Rosewood bench save (clear, and in heavy fog with a thunderstorm), the spinning walk south through Rosewood in fog and storm, the Louisville horde (~2,000 zombies) and the riverside horde shooting. A bench starts on the first day whose harness could run it. Dashed: the stock game, the same every day. Hover a day for what it released.",
    "datasource": {
     "type": "grafana-postgresql-datasource",
     "uid": "pzopt-pg"
@@ -655,7 +655,7 @@
      "rawQuery": true,
      "editorMode": "code",
      "format": "table",
-     "rawSql": "WITH d AS (SELECT substring(label from '(daily|dstorm|dspin|dlou|dhorde)-') AS b, substring(label from '(?:daily|dstorm|dspin|dlou|dhorde)-([0-9]{4}|stock)-') AS k,\n             to_char(started, 'YYYY') AS y, run, fps_mean FROM runs\n           -- laptop runs come back from the queue as <machine>-<label>\n           WHERE label ~ '^((flip|dell|mac)-)?(daily|dstorm|dspin|dlou|dhorde)-([0-9]{4}|stock)-[0-9]+$' AND machine = ${hmachine:sqlstring}\n             AND valid AND fps_mean IS NOT NULL AND run NOT IN ('')),\ne AS (SELECT run, min(t) AS t0, min(t) FILTER (WHERE text ~ 'continuing latest save') AS tc FROM events\n      WHERE run IN (SELECT run FROM d) GROUP BY run),\nlt AS (SELECT d.k, d.y, extract(epoch FROM e.tc - e.t0) AS boot,\n         extract(epoch FROM (SELECT min(x.t) FROM events x WHERE x.run = e.run AND x.t > e.tc AND x.text ~ 'world ready') - e.tc) AS load\n       FROM e JOIN d USING (run)),\no AS (SELECT to_date(y || k, 'YYYYMMDD') AS day, b, percentile_cont(0.5) WITHIN GROUP (ORDER BY fps_mean) AS fps FROM d WHERE k <> 'stock' GROUP BY 1, 2),\nst AS (SELECT b, percentile_cont(0.5) WITHIN GROUP (ORDER BY fps_mean) AS fps FROM d WHERE k = 'stock' GROUP BY 1),\nlo AS (SELECT to_date(y || k, 'YYYYMMDD') AS day, percentile_cont(0.5) WITHIN GROUP (ORDER BY boot) AS boot, percentile_cont(0.5) WITHIN GROUP (ORDER BY load) AS load FROM lt\n       WHERE k <> 'stock' GROUP BY 1),\nls AS (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY boot) AS boot, percentile_cont(0.5) WITHIN GROUP (ORDER BY load) AS load FROM lt WHERE k = 'stock')\nSELECT o.day::timestamptz + interval '12 hours' AS time,\n  max(o.fps) FILTER (WHERE o.b = 'daily') AS \"120 km/h drive\", (SELECT fps FROM st WHERE st.b = 'daily') AS \"stock \u00b7 120 km/h drive\",\n  max(o.fps) FILTER (WHERE o.b = 'dstorm') AS \"120 km/h drive, fog + storm\", (SELECT fps FROM st WHERE st.b = 'dstorm') AS \"stock \u00b7 120 km/h drive, fog + storm\",\n  max(o.fps) FILTER (WHERE o.b = 'dspin') AS \"spin south, fog + storm\", (SELECT fps FROM st WHERE st.b = 'dspin') AS \"stock \u00b7 spin south, fog + storm\",\n  max(o.fps) FILTER (WHERE o.b = 'dlou') AS \"Louisville horde\", (SELECT fps FROM st WHERE st.b = 'dlou') AS \"stock \u00b7 Louisville horde\",\n  max(o.fps) FILTER (WHERE o.b = 'dhorde') AS \"horde shooting, riverside\", (SELECT fps FROM st WHERE st.b = 'dhorde') AS \"stock \u00b7 horde shooting, riverside\",\n  max(lo.boot) AS \"boot (s)\", (SELECT boot FROM ls) AS \"stock \u00b7 boot (s)\",\n  max(lo.load) AS \"load (s)\", (SELECT load FROM ls) AS \"stock \u00b7 load (s)\",\n  to_char(o.day, 'YYYYMMDD')::int AS \"build\",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022\",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022 \",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022  \",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022   \",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022    \",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022     \",\n  CASE WHEN o.day IN ('2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022      \",\n  CASE WHEN o.day IN ('2026-09-22', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022       \",\n  CASE WHEN o.day IN ('2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022        \"\nFROM o LEFT JOIN lo USING (day) GROUP BY o.day ORDER BY o.day",
+     "rawSql": "WITH d AS (SELECT substring(label from '(daily|dstorm|dspin|dlou|dhorde)-') AS b, substring(label from '(?:daily|dstorm|dspin|dlou|dhorde)-([0-9]{4}|stock)-') AS k,\n             to_char(started, 'YYYY') AS y, run, fps_mean FROM runs\n           -- laptop runs come back from the queue as <machine>-<label>\n           WHERE label ~ '^((flip|dell|mac)-)?(daily|dstorm|dspin|dlou|dhorde)-([0-9]{4}|stock)-[0-9]+$' AND machine = ${hmachine:sqlstring}\n             AND valid AND fps_mean IS NOT NULL AND run NOT IN ('')),\no AS (SELECT to_date(y || k, 'YYYYMMDD') AS day, b, percentile_cont(0.5) WITHIN GROUP (ORDER BY fps_mean) AS fps FROM d WHERE k <> 'stock' GROUP BY 1, 2),\nst AS (SELECT b, percentile_cont(0.5) WITHIN GROUP (ORDER BY fps_mean) AS fps FROM d WHERE k = 'stock' GROUP BY 1)\nSELECT o.day::timestamptz + interval '12 hours' AS time,\n  max(o.fps) FILTER (WHERE o.b = 'daily') AS \"120 km/h drive\", (SELECT fps FROM st WHERE st.b = 'daily') AS \"stock \u00b7 120 km/h drive\",\n  max(o.fps) FILTER (WHERE o.b = 'dstorm') AS \"120 km/h drive, fog + storm\", (SELECT fps FROM st WHERE st.b = 'dstorm') AS \"stock \u00b7 120 km/h drive, fog + storm\",\n  max(o.fps) FILTER (WHERE o.b = 'dspin') AS \"spin south, fog + storm\", (SELECT fps FROM st WHERE st.b = 'dspin') AS \"stock \u00b7 spin south, fog + storm\",\n  max(o.fps) FILTER (WHERE o.b = 'dlou') AS \"Louisville horde\", (SELECT fps FROM st WHERE st.b = 'dlou') AS \"stock \u00b7 Louisville horde\",\n  max(o.fps) FILTER (WHERE o.b = 'dhorde') AS \"horde shooting, riverside\", (SELECT fps FROM st WHERE st.b = 'dhorde') AS \"stock \u00b7 horde shooting, riverside\",\n  to_char(o.day, 'YYYYMMDD')::int AS \"build\",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022\",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022 \",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022  \",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022   \",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022    \",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022     \",\n  CASE WHEN o.day IN ('2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022      \",\n  CASE WHEN o.day IN ('2026-09-22', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022       \",\n  CASE WHEN o.day IN ('2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022        \"\nFROM o GROUP BY o.day ORDER BY o.day",
      "hide": false
     }
    ],
@@ -942,150 +942,6 @@
        {
         "id": "min",
         "value": 0
-       },
-       {
-        "id": "custom.lineStyle",
-        "value": {
-         "fill": "dash",
-         "dash": [
-          8,
-          6
-         ]
-        }
-       },
-       {
-        "id": "custom.lineWidth",
-        "value": 2
-       },
-       {
-        "id": "custom.pointSize",
-        "value": 5
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "boot (s)"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "s"
-       },
-       {
-        "id": "decimals",
-        "value": 1
-       },
-       {
-        "id": "color",
-        "value": {
-         "mode": "fixed",
-         "fixedColor": "#FADE2A"
-        }
-       },
-       {
-        "id": "custom.axisPlacement",
-        "value": "right"
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "stock \u00b7 boot (s)"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "s"
-       },
-       {
-        "id": "decimals",
-        "value": 1
-       },
-       {
-        "id": "color",
-        "value": {
-         "mode": "fixed",
-         "fixedColor": "#FADE2A"
-        }
-       },
-       {
-        "id": "custom.axisPlacement",
-        "value": "right"
-       },
-       {
-        "id": "custom.lineStyle",
-        "value": {
-         "fill": "dash",
-         "dash": [
-          8,
-          6
-         ]
-        }
-       },
-       {
-        "id": "custom.lineWidth",
-        "value": 2
-       },
-       {
-        "id": "custom.pointSize",
-        "value": 5
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "load (s)"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "s"
-       },
-       {
-        "id": "decimals",
-        "value": 1
-       },
-       {
-        "id": "color",
-        "value": {
-         "mode": "fixed",
-         "fixedColor": "#8AB8FF"
-        }
-       },
-       {
-        "id": "custom.axisPlacement",
-        "value": "right"
-       }
-      ]
-     },
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "stock \u00b7 load (s)"
-      },
-      "properties": [
-       {
-        "id": "unit",
-        "value": "s"
-       },
-       {
-        "id": "decimals",
-        "value": 1
-       },
-       {
-        "id": "color",
-        "value": {
-         "mode": "fixed",
-         "fixedColor": "#8AB8FF"
-        }
-       },
-       {
-        "id": "custom.axisPlacement",
-        "value": "right"
        },
        {
         "id": "custom.lineStyle",
@@ -1755,14 +1611,830 @@
      "maxWidth": 360
     }
    },
-   "timeFrom": "9d",
+   "timeFrom": "10d",
    "hideTimeOverride": true,
    "id": 9,
    "gridPos": {
     "x": 0,
     "y": 16,
     "w": 24,
-    "h": 12
+    "h": 11
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Each day's build on the flip: boot and load time",
+   "description": "Boot (launch to the main menu) and load (Continue to the world ready) in seconds, median over every run of that day's build on the machine (all benchmarks load the same bench save), lower is better. Dashed: the stock game. Hover a day for what it released.",
+   "datasource": {
+    "type": "grafana-postgresql-datasource",
+    "uid": "pzopt-pg"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "datasource": {
+      "type": "grafana-postgresql-datasource",
+      "uid": "pzopt-pg"
+     },
+     "rawQuery": true,
+     "editorMode": "code",
+     "format": "table",
+     "rawSql": "WITH d AS (SELECT substring(label from '(daily|dstorm|dspin|dlou|dhorde)-') AS b, substring(label from '(?:daily|dstorm|dspin|dlou|dhorde)-([0-9]{4}|stock)-') AS k,\n             to_char(started, 'YYYY') AS y, run, fps_mean FROM runs\n           -- laptop runs come back from the queue as <machine>-<label>\n           WHERE label ~ '^((flip|dell|mac)-)?(daily|dstorm|dspin|dlou|dhorde)-([0-9]{4}|stock)-[0-9]+$' AND machine = ${hmachine:sqlstring}\n             AND valid AND fps_mean IS NOT NULL AND run NOT IN ('')),\ne AS (SELECT run, min(t) AS t0, min(t) FILTER (WHERE text ~ 'continuing latest save') AS tc FROM events\n      WHERE run IN (SELECT run FROM d) GROUP BY run),\nlt AS (SELECT d.k, d.y, extract(epoch FROM e.tc - e.t0) AS boot,\n         extract(epoch FROM (SELECT min(x.t) FROM events x WHERE x.run = e.run AND x.t > e.tc AND x.text ~ 'world ready') - e.tc) AS load\n       FROM e JOIN d USING (run)),\no AS (SELECT to_date(y || k, 'YYYYMMDD') AS day, percentile_cont(0.5) WITHIN GROUP (ORDER BY boot) AS boot, percentile_cont(0.5) WITHIN GROUP (ORDER BY load) AS load FROM lt\n      WHERE k <> 'stock' GROUP BY 1),\nls AS (SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY boot) AS boot, percentile_cont(0.5) WITHIN GROUP (ORDER BY load) AS load FROM lt WHERE k = 'stock')\nSELECT o.day::timestamptz + interval '12 hours' AS time,\n  o.boot AS \"boot\", (SELECT boot FROM ls) AS \"stock \u00b7 boot\", o.load AS \"load\", (SELECT load FROM ls) AS \"stock \u00b7 load\",\n  to_char(o.day, 'YYYYMMDD')::int AS \"build\",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022\",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022 \",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022  \",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022   \",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022    \",\n  CASE WHEN o.day IN ('2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022     \",\n  CASE WHEN o.day IN ('2026-09-22', '2026-09-23', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022      \",\n  CASE WHEN o.day IN ('2026-09-22', '2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022       \",\n  CASE WHEN o.day IN ('2026-09-24') THEN to_char(o.day, 'YYYYMMDD')::int END AS \"\u2022        \"\nFROM o ORDER BY o.day",
+     "hide": false
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 3,
+      "pointSize": 9,
+      "showPoints": "always",
+      "fillOpacity": 0,
+      "spanNulls": true,
+      "stacking": {
+       "mode": "none",
+       "group": "A"
+      },
+      "gradientMode": "none",
+      "axisSoftMin": 0,
+      "insertNulls": false
+     },
+     "color": {
+      "mode": "palette-classic"
+     },
+     "decimals": 1
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "boot"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FADE2A"
+        }
+       },
+       {
+        "id": "min",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "stock \u00b7 boot"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#FADE2A"
+        }
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "fill": "dash",
+         "dash": [
+          8,
+          6
+         ]
+        }
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 2
+       },
+       {
+        "id": "custom.pointSize",
+        "value": 5
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "load"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#8AB8FF"
+        }
+       },
+       {
+        "id": "min",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "stock \u00b7 load"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "#8AB8FF"
+        }
+       },
+       {
+        "id": "min",
+        "value": 0
+       },
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "fill": "dash",
+         "dash": [
+          8,
+          6
+         ]
+        }
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 2
+       },
+       {
+        "id": "custom.pointSize",
+        "value": 5
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "build"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260919": {
+            "text": "build 7d2de4c"
+           },
+           "20260920": {
+            "text": "build 5915b2c"
+           },
+           "20260921": {
+            "text": "build 8bbc11a"
+           },
+           "20260922": {
+            "text": "build da3cdea"
+           },
+           "20260923": {
+            "text": "build d492a26"
+           },
+           "20260924": {
+            "text": "build b3904da"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022"
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260919": {
+            "text": "Faster chunk streaming and baking while driving at max zoom"
+           },
+           "20260920": {
+            "text": "Options > Optimizations tab: every setting, one master switch"
+           },
+           "20260921": {
+            "text": "Fog pass: heavy fog in one draw call (220 -> 389 fps)"
+           },
+           "20260922": {
+            "text": "Smooth camera zoom: chunk textures kept, eased zoom"
+           },
+           "20260923": {
+            "text": "Faster Continue: the world builds from the player outwards"
+           },
+           "20260924": {
+            "text": "Input latency: the keyboard reaches the screen a frame sooner"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022 "
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260919": {
+            "text": "Trees and windows baked into the chunk textures"
+           },
+           "20260920": {
+            "text": "In-game performance overlay (F9), no MangoHud or RivaTuner"
+           },
+           "20260921": {
+            "text": "Low-end hardware profile"
+           },
+           "20260922": {
+            "text": "Upscaling: FSR 1.0, bicubic, DLSS"
+           },
+           "20260923": {
+            "text": "Zombie hordes use every core (animation on worker threads)"
+           },
+           "20260924": {
+            "text": "Variable refresh (VRR) on Linux; HDR on Linux and macOS"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022  "
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260919": {
+            "text": "Boot 7.4 -> 5.0 s, loading a save 6.5 -> 4.0 s"
+           },
+           "20260920": {
+            "text": "Game-thread and 400 fps passes: cutaways, lighting, occlusion"
+           },
+           "20260921": {
+            "text": "macOS support"
+           },
+           "20260922": {
+            "text": "Zombie game-thread pass (a horde's share 23 % -> 11 %)"
+           },
+           "20260923": {
+            "text": "Render distance Auto for 4K and ultrawide screens"
+           },
+           "20260924": {
+            "text": "Upscaler fixes, faster DLSS"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022   "
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260919": {
+            "text": "A real Uncapped frame rate, 300-500 fps caps, a separate menu cap"
+           },
+           "20260920": {
+            "text": "Thunderstorm pass: puddle cache, rain tiles, batched drawing (storm 83 -> 131 fps)"
+           },
+           "20260921": {
+            "text": "Smooth moving lights: torch, headlights, lightbars"
+           },
+           "20260922": {
+            "text": "In-game updater in the main menu"
+           },
+           "20260923": {
+            "text": "G1 garbage collector by default (+10 % on a 4-core laptop)"
+           },
+           "20260924": {
+            "text": "Option: zombie detail follows the frame cap"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022    "
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260919": {
+            "text": "Model shader cache (a laptop's load 16 s shorter)"
+           },
+           "20260920": {
+            "text": "Tuned G1 garbage collector settings"
+           },
+           "20260921": {
+            "text": "Game-thread profiler in the F9 overlay"
+           },
+           "20260922": {
+            "text": "Stock vs optimized preview clips in the Optimizations tab"
+           },
+           "20260923": {
+            "text": "Performance overlay nearly free (under 1 %)"
+           },
+           "20260924": {
+            "text": "Power efficiency on hybrid CPUs"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022     "
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260919": {
+            "text": "Fixed: black floor tiles, missing big trees"
+           },
+           "20260920": {
+            "text": "Fixed: objects flickering inside buildings, black chunk squares, missing sound (issue #3)"
+           },
+           "20260921": {
+            "text": "Fixed: Windows micro stutter every 0.5 s, multiplayer join"
+           },
+           "20260922": {
+            "text": "Render distance setting; overlay fits any screen"
+           },
+           "20260923": {
+            "text": "Overlay item in the main and pause menus; Sort by in the Optimizations tab"
+           },
+           "20260924": {
+            "text": "Render distance follows the view upstairs"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022      "
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260922": {
+            "text": "Fewer hitches on 4-core PCs"
+           },
+           "20260923": {
+            "text": "Fixed: parked cars barely spawning, a load hang, the Windows borderless window"
+           },
+           "20260924": {
+            "text": "Clear audio: no clipping under gunfire on stereo"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022       "
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260922": {
+            "text": "Fixed: off-screen zombies thumping doors in bursts"
+           },
+           "20260924": {
+            "text": "Controller: smooth Optimizations tab, L3 + R3 toggles the overlay"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "\u2022        "
+      },
+      "properties": [
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "value",
+          "options": {
+           "20260924": {
+            "text": "Fixed: weather and fog flashing indoors, a ragdoll crash"
+           }
+          }
+         }
+        ]
+       },
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "viz": false,
+         "legend": true,
+         "tooltip": false
+        }
+       },
+       {
+        "id": "custom.axisPlacement",
+        "value": "hidden"
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       },
+       {
+        "id": "custom.showPoints",
+        "value": "never"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 0
+       },
+       {
+        "id": "color",
+        "value": {
+         "mode": "fixed",
+         "fixedColor": "transparent"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "options": {
+    "legend": {
+     "displayMode": "list",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "mode": "multi",
+     "sort": "none",
+     "maxWidth": 360
+    }
+   },
+   "timeFrom": "10d",
+   "hideTimeOverride": true,
+   "id": 10,
+   "gridPos": {
+    "x": 0,
+    "y": 27,
+    "w": 24,
+    "h": 8
    }
   },
   {
@@ -2139,10 +2811,10 @@
     },
     "sortBy": []
    },
-   "id": 10,
+   "id": 11,
    "gridPos": {
     "x": 0,
-    "y": 28,
+    "y": 35,
     "w": 24,
     "h": 6
    }
@@ -2152,10 +2824,10 @@
    "title": "All runs",
    "collapsed": false,
    "panels": [],
-   "id": 11,
+   "id": 12,
    "gridPos": {
     "x": 0,
-    "y": 34,
+    "y": 41,
     "w": 24,
     "h": 1
    }
@@ -2220,10 +2892,10 @@
      "valueSize": 26
     }
    },
-   "id": 12,
+   "id": 13,
    "gridPos": {
     "x": 0,
-    "y": 35,
+    "y": 42,
     "w": 6,
     "h": 4
    }
@@ -2289,10 +2961,10 @@
      "valueSize": 20
     }
    },
-   "id": 13,
+   "id": 14,
    "gridPos": {
     "x": 6,
-    "y": 35,
+    "y": 42,
     "w": 18,
     "h": 4
    }
@@ -3089,10 +3761,10 @@
     },
     "sortBy": []
    },
-   "id": 14,
+   "id": 15,
    "gridPos": {
     "x": 0,
-    "y": 39,
+    "y": 46,
     "w": 24,
     "h": 14
    }
@@ -3102,10 +3774,10 @@
    "title": "Trends (one point per run, series = label or machine)",
    "collapsed": false,
    "panels": [],
-   "id": 15,
+   "id": 16,
    "gridPos": {
     "x": 0,
-    "y": 53,
+    "y": 60,
     "w": 24,
     "h": 1
    }
@@ -3113,7 +3785,7 @@
   {
    "type": "timeseries",
    "title": "fps (route mean)",
-   "description": "One point per run over the dashboard's time range, one series per run label (the legend lists them): the route-window value from analyze.py.",
+   "description": "One point per run over the dashboard's time range: the route-window value from analyze.py. One series per run label while at most 20 labels are in range (narrow with the label regex), else one per machine \u00b7 stock / optimized.",
    "datasource": {
     "type": "grafana-postgresql-datasource",
     "uid": "pzopt-pg"
@@ -3183,10 +3855,10 @@
      "sort": "desc"
     }
    },
-   "id": 16,
+   "id": 17,
    "gridPos": {
     "x": 0,
-    "y": 54,
+    "y": 61,
     "w": 12,
     "h": 9
    }
@@ -3194,7 +3866,7 @@
   {
    "type": "timeseries",
    "title": "p99 frame time",
-   "description": "One point per run over the dashboard's time range, one series per run label (the legend lists them): the route-window value from analyze.py.",
+   "description": "One point per run over the dashboard's time range: the route-window value from analyze.py. One series per run label while at most 20 labels are in range (narrow with the label regex), else one per machine \u00b7 stock / optimized.",
    "datasource": {
     "type": "grafana-postgresql-datasource",
     "uid": "pzopt-pg"
@@ -3268,10 +3940,10 @@
      "sort": "desc"
     }
    },
-   "id": 17,
+   "id": 18,
    "gridPos": {
     "x": 12,
-    "y": 54,
+    "y": 61,
     "w": 12,
     "h": 9
    }
@@ -3279,7 +3951,7 @@
   {
    "type": "timeseries",
    "title": "p99.9 frame time",
-   "description": "One point per run over the dashboard's time range, one series per run label (the legend lists them): the route-window value from analyze.py.",
+   "description": "One point per run over the dashboard's time range: the route-window value from analyze.py. One series per run label while at most 20 labels are in range (narrow with the label regex), else one per machine \u00b7 stock / optimized.",
    "datasource": {
     "type": "grafana-postgresql-datasource",
     "uid": "pzopt-pg"
@@ -3353,10 +4025,10 @@
      "sort": "desc"
     }
    },
-   "id": 18,
+   "id": 19,
    "gridPos": {
     "x": 0,
-    "y": 63,
+    "y": 70,
     "w": 12,
     "h": 9
    }
@@ -3364,7 +4036,7 @@
   {
    "type": "timeseries",
    "title": "GPU busy (route mean)",
-   "description": "One point per run over the dashboard's time range, one series per run label (the legend lists them): the route-window value from analyze.py.",
+   "description": "One point per run over the dashboard's time range: the route-window value from analyze.py. One series per run label while at most 20 labels are in range (narrow with the label regex), else one per machine \u00b7 stock / optimized.",
    "datasource": {
     "type": "grafana-postgresql-datasource",
     "uid": "pzopt-pg"
@@ -3420,10 +4092,10 @@
      "sort": "desc"
     }
    },
-   "id": 19,
+   "id": 20,
    "gridPos": {
     "x": 12,
-    "y": 63,
+    "y": 70,
     "w": 12,
     "h": 9
    }
@@ -3431,7 +4103,7 @@
   {
    "type": "timeseries",
    "title": "Busiest core (route mean)",
-   "description": "One point per run over the dashboard's time range, one series per run label (the legend lists them): the route-window value from analyze.py.",
+   "description": "One point per run over the dashboard's time range: the route-window value from analyze.py. One series per run label while at most 20 labels are in range (narrow with the label regex), else one per machine \u00b7 stock / optimized.",
    "datasource": {
     "type": "grafana-postgresql-datasource",
     "uid": "pzopt-pg"
@@ -3487,10 +4159,10 @@
      "sort": "desc"
     }
    },
-   "id": 20,
+   "id": 21,
    "gridPos": {
     "x": 0,
-    "y": 72,
+    "y": 79,
     "w": 12,
     "h": 9
    }
@@ -3498,7 +4170,7 @@
   {
    "type": "timeseries",
    "title": "Chunk latency p99 (enqueue \u2192 publish)",
-   "description": "One point per run over the dashboard's time range, one series per run label (the legend lists them): the route-window value from analyze.py.",
+   "description": "One point per run over the dashboard's time range: the route-window value from analyze.py. One series per run label while at most 20 labels are in range (narrow with the label regex), else one per machine \u00b7 stock / optimized.",
    "datasource": {
     "type": "grafana-postgresql-datasource",
     "uid": "pzopt-pg"
@@ -3552,10 +4224,10 @@
      "sort": "desc"
     }
    },
-   "id": 21,
+   "id": 22,
    "gridPos": {
     "x": 12,
-    "y": 72,
+    "y": 79,
     "w": 12,
     "h": 9
    }
@@ -3617,10 +4289,10 @@
      "sort": "desc"
     }
    },
-   "id": 22,
+   "id": 23,
    "gridPos": {
     "x": 0,
-    "y": 81,
+    "y": 88,
     "w": 12,
     "h": 9
    }
@@ -3682,10 +4354,10 @@
      "sort": "desc"
     }
    },
-   "id": 23,
+   "id": 24,
    "gridPos": {
     "x": 12,
-    "y": 81,
+    "y": 88,
     "w": 12,
     "h": 9
    }
@@ -3695,10 +4367,10 @@
    "title": "Objective findings",
    "collapsed": false,
    "panels": [],
-   "id": 24,
+   "id": 25,
    "gridPos": {
     "x": 0,
-    "y": 90,
+    "y": 97,
     "w": 24,
     "h": 1
    }
@@ -4014,10 +4686,10 @@
     },
     "sortBy": []
    },
-   "id": 25,
+   "id": 26,
    "gridPos": {
     "x": 0,
-    "y": 91,
+    "y": 98,
     "w": 24,
     "h": 8
    }
@@ -4027,10 +4699,10 @@
    "title": "Hardware use (one point per run, series = label or machine)",
    "collapsed": false,
    "panels": [],
-   "id": 26,
+   "id": 27,
    "gridPos": {
     "x": 0,
-    "y": 99,
+    "y": 106,
     "w": 24,
     "h": 1
    }
@@ -4094,10 +4766,10 @@
      "sort": "desc"
     }
    },
-   "id": 27,
+   "id": 28,
    "gridPos": {
     "x": 0,
-    "y": 100,
+    "y": 107,
     "w": 12,
     "h": 8
    }
@@ -4160,10 +4832,10 @@
      "sort": "desc"
     }
    },
-   "id": 28,
+   "id": 29,
    "gridPos": {
     "x": 12,
-    "y": 100,
+    "y": 107,
     "w": 12,
     "h": 8
    }
@@ -4225,10 +4897,10 @@
      "sort": "desc"
     }
    },
-   "id": 29,
+   "id": 30,
    "gridPos": {
     "x": 0,
-    "y": 108,
+    "y": 115,
     "w": 12,
     "h": 8
    }
@@ -4291,10 +4963,10 @@
      "sort": "desc"
     }
    },
-   "id": 30,
+   "id": 31,
    "gridPos": {
     "x": 12,
-    "y": 108,
+    "y": 115,
     "w": 12,
     "h": 8
    }
@@ -4357,10 +5029,10 @@
      "sort": "desc"
     }
    },
-   "id": 31,
+   "id": 32,
    "gridPos": {
     "x": 0,
-    "y": 116,
+    "y": 123,
     "w": 12,
     "h": 8
    }
@@ -4423,10 +5095,10 @@
      "sort": "desc"
     }
    },
-   "id": 32,
+   "id": 33,
    "gridPos": {
     "x": 12,
-    "y": 116,
+    "y": 123,
     "w": 12,
     "h": 8
    }

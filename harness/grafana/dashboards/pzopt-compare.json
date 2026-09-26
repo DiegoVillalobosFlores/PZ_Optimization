@@ -71,8 +71,8 @@
      "type": "grafana-postgresql-datasource",
      "uid": "pzopt-pg"
     },
-    "definition": "SELECT run FROM runs WHERE run IN (${runs:sqlstring}) AND run <> ${base:sqlstring} ORDER BY started",
-    "query": "SELECT run FROM runs WHERE run IN (${runs:sqlstring}) AND run <> ${base:sqlstring} ORDER BY started",
+    "definition": "SELECT run FROM (\n  SELECT run, started FROM runs WHERE run IN (${runs:sqlstring}) AND run <> ${base:sqlstring}\n  UNION ALL (SELECT run, started FROM runs WHERE run <> ${base:sqlstring}\n             AND NOT EXISTS (SELECT 1 FROM runs WHERE run IN (${runs:sqlstring}) AND run <> ${base:sqlstring})\n             ORDER BY label = (SELECT label FROM runs WHERE run = ${base:sqlstring}) DESC, started DESC LIMIT 1)) x ORDER BY started",
+    "query": "SELECT run FROM (\n  SELECT run, started FROM runs WHERE run IN (${runs:sqlstring}) AND run <> ${base:sqlstring}\n  UNION ALL (SELECT run, started FROM runs WHERE run <> ${base:sqlstring}\n             AND NOT EXISTS (SELECT 1 FROM runs WHERE run IN (${runs:sqlstring}) AND run <> ${base:sqlstring})\n             ORDER BY label = (SELECT label FROM runs WHERE run = ${base:sqlstring}) DESC, started DESC LIMIT 1)) x ORDER BY started",
     "refresh": 2,
     "multi": false,
     "includeAll": false,
@@ -191,7 +191,9 @@
       "cellOptions": {
        "type": "auto"
       },
-      "filterable": false
+      "filterable": false,
+      "inspect": true,
+      "wrapHeaderText": true
      }
     },
     "overrides": [
@@ -540,7 +542,9 @@
       "cellOptions": {
        "type": "auto"
       },
-      "filterable": false
+      "filterable": false,
+      "inspect": true,
+      "wrapHeaderText": true
      }
     },
     "overrides": [
@@ -2339,7 +2343,9 @@
       "cellOptions": {
        "type": "auto"
       },
-      "filterable": false
+      "filterable": false,
+      "inspect": true,
+      "wrapHeaderText": true
      },
      "unit": "percent"
     },
@@ -2424,7 +2430,7 @@
      "rawQuery": true,
      "editorMode": "code",
      "format": "table",
-     "rawSql": "WITH a AS (SELECT stack_id, sum(samples) AS c, 0 AS r FROM stacks WHERE run = ${base:sqlstring} AND source = ${source:sqlstring} AND $__timeFilter(rt) GROUP BY 1\n           UNION ALL SELECT stack_id, 0, sum(samples) FROM stacks WHERE run = ${other:sqlstring} AND source = ${source:sqlstring} AND $__timeFilter(rt) GROUP BY 1),\nf AS (SELECT d.frames, a.c, a.r FROM a JOIN stack_defs d ON d.id = a.stack_id),\nn AS (SELECT f.frames[1:i] AS path, sum(f.c + f.r) AS value, sum(f.r) AS value_right,\n             sum(f.c + f.r) FILTER (WHERE i = cardinality(f.frames)) AS self, sum(f.r) FILTER (WHERE i = cardinality(f.frames)) AS self_right\n      FROM f, generate_series(0, cardinality(f.frames)) AS i GROUP BY 1)\nSELECT cardinality(path) AS level, value, coalesce(self, 0) AS self, coalesce(path[cardinality(path)], 'all') AS label,\n  value_right AS \"valueRight\", coalesce(self_right, 0) AS \"selfRight\" FROM n ORDER BY path",
+     "rawSql": "WITH a AS (SELECT stack_id, sum(samples) AS c, 0 AS r FROM stacks WHERE run = ${base:sqlstring} AND source = ${source:sqlstring} AND $__timeFilter(rt) GROUP BY 1\n           UNION ALL SELECT stack_id, 0, sum(samples) FROM stacks WHERE run = ${other:sqlstring} AND source = ${source:sqlstring} AND $__timeFilter(rt) GROUP BY 1),\nf AS (SELECT d.frames, a.c, a.r FROM a JOIN stack_defs d ON d.id = a.stack_id),\nn AS (SELECT f.frames[1:i] AS path, sum(f.c + f.r) AS value, sum(f.r) AS value_right,\n             sum(f.c + f.r) FILTER (WHERE i = cardinality(f.frames)) AS self, sum(f.r) FILTER (WHERE i = cardinality(f.frames)) AS self_right\n      FROM f, generate_series(0, cardinality(f.frames)) AS i GROUP BY 1)\nSELECT level, value, self, label, \"valueRight\", \"selfRight\" FROM (\n  SELECT cardinality(path) AS level, value, coalesce(self, 0) AS self, coalesce(path[cardinality(path)], 'all') AS label,\n    value_right AS \"valueRight\", coalesce(self_right, 0) AS \"selfRight\", path FROM n\n  UNION ALL SELECT 0, 0, 0, 'no samples in this range', 0, 0, ARRAY[]::text[] WHERE NOT EXISTS (SELECT 1 FROM n)) z ORDER BY path",
      "hide": false
     }
    ],

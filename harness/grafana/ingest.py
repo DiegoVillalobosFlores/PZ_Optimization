@@ -31,6 +31,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -1093,11 +1094,19 @@ class Live:
         self.send(sql)
 
 
+def workshop_snapshot():
+    try:
+        import workshop_stats
+        workshop_stats.snapshot()
+    except Exception as e:  # Steam down or rate-limiting: the next try is in 30 min
+        print(f"workshop: {e}", file=sys.stderr, flush=True)
+
+
 def follow():
     live, since = Live(), since_epoch()
     known = {r[0]: float(r[1]) for r in psql_query("SELECT run, coalesce(files_mtime, 0) FROM runs")}
     failed = {}
-    last_scan = last_prune = last_spool = 0.0
+    last_scan = last_prune = last_spool = last_workshop = 0.0
     last_stack_prune = time.time() - 3000  # first definition prune ~10 min after start
     print(f"follow: live from {ZOMBOID}, runs since {datetime.datetime.fromtimestamp(since)} under {', '.join(map(str, run_roots()))}", flush=True)
     while True:
@@ -1118,6 +1127,9 @@ def follow():
                 except Exception as e:
                     failed[d.name] = m
                     print(f"import {d.name} failed: {e}", file=sys.stderr, flush=True)
+        if now - last_workshop > 1800:  # the Workshop item's public numbers (hero row of the home dashboard)
+            last_workshop = now
+            threading.Thread(target=workshop_snapshot, daemon=True).start()
         if now - last_spool > 30 and remote().spooled():
             last_spool = now
             remote().flush()

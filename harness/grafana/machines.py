@@ -75,8 +75,10 @@ FROM runs WHERE {mine} AND $__timeFilter(started) ORDER BY resolution, opengl, g
         L.row(f"Stock vs PZ Optimization on the {m}")
         for title, w, h in (("Stock game", 10, 7), ("Faster than stock", 4, 7), ("With PZ Optimization", 10, 7)):
             L.add(retarget(hero[title], m), w, h)
-        daily = next(p for t, p in hero.items() if t and t.startswith("Each day's build"))
-        L.add(retarget(daily, m, f"Each day's build on the {m}: fps per benchmark, boot and load"), 24, 12)
+        # the daily charts (fps per benchmark, then boot and load time), retitled for the machine
+        for t, p in hero.items():
+            if t and t.startswith("Each day's build"):
+                L.add(retarget(p, m, t.replace("${hmachine}", m)), 24, 11 if "fps" in t else 8)
         L.add(retarget(hero["Every scene measured both ways (desktop)"], m, f"Every scene measured both ways ({m})"), 24, 6)
 
     # the runs part of the home page, restricted by the hidden machine constant

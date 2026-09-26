@@ -1,0 +1,84 @@
+{
+ "_doc": "What each day's build brought: the hover of the home dashboard's daily 120 km/h drive chart (dashboards.py bakes it into value mappings; regenerate and deploy after an edit). build = the commit that day's drive runs measure: the last release of the day (Europe/Berlin), before 09-21 the day's last commit, built in a detached worktree. Runs are labelled daily-<MMDD>-<n>, the stock game daily-stock-<n> (--prop enabled=false): harness/run.sh --mode drive --flag route=E:1200 --flag kmh=193 --flag zoom=max --prop instrument=true --prop uncappedFps=true --no-dashboard --launcher direct, from the worktree's own run.sh. excluded = runs whose drive telemetry (console 'harness: drive t=' lines) shows the car more than 10 tiles off the line (the pre-09-22 follower swings 7-9 at full speed without a hit) or a speed drop > 40 km/h: their fps is not the drive's.",
+ "days": [
+  {
+   "day": "2026-09-19",
+   "build": "7d2de4c",
+   "notes": [
+    "Faster chunk streaming and baking while driving at max zoom",
+    "Trees and windows baked into the chunk textures",
+    "Boot 7.4 -> 5.0 s, loading a save 6.5 -> 4.0 s",
+    "A real Uncapped frame rate, 300-500 fps caps, a separate menu cap",
+    "Model shader cache (a laptop's load 16 s shorter)",
+    "Fixed: black floor tiles, missing big trees"
+   ]
+  },
+  {
+   "day": "2026-09-20",
+   "build": "5915b2c",
+   "notes": [
+    "Options > Optimizations tab: every setting, one master switch",
+    "In-game performance overlay (F9), no MangoHud or RivaTuner",
+    "Game-thread and 400 fps passes: cutaways, lighting, occlusion",
+    "Thunderstorm pass: puddle cache, rain tiles, batched drawing (storm 83 -> 131 fps)",
+    "Tuned G1 garbage collector settings",
+    "Fixed: objects flickering inside buildings, black chunk squares, missing sound (issue #3)"
+   ]
+  },
+  {
+   "day": "2026-09-21",
+   "build": "8bbc11a",
+   "notes": [
+    "Fog pass: heavy fog in one draw call (220 -> 389 fps)",
+    "Low-end hardware profile",
+    "macOS support",
+    "Smooth moving lights: torch, headlights, lightbars",
+    "Game-thread profiler in the F9 overlay",
+    "Fixed: Windows micro stutter every 0.5 s, multiplayer join"
+   ]
+  },
+  {
+   "day": "2026-09-22",
+   "build": "da3cdea",
+   "notes": [
+    "Smooth camera zoom: chunk textures kept, eased zoom",
+    "Upscaling: FSR 1.0, bicubic, DLSS",
+    "Zombie game-thread pass (a horde's share 23 % -> 11 %)",
+    "In-game updater in the main menu",
+    "Stock vs optimized preview clips in the Optimizations tab",
+    "Render distance setting; overlay fits any screen",
+    "Fewer hitches on 4-core PCs",
+    "Fixed: off-screen zombies thumping doors in bursts"
+   ]
+  },
+  {
+   "day": "2026-09-23",
+   "build": "d492a26",
+   "notes": [
+    "Faster Continue: the world builds from the player outwards",
+    "Zombie hordes use every core (animation on worker threads)",
+    "Render distance Auto for 4K and ultrawide screens",
+    "G1 garbage collector by default (+10 % on a 4-core laptop)",
+    "Performance overlay nearly free (under 1 %)",
+    "Overlay item in the main and pause menus; Sort by in the Optimizations tab",
+    "Fixed: parked cars barely spawning, a load hang, the Windows borderless window"
+   ]
+  },
+  {
+   "day": "2026-09-24",
+   "build": "b3904da",
+   "notes": [
+    "Input latency: the keyboard reaches the screen a frame sooner",
+    "Variable refresh (VRR) on Linux; HDR on Linux and macOS",
+    "Upscaler fixes, faster DLSS",
+    "Option: zombie detail follows the frame cap",
+    "Power efficiency on hybrid CPUs",
+    "Render distance follows the view upstairs",
+    "Clear audio: no clipping under gunfire on stereo",
+    "Controller: smooth Optimizations tab, L3 + R3 toggles the overlay",
+    "Fixed: weather and fog flashing indoors, a ragdoll crash"
+   ]
+  }
+ ],
+ "excluded": {}
+}

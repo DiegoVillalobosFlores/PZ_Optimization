@@ -26,3 +26,4 @@ https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/imag
 https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/32-texture-compression.gif https://da.gd/1a7O
 https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/33-let-there-be-light.gif https://da.gd/8L48E
 https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/34-faster-local-updates.gif https://da.gd/Q1X2iF
+https://raw.githubusercontent.com/xD3I/PZ_Optimization/master/docs/workshop/images/35-reflections.gif https://da.gd/MBUSm

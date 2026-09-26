@@ -211,6 +211,11 @@ heading (its image stays).
 `docs/media/sprite-filter-stock-vs-sharp.mp4`: `sfv-walk0.75-*`, `sfv-walk1.5-*`, `sfv-drive-*`, `devCapture=...,crop=...,ram`),
 3.2 s per scene at 10 fps, 96 colours (3.2 MB); the table: fine detail at 75 % / 175 % / in the 120 km/h drive, the world
 pass's GPU time on the drive and zoomed out. The darkness card `37` lost its "New!" heading (its image stays).
+`39` the "New! Sun, moon and cloud shadows" card (`harness/sky-card-gif.py`; 2026-09-26, `docs/findings-sky-2026-09-26.md`):
+left, the game's own frames (`devCapture`) of the stock look against sun shadows on, runs `card-sky-{clouds,evening,moon}-{off,on}`:
+Rosewood at 16:00 under 50 % clouds drifting at 8x speed, at 19:30 (long shadows), at 23:00 under the 1993-07-03 full moon;
+right, what is new and the chunk composite's GPU time with clouds on (632 vs 623 us). The sharp sprites card `38` lost its
+"New!" heading (its image stays).
 `description.txt` embeds them with `[img]` from the raw GitHub URL of `master`,
 so they render only after the folder is pushed. The staged page carries da.gd short links instead (2026-09-24,
 `scripts/workshop-shorten.py`, cache `docs/workshop/short-urls.txt`, ~80 characters saved per image; da.gd is the one

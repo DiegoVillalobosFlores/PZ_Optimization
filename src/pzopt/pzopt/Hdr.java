@@ -102,7 +102,7 @@ public final class Hdr {
       float knee; // encode roll-off start, fraction of the peak
       float blackLift; // world black offset in nits (negative = crush), 0 = none
       float gamma; // decode exponent of the SDR signal
-      float nightLo, nightHi; // average world luminance (linear) mapped to night 1 .. 0
+      float nightLo, nightHi; // local mean luminance (linear) mapped to night 1 .. 0
       float bloom; // bloom strength (0 = off): the blurred energy the expansion added, added back
       float light, lightCurve, lightFlipY, debugView; // light-map gain strength / exponent, map orientation, 1-3 = debug views
       float lightMax = 4F; // light gain at full excess (x)
@@ -462,6 +462,7 @@ public final class Hdr {
          "uniform vec4 pzHdrC; // x saturation, y black offset (fraction of paper), z night lo, w night hi",
          "uniform vec4 pzHdrD; // x gamma, y stats valid, z bloom strength, w bloom valid",
          "uniform sampler2D pzHdrStats;",
+         "uniform sampler2D pzHdrAux; // r = sun exposure, g = local mean linear luminance",
          "uniform vec3 pzHdrL0; // window px (gl_FragCoord) -> light map UV (row u)",
          "uniform vec3 pzHdrL1; // (row v)",
          "uniform vec4 pzHdrF; // x light strength, y light curve, z light map valid, w debug view",
@@ -473,7 +474,7 @@ public final class Hdr {
          "}",
          "// the map is the floor's light; a wall face, a character or a crate above a floor pixel takes the light of the",
          "// floor in front of it, which is below it on screen: max over samples down to the reach, with a falloff",
-         "uniform vec4 pzHdrH; // x light tint",
+         "uniform vec4 pzHdrH; // x light tint, y climate night cap, zw uploaded aux UV extent (0 when unavailable)",
          "vec4 pzHdrPick(vec4 best, vec4 s, float w) {",
          "  return s.a * w > best.a ? vec4(s.rgb, s.a * w) : best;",
          "}",
@@ -499,11 +500,28 @@ public final class Hdr {
          "  float g = (pzHdrG.x - 1.0) * pzHdrF.x * pow(m.a, pzHdrF.y);",
          "  return vec3(1.0) + g * mix(vec3(1.0), m.rgb, pzHdrH.x) + vec3(flash * (1.0 - m.a));",
          "}",
-         "float pzHdrNight() {",
-         "  float avg = pzHdrD.y > 0.5 ? texture2D(pzHdrStats, vec2(0.5), 16.0).a : 0.2; // bias to the 1x1 mip (GLSL 1.20 has no textureLod in fragments)",
-         "  // a dark frame by day (the unseen area, an interior) is not night: the climate's daylight caps the key (y), else",
-         "  // the night ITM lifted pale albedo in daylight (hdr23-riverday: 1.45x SDR with the sun off)",
+         "float pzHdrNightAt(vec2 windowPx) {",
+         "  if (pzHdrH.z <= 0.0 || pzHdrH.w <= 0.0) return 0.0;",
+         "  vec3 p = vec3(windowPx, 1.0);",
+         "  vec2 uv = vec2(dot(pzHdrL0, p), dot(pzHdrL1, p));",
+         "  if (uv.x < 0.0 || uv.y < 0.0 || uv.x >= pzHdrH.z || uv.y >= pzHdrH.w) return 0.0;",
+         "  // Clamp to uploaded texel centers: unused storage may belong to an older, larger map.",
+         "  float halfTexel = 0.5 / " + HdrLight.MAX + ".0;",
+         "  uv = vec2(clamp(uv.x, halfTexel, pzHdrH.z - halfTexel), clamp(uv.y, halfTexel, pzHdrH.w - halfTexel));",
+         "  float avg = texture2D(pzHdrAux, uv).g;",
          "  return min(1.0 - smoothstep(pzHdrC.z, pzHdrC.w, avg), pzHdrH.y);",
+         "}",
+         "float pzHdrNight(vec2 windowPx) {",
+         "  // Match the light map's vertical reach for walls and objects above the floor.",
+         "  // Prefer the brighter reference so a dark floor behind a lit wall cannot over-amplify it.",
+         "  float night = pzHdrNightAt(windowPx);",
+         "  float h = pzHdrG.w;",
+         "  if (h > 0.5) {",
+         "    night = min(night, pzHdrNightAt(windowPx - vec2(0.0, h * 0.33)));",
+         "    night = min(night, pzHdrNightAt(windowPx - vec2(0.0, h * 0.67)));",
+         "    night = min(night, pzHdrNightAt(windowPx - vec2(0.0, h)));",
+         "  }",
+         "  return night;",
          "}",
          "float pzHdrGain(vec3 lin, float night) {",
          "  float t = mix(pzHdrB.x, pzHdrB.y, night);",
@@ -648,7 +666,6 @@ public final class Hdr {
          GAIN_GLSL,
          "uniform sampler2D pzHdrBloom;",
          "uniform vec4 pzHdrE; // the player's screen rect in window px (xy bottom-left origin, zw size): bloom level 0 covers it",
-         "uniform sampler2D pzHdrAux; // HdrLight aux map: r = sun exposure (outdoors x light)",
          "uniform vec4 pzHdrS; // x sun gain above 1 (sunMax - 1) x sun strength, y aux valid",
          "uniform sampler2D pzHdrGlintTex; // HdrGlint: water / puddle speculars (rgb g / (1 + g), a the surface luminance)",
          "uniform sampler2D pzHdrWorldTex; // the world texture (render size): what the surface became after later draws",
@@ -690,7 +707,7 @@ public final class Hdr {
          "    if (pzHdrF.w > 1.5) { vec2 sq = floor(luv * 256.0); float k = mod(sq.x + sq.y, 2.0); return mix(c, vec3(k, 1.0 - k, 0.0), 0.35); }",
          "    return mix(c, vec3(1.0, 0.0, 0.0), pzHdrLightExcess(gl_FragCoord.xy) * 0.8);",
          "  }",
-         "  lin *= pzHdrGain(lin, pzHdrNight()) * pzHdrLightGain(gl_FragCoord.xy);",
+         "  lin *= pzHdrGain(lin, pzHdrNight(gl_FragCoord.xy)) * pzHdrLightGain(gl_FragCoord.xy);",
          "  if (pzHdrS.y > 0.5 && pzHdrS.x > 0.0) {",
          "    vec3 sp = vec3(gl_FragCoord.xy, 1.0);",
          "    lin *= 1.0 + pzHdrS.x * texture2D(pzHdrAux, vec2(dot(pzHdrL0, sp), dot(pzHdrL1, sp))).r;",
@@ -758,8 +775,8 @@ public final class Hdr {
       setLightUniforms(uL0, uL1, uF, uLight);
       setWindowRect(uE);
       boolean glint = HdrGlint.bindForComposite();
-      boolean aux = HdrLight.bindAux();
-      GL20.glUniform1i(GL20.glGetUniformLocation(prog, "pzHdrAux"), HdrLight.AUX_UNIT);
+      // setLightUniforms has already rebound the shared aux map for this floor.
+      boolean aux = HdrLight.ready && HdrExposure.matchesFloor(HdrLight.mapZ);
       GL20.glUniform4f(GL20.glGetUniformLocation(prog, "pzHdrS"), (tune.sunMax - 1F) * HdrGlint.sunStrength, aux ? 1F : 0F, 0F, 0F);
       GL20.glUniform4f(GL20.glGetUniformLocation(prog, "pzHdrGl"), glint ? 1F : 0F, 1F, 0F, 0F);
       GL20.glUniform4f(GL20.glGetUniformLocation(prog, "pzHdrWR"), worldRectUv[0], worldRectUv[1], worldRectUv[2], worldRectUv[3]);
@@ -804,7 +821,11 @@ public final class Hdr {
    private static void setLightUniforms(int l0, int l1, int f, int sampler) {
       int prog = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
       float nightCap = nightCap();
-      GL20.glUniform4f(GL20.glGetUniformLocation(prog, "pzHdrH"), tune.lightTint, nightCap, 0F, 0F);
+      int auxSampler = GL20.glGetUniformLocation(prog, "pzHdrAux");
+      boolean aux = auxSampler >= 0 && HdrLight.bindAux();
+      GL20.glUniform1i(auxSampler, HdrLight.AUX_UNIT);
+      GL20.glUniform4f(GL20.glGetUniformLocation(prog, "pzHdrH"), tune.lightTint, nightCap,
+            aux ? HdrLight.mapWidthUV : 0F, aux ? HdrLight.mapHeightUV : 0F);
       float levelPx = 96F * Core.tileScale / Math.max(0.1F, Core.getInstance().getZoom(0)); // one floor level on screen
       GL20.glUniform4f(GL20.glGetUniformLocation(prog, "pzHdrG"), tune.lightMax, tune.itmDay, 1F + (tune.flashMax - 1F) * flash, levelPx * tune.lightReach);
       float[] m = HdrLight.mapping;
@@ -834,7 +855,7 @@ public final class Hdr {
       return t.peakNits > 0 && !HdrMac.MAC ? Math.min(t.peakNits, (float)HdrWayland.encMax) : (float)HdrWayland.encMax;
    }
 
-   // ---- world passes before the composite: average luminance (GPU mip chain, no read-back) and bloom ----
+   // ---- world passes before the composite: diagnostic frame luminance and bloom ----
 
    private static int statsTex, statsFbo, statsProgram, statsVao;
    private static final int STATS_W = 256, STATS_H = 128;
@@ -856,13 +877,21 @@ public final class Hdr {
       if (active && !alphaGain) {
          HdrGlint.update();
       }
-      if (active && tune.light > 0F) {
+      if (active) {
+         zombie.characters.IsoPlayer player = zombie.characters.IsoPlayer.players[0];
+         HdrExposure.Sample exposure = HdrExposure.sample(
+               zombie.iso.IsoWorld.instance != null ? zombie.iso.IsoWorld.instance.currentCell : null,
+               player != null ? player.getCurrentSquare() : null, tune.gamma, Config.DEV_HDR_TRACE_MS > 0);
+         // Select the map's floor in draw order; player-local luminance is diagnostic only.
+         SpriteRenderer.instance.drawGeneric(exposure);
+         // Local night amplification needs the aux map even when lamp enhancement is disabled.
          HdrLight.queue(tune.lightFlipY);
       }
       if (Config.DEV_HDR_TRACE_MS > 0 && zombie.characters.IsoPlayer.players[0] != null) {
          zombie.characters.IsoPlayer p = zombie.characters.IsoPlayer.players[0];
          traceDir = String.valueOf(p.getDir());
          traceAngle = (float)Math.toDegrees(Math.atan2(p.getForwardDirection().y, p.getForwardDirection().x));
+         traceZoom = Core.getInstance().getZoom(0);
       }
       if (active) {
          SpriteRenderer.instance.drawGeneric(STATS);
@@ -913,7 +942,6 @@ public final class Hdr {
       worldRectUv[1] = rect[1] / th;
       worldRectUv[2] = rect[2] / tw;
       worldRectUv[3] = rect[3] / th;
-      GpuSections.markNow("hdr.stats", false);
       GL11.glGetIntegerv(GL11.GL_VIEWPORT, SAVED_VIEWPORT);
       int prevFbo = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
       int prevProgram = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
@@ -928,22 +956,20 @@ public final class Hdr {
       GL30.glBindVertexArray(statsVao);
       GL13.glActiveTexture(GL13.GL_TEXTURE0);
 
-      // 1. average luminance
-      GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, statsFbo);
-      GL11.glViewport(0, 0, STATS_W, STATS_H);
-      GL20.glUseProgram(statsProgram);
-      GL11.glBindTexture(GL11.GL_TEXTURE_2D, tex.getID());
-      GL20.glUniform1i(GL20.glGetUniformLocation(statsProgram, "src"), 0);
-      GL20.glUniform4f(GL20.glGetUniformLocation(statsProgram, "rect"), worldRectUv[0], worldRectUv[1], worldRectUv[2], worldRectUv[3]);
-      GL20.glUniform1f(GL20.glGetUniformLocation(statsProgram, "gamma"), tune.gamma);
-      GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, 3);
-      GL11.glBindTexture(GL11.GL_TEXTURE_2D, statsTex);
-      GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
-      GL13.glActiveTexture(GL13.GL_TEXTURE0 + STATS_UNIT);
-      GL11.glBindTexture(GL11.GL_TEXTURE_2D, statsTex); // the composite and the bright pass sample it on unit 7
-      GL13.glActiveTexture(GL13.GL_TEXTURE0);
-      GpuSections.markNow("hdr.stats", true);
+      // The screen average is diagnostic only; camera composition no longer sets exposure.
       if (Config.DEV_HDR_TRACE_MS > 0) {
+         GpuSections.markNow("hdr.stats", false);
+         GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, statsFbo);
+         GL11.glViewport(0, 0, STATS_W, STATS_H);
+         GL20.glUseProgram(statsProgram);
+         GL11.glBindTexture(GL11.GL_TEXTURE_2D, tex.getID());
+         GL20.glUniform1i(GL20.glGetUniformLocation(statsProgram, "src"), 0);
+         GL20.glUniform4f(GL20.glGetUniformLocation(statsProgram, "rect"), worldRectUv[0], worldRectUv[1], worldRectUv[2], worldRectUv[3]);
+         GL20.glUniform1f(GL20.glGetUniformLocation(statsProgram, "gamma"), tune.gamma);
+         GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, 3);
+         GL11.glBindTexture(GL11.GL_TEXTURE_2D, statsTex);
+         GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
+         GpuSections.markNow("hdr.stats", true);
          trace();
       }
 
@@ -982,7 +1008,7 @@ public final class Hdr {
    }
 
    private static volatile String traceDir = "?";
-   private static volatile float traceAngle;
+   private static volatile float traceAngle, traceZoom;
    private static long traceNextMs;
    private static final java.nio.FloatBuffer TRACE_BUF = BufferUtils.createFloatBuffer(4);
 
@@ -999,11 +1025,13 @@ public final class Hdr {
       GL11.glGetTexImage(GL11.GL_TEXTURE_2D, top, GL11.GL_RGBA, GL11.GL_FLOAT, TRACE_BUF);
       float avg = TRACE_BUF.get(3);
       float dl = HdrGlint.daylight, nightCap = nightCap();
-      float s = Math.max(0F, Math.min(1F, (avg - tune.nightLo) / Math.max(1e-6F, tune.nightHi - tune.nightLo)));
-      float night = Math.min(1F - s * s * (3F - 2F * s), nightCap);
-      Log.info(String.format("hdr trace: dir=%s angle=%.0f avg=%.4f night=%.2f nightCap=%.2f daylight=%.2f lightAmbient=%.3f seen=%d maxExcess=%d could=%d counted=%d medAll=%d medSeen=%d medCould=%d",
-            traceDir, traceAngle, avg, night, nightCap, dl, HdrLight.lastAmbient, HdrLight.lastSeen, HdrLight.lastMaxExcess, HdrLight.lastCould, HdrLight.lastCounted,
-            HdrLight.lastMedAll, HdrLight.lastMedSeen, HdrLight.lastMedCould));
+      HdrExposure.Sample exposure = HdrExposure.current;
+      float night = exposure.squares > 0
+            ? HdrExposure.night(exposure.luminance, tune.nightLo, tune.nightHi, nightCap) : 0F;
+      Log.info(String.format("hdr trace: dir=%s angle=%.0f zoom=%.3f avg=%.4f playerNight=%.2f nightCap=%.2f daylight=%.2f localAmbientMean=%.3f seen=%d maxExcess=%d could=%d counted=%d medAll=%d medSeen=%d medCould=%d playerExposure=%.4f sample=%d,%d,%d samples=%d mapNightMin=%.2f mapNightMax=%.2f",
+            traceDir, traceAngle, traceZoom, avg, night, nightCap, dl, HdrLight.lastAmbient, HdrLight.lastSeen, HdrLight.lastMaxExcess, HdrLight.lastCould, HdrLight.lastCounted,
+            HdrLight.lastMedAll, HdrLight.lastMedSeen, HdrLight.lastMedCould, exposure.luminance,
+            exposure.x, exposure.y, exposure.z, exposure.squares, HdrLight.lastNightMin, HdrLight.lastNightMax));
    }
 
    private static int fboFor(int texture) {
@@ -1131,7 +1159,8 @@ public final class Hdr {
          "  float i = dot(c, vec3(0.3, 0.59, 0.11));",
          "  c = (mix(c, vec3(i), 0.1) - 0.4) * 1.2 + 0.4;",
          "  vec3 lin = pow(clamp(c, 0.0, 1.0), vec3(pzHdrD.x));",
-         "  vec3 gain = pzHdrGain(lin, pzHdrNight()) * pzHdrLightGain(pzHdrE.xy + uv * pzHdrE.zw);",
+         "  vec2 windowPx = pzHdrE.xy + uv * pzHdrE.zw;",
+         "  vec3 gain = pzHdrGain(lin, pzHdrNight(windowPx)) * pzHdrLightGain(windowPx);",
          "  o = vec4(lin * (gain - 1.0), 1.0);",
          "}");
 
@@ -1284,7 +1313,7 @@ public final class Hdr {
          "  float i = dot(c, vec3(0.3, 0.59, 0.11));",
          "  c = (mix(c, vec3(i), 0.1) - 0.4) * 1.2 + 0.4;",
          "  vec3 lin = pow(clamp(c, 0.0, 1.0), vec3(pzHdrD.x));",
-         "  vec3 gv = pzHdrGain(lin, pzHdrNight()) * pzHdrLightGain(gl_FragCoord.xy);",
+         "  vec3 gv = pzHdrGain(lin, pzHdrNight(gl_FragCoord.xy)) * pzHdrLightGain(gl_FragCoord.xy);",
          "  float g = max(max(gv.r, gv.g), gv.b);",
          "  gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0 - clamp(log2(max(g, 1.0)) / log2Max, 0.0, 1.0));",
          "}");

@@ -462,6 +462,11 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   the chunk-depth texel and its neighbours 2 texels away, only where a light reaches; +52 us/frame on the flip) and
   `bakeLevelChangeFrames` / `bakeLevelChangeRadius` (a floor change bakes the 3x3 chunks round the player at once) -> blink =
   stock. Rig: `--flag explore=stairs --flag director=jev` + `harness/stairs-flicker.py` (harness/CLAUDE.md).
+- Light leaks (2026-09-26, `docs/findings-ppl-leaks-2026-09-26.md`): with pixelLight a room behind a wall lit up on the
+  basement stairs and walls took colours from another floor. `pplTorchCanSee` (the torch off squares the player cannot see:
+  the native lists it behind walls without adding it), `pplOwnLevelLights` (dynamic lights on their own level only, not ±1),
+  `pplShadowDepthTest` (the reprojected torch shadow mask ignores texels of another surface after a floor change). Compare
+  against `pixelLight=false` with devCapture crops of the stairs walk (`--flag time_of_day=1 --flag lights=on --flag torch=on`).
 - Driving smoothness (2026-09-26, `docs/findings-car-jitter-2026-09-26.md`): the car's "micro rubber band" was the
   driving camera placed inside the player's update, before the car moved (per session / per town stretch: object update
   order), plus 100 Hz Bullet steps drawn without interpolation. `vehicleSmooth=interp` (pzopt.VehicleSmooth: the frame

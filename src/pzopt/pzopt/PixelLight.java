@@ -944,11 +944,14 @@ public final class PixelLight {
                      }
                   }
                   float tmax = Math.max(tr, Math.max(tg, tb)), imax = Math.max(li.r, Math.max(li.g, li.b));
-                  if (tmax > 0.02F && imax < 0.9F * tmax || tmax <= 0.02F && (jl.pzoptVis() & 2) == 0 && torchNear(sq.x + 0.5F, sq.y + 0.5F, z)) {
+                  boolean canSee = (jl.pzoptVis() & 2) != 0;
+                  if (tmax > 0.02F && (imax < 0.9F * tmax || Config.PPL_TORCH_CAN_SEE && !canSee) || tmax <= 0.02F && !canSee && torchNear(sq.x + 0.5F, sq.y + 0.5F, z)) {
                      // the native lists the torch here but did not add it (a wall hides it, or the square is dark for the
-                     // player): nothing to take out, and the torch stays off here. No entry at all: the model decides where
-                     // the player can see the square (one the torch has just turned to is not lit by the native yet; the
-                     // torch points where the player looks), never where the player cannot (fog of war)
+                     // player): nothing to take out, and the torch stays off here. A square the player cannot see never took
+                     // it: a room lit by its own lamp is brighter than the torch, so the brightness test alone let the torch
+                     // through the wall. No entry at all: the model decides where the player can see the square (one the torch
+                     // has just turned to is not lit by the native yet; the torch points where the player looks), never where
+                     // the player cannot (fog of war)
                      tr = tg = tb = 0.0F;
                      tvis = 0;
                   }
@@ -1143,12 +1146,17 @@ public final class PixelLight {
    }
    private static IsoChunk packChunk;
 
+   /** The level a light belongs to: a holder on the stairs (z 0.6) lights the level of the stairs' squares. */
+   static int lightLevel(float z) {
+      return (int)Math.floor(z + 0.05F);
+   }
+
    /** A handheld torch could reach this point (the frame's torch list, reach + a square). */
    private static boolean torchNear(float x, float y, int z) {
       ArrayList<IsoGameCharacter.TorchInfo> torches = LightingJNI.pzoptTorches();
       for (int i = 0; i < torches.size(); i++) {
          IsoGameCharacter.TorchInfo t = torches.get(i);
-         if (t.id == 0 || t.id >= 4096 || Math.abs(t.z - z) > 1.5F) {
+         if (t.id == 0 || t.id >= 4096 || (Config.PPL_OWN_LEVEL_LIGHTS ? lightLevel(t.z) != z : Math.abs(t.z - z) > 1.5F)) {
             continue;
          }
          float dx = x - t.x, dy = y - t.y, r = Math.max(1.0F, t.dist) + 1.0F;
@@ -1400,7 +1408,7 @@ public final class PixelLight {
                culled++;
                continue;
             }
-            if (lz < z0 - 1.5F || lz > z1 + 1.5F) {
+            if (Config.PPL_OWN_LEVEL_LIGHTS ? lightLevel(lz) < z0 || lightLevel(lz) > z1 : lz < z0 - 1.5F || lz > z1 + 1.5F) {
                continue;
             }
             float dx = Math.max(0.0F, Math.max(x0 - lx, lx - (x0 + 8.0F))), dy = Math.max(0.0F, Math.max(y0 - ly, ly - (y0 + 8.0F)));
@@ -1627,7 +1635,7 @@ public final class PixelLight {
                GL20.glGetUniformLocation(program, "pplLb"), GL20.glGetUniformLocation(program, "pplLn"), GL20.glGetUniformLocation(program, "pplOpt"),
                GL20.glGetUniformLocation(program, "pplLc"), GL20.glGetUniformLocation(program, "pplOpt2"), GL20.glGetUniformLocation(program, "pplSmP"),
                GL20.glGetUniformLocation(program, "pplSmV"), GL20.glGetUniformLocation(program, "pplSmO"), GL20.glGetUniformLocation(program, "pplWet"),
-               GL20.glGetUniformLocation(program, "pplShadowMask")};
+               GL20.glGetUniformLocation(program, "pplShadowMask"), GL20.glGetUniformLocation(program, "pplSmC")};
             this.chunkUniforms.put(program, loc);
             if (loc[15] >= 0) {
                // the game's ShaderProgram renumbers every sampler2D to units 0, 1, 2... after the link (layout(binding) lost;
@@ -1666,6 +1674,7 @@ public final class PixelLight {
             GL20.glUniform4f(loc[12], this.prevVp[0], this.prevVp[1], this.prevVp[2], this.prevVp[3]);
             // the previous frame's mapping is relative to its own origin square: x - y and x + y shift by the difference
             GL20.glUniform4f(loc[13], (this.ox - this.oy) - (this.prevOx - this.prevOy), (this.ox + this.oy) - (this.prevOx + this.prevOy), 0.0F, 0.0F);
+            GL20.glUniform4f(loc[16], Config.PPL_SHADOW_DEPTH_TEST ? this.prevMap[4] : 0.0F, this.prevMap[5], 0.0F, 0.0F);
             GL13.glActiveTexture(GL13.GL_TEXTURE0 + MASK_UNIT);
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.maskTex[1]);
             GL13.glActiveTexture(GL13.GL_TEXTURE0);
@@ -2115,12 +2124,18 @@ public final class PixelLight {
       "uniform vec4 pplSmP;", // the previous frame's window mapping (kA, cA, kB, cB)
       "uniform vec4 pplSmV;", // the previous frame's viewport
       "uniform vec4 pplSmO;", // x - y and x + y of this frame's origin minus the previous frame's
+      "uniform vec4 pplSmC;", // the previous frame's depth mapping (pplMapC.xy then; x 0: no test)
       "float pplMask(vec3 P) {",
       "   float A = P.x - P.y + pplSmO.x, B = P.x + P.y - 6.0 * P.z + pplSmO.y;",
       "   vec2 f = vec2((A - pplSmP.y) / pplSmP.x, (B - pplSmP.w) / pplSmP.z);",
       "   vec2 uv = (f - pplSmV.xy) / pplSmV.zw;",
       "   if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 1.0;",
-      "   return texture(pplShadowMask, uv).r;",
+      "   vec2 m = texture(pplShadowMask, uv).rg;",
+      // the mask texel shows another surface than this pixel (a floor change or a cutaway swapped the scene, a mover
+      // uncovered it): its shadow belongs to that surface, not to this one (a level is 2 units of x + y + 2z; the mask
+      // keeps the depth at half precision, ~0.3 units: half a level of slack)
+      "   if (pplSmC.x != 0.0 && abs(pplSmC.x * m.g + pplSmC.y - (P.x + P.y + 2.0 * P.z + pplSmO.y)) > 1.0) return 1.0;",
+      "   return m.r;",
       "}",
       // the surface normal from the position's screen derivatives, in squares (a level is 2.449 squares tall), facing the
       // viewer; the sprites' depth textures make it a real normal on furniture too (call in uniform control flow)
@@ -2260,7 +2275,9 @@ public final class PixelLight {
       "         int i = findLSB(bits);",
       "         bits &= bits - 1;",
       "         vec4 a = pplLa[i], b = pplLb[i], c = pplLc[i];",
-      "         if (abs(a.z - lz) > 1.5) continue;",
+      // a light lights its own level only (a holder on the stairs: the stairs' level); the native's field between the
+      // centres already carries whatever reaches another level
+      Config.PPL_OWN_LEVEL_LIGHTS ? "         if (floor(a.z + 0.05) != lz) continue;" : "         if (abs(a.z - lz) > 1.5) continue;",
       "         float dd = length(P.xy - a.xy);",
       "         if (dd > a.w + 1.0) continue;",
       "#ifdef PPL_LAZY_NORMAL",

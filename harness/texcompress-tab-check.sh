@@ -80,7 +80,9 @@ l=$(find_line "Search settings") || true
 read -r x y w h t <<<"$l"; press "$(( x + w / 2 + 140 ))" "$y"
 xdotool type --delay 40 "texture compression"; sleep 2.5; shot search
 has search "who compresses" && pass "row 'Texture compression: who compresses' listed" || fail "row not found by the search"
-has search "who compresses.*auto|^auto\b| auto *$" && pass "value auto shown" || echo "note: OCR did not read 'auto' (check search.png)"
+has search "Default \(auto" && pass "value Default (auto ...) shown" || fail "combo does not show Default (auto ...)"
+# the combo's position now: with the mouse on the row, the OCR reads label and combo as one line
+cl=$(lines | awk '$5 ~ /^Default/ && $0 ~ /Default \(auto/' | head -1)
 
 # 2. the preview's description for it
 l=$(find_line "who compresses" left) || true
@@ -90,17 +92,14 @@ if [[ -n "$l" ]]; then
 fi
 
 # 3. the combo -> worker -> ACCEPT: saved to Zomboid/pzopt/options.ini
-l=$(find_line "who compresses" left) || true
-read -r x y w h t <<<"$l"
-cl=$(lines | awk -v y="$y" -v x="$x" '$1 > x + 200 && ($2 - y) * ($2 - y) < 400 && $5 ~ /^auto/' | head -1)
 if [[ -n "$cl" ]]; then
   read -r cx cy cw ch ct <<<"$cl"; press "$cx" "$cy"; sleep 1; shot combo-open
-  click_text "worker" || fail "no worker entry in the open combo"
+  click_text "worker \\(the file" || fail "no worker entry in the open combo"
 else
-  fail "combo (auto) not found on the row"
+  fail "combo (Default (auto ...)) not found on the row"
 fi
 sleep 1; shot combo-worker
-has combo-worker "worker" && pass "combo shows worker" || fail "combo does not show worker"
+has combo-worker "worker \(the file" && pass "combo shows worker" || fail "combo does not show worker"
 click_text "ACCEPT" || fail "no ACCEPT"; sleep 2; shot accepted
 click_text "^.*\bOK\b *$" >/dev/null 2>&1   # the restart-required dialog
 sleep 1

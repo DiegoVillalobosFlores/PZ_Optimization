@@ -704,7 +704,9 @@ thread, CPU render thread, other cores, GPU, VRAM, RAM, disk / caches, boot and 
 chunk arrival**, on a labelled axis from *lowest* through *mid* (the stock game) to *max*. Green bars
 grow left for less load (or a shorter load, chunks sooner), amber right for more, blue for idle
 cores put to work; the level word next to each bar says the same. The clips are 512 px, 24 fps GIFs under
-`media/ui/pzopt/compare/`, decoded in the game and freed when the options screen closes.
+`media/ui/pzopt/compare/`, decoded in the game and freed when the options screen closes. The clips are
+**off by default**: tick **Before / after clips** in the tab's header (under *Sort by*, on every tab) to play them;
+the choice applies at once and is remembered (`previewClips` in `options.ini`).
 
 ![Options > Optimizations: the controls on the left, the preview panel with the stock and optimized clips and the effect bars on the right](docs/media/options-optimizations-tab.jpg)
 

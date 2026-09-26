@@ -178,6 +178,8 @@ import java.util.Properties;
  *                            override), the same answers; they were 20 % of the map-zones step (default true)
  *   lazyOptionsScreen true/false the options screen (main menu, in-game menu) is built when first opened; while hidden only
  *                            its key bindings are loaded (pzopt_optimizations_options.lua) (default true)
+ *   previewClips    true/false   the options tabs' preview panel plays the before / after clips of the setting under the
+ *                            mouse; the "Before / after clips" tick box in each tab's header, saved at once (default false)
  *   electricityLevelRange true/false AmbientStreamManager.checkHaveElectricity (world entry, power changes) walks only the
  *                            levels some loaded chunk has instead of all 64, same squares in the same order (default true)
  *   fileThreadsWait int          file pool width while the loader thread only waits for the file tasks (assetLock2, the
@@ -624,6 +626,7 @@ public final class Config {
    public static final boolean ZONE_EDGE_PREFILTER = bool("zoneEdgePrefilter", true);
    public static final boolean ELECTRICITY_LEVEL_RANGE = bool("electricityLevelRange", true);
    public static final boolean LAZY_OPTIONS_SCREEN = bool("lazyOptionsScreen", true); // the options screen built when first opened, key bindings at once (Lua)
+   public static final boolean PREVIEW_CLIPS = bool("previewClips", false); // the options tabs' before / after GIFs in the preview panel; the tick box in each tab's header saves it at once (Lua)
    public static final boolean LUA_EVENT_PROFILE = bool("luaEventProfile", false); // measurement: time every Lua event handler (pzopt.LuaEventProfile)
    public static final boolean DEV_ELECTRICITY_CHECK = bool("devElectricityCheck", false); // dev: count the stock 64-level walk in the same call (instrumented runs)
    public static final int FILE_INFLIGHT_LOAD = Math.max(FILE_INFLIGHT, integer("fileInflightLoad", 128));

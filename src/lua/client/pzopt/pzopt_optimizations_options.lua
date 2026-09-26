@@ -1263,6 +1263,39 @@ local function clipPath(clip, side)
     return "media/ui/pzopt/compare/" .. clip .. "-" .. side .. ".gif"
 end
 
+-- Whether the preview plays the before / after clips (key previewClips, off by default): the tick box in every
+-- tab's header flips it for all three tabs and saves it to options.ini at once. `gen` tells the previews to lay
+-- out again. A build without the key keeps the choice for the session only.
+local CLIPS = { on = nil, gen = 0 }
+
+local function clipsOn()
+    if CLIPS.on == nil then
+        CLIPS.on = false
+        pcall(function()
+            local p = perf()
+            if p:isPzoptOptionKnown("previewClips") then
+                local saved = p:getPzoptOptionSaved("previewClips")
+                CLIPS.on = (saved ~= "" and saved or p:getPzoptOptionDefault("previewClips")) == "true"
+            end
+        end)
+    end
+    return CLIPS.on
+end
+
+local function setClipsOn(on)
+    if on == clipsOn() then return end
+    CLIPS.on = on
+    CLIPS.gen = CLIPS.gen + 1
+    pcall(function()
+        local p = perf()
+        if p:isPzoptOptionKnown("previewClips") then
+            -- "" = the default (off) on the next boot
+            p:setPzoptOption("previewClips", on and "true" or "")
+        end
+        if not on then p:releasePzoptGifs() end
+    end)
+end
+
 PzoptPreview = ISPanel:derive("PzoptPreview")
 
 function PzoptPreview:new(x, y, w, h, panel, rows)
@@ -1305,18 +1338,23 @@ function PzoptPreview:layoutSlots()
     end
     for _, row in ipairs(self.rows) do count(row.entry.tip) end
     self.descLines = lines
+    self.clips = clipsOn()
+    self.clipsGen = CLIPS.gen
     local fixed = pad + self.hM + 2 + self.hS + 2 + self.hS + 8 -- title, values, Java classes
-        + self.hS + 2 + 4 + self.hS + 8                    -- clip captions, clip title line
         + lines * self.hS + 8                              -- description
         + self.hM + 4 + #AXES * (self.hS + 6)              -- bars
         + 6 + self.hS + 2 + self.hS                        -- x axis ticks and title
         + 4 + 2 * self.hS + pad                            -- legend
-    local ih = math.max(60, self.height - fixed)
-    local iw = math.floor((cw - gap) / 2)
-    if math.floor(iw * CLIP_H / CLIP_W) < ih then
-        ih = math.floor(iw * CLIP_H / CLIP_W)
-    else
-        iw = math.floor(ih * CLIP_W / CLIP_H)
+    local iw, ih = 0, 0
+    if self.clips then
+        fixed = fixed + self.hS + 2 + 4 + self.hS + 8      -- clip captions, clip title line
+        ih = math.max(60, self.height - fixed)
+        iw = math.floor((cw - gap) / 2)
+        if math.floor(iw * CLIP_H / CLIP_W) < ih then
+            ih = math.floor(iw * CLIP_H / CLIP_W)
+        else
+            iw = math.floor(ih * CLIP_W / CLIP_H)
+        end
     end
     self.clipW, self.clipH = iw, ih
     -- height the clips did not need (a wide page) makes the bar rows taller, up to twice the font height
@@ -1446,7 +1484,8 @@ end
 
 function PzoptPreview:prerender()
     ISPanel.prerender(self)
-    if self.width ~= self.slotW or self.height ~= self.slotH then self:layoutSlots() end -- window resized
+    -- window resized, or the clips switched on / off
+    if self.width ~= self.slotW or self.height ~= self.slotH or self.clipsGen ~= CLIPS.gen then self:layoutSlots() end
     self:pick()
     local row = self.row
     local pad = self.pad
@@ -1471,17 +1510,19 @@ function PzoptPreview:prerender()
     local java = #classes > 0 and ("Java: " .. table.concat(classes, ", ")) or "Java: read by pzopt.Config only"
     self:text(getTextManager():WrapText(self.fontS, java, w, 1, "..."), x, y, C_DIM)
     y = y + self.hS + 8
-    -- the two clips, centred in the column
-    local iw, ih, gap = self.clipW, self.clipH, pad
-    local cx = x + math.floor((w - (2 * iw + gap)) / 2)
-    local now = getTimestampMs()
-    local sides = clipSides(row.clip)
-    self:drawClip(cx, y, iw, ih, sides[1], clipPath(row.clip, "stock"), now, C_STOCK)
-    y = self:drawClip(cx + iw + gap, y, iw, ih, sides[2], clipPath(row.clip, "opt"), now, C_OPT) + 4
-    local same = sides == CLIP_SIDES.overlay and ". Same save, route and machine, a crop of the top-left corner at the Large overlay font."
-        or CLIP_NOTES[row.clip] or ". Same save, route and machine; the number is that run's live frame rate."
-    self:text(getTextManager():WrapText(self.fontS, (CLIP_TITLES[row.clip] or row.clip) .. same, w, 1, "..."), x, y, C_DIM)
-    y = y + self.hS + 8
+    -- the two clips, centred in the column (with the header's "Before / after clips" ticked)
+    if self.clips then
+        local iw, ih, gap = self.clipW, self.clipH, pad
+        local cx = x + math.floor((w - (2 * iw + gap)) / 2)
+        local now = getTimestampMs()
+        local sides = clipSides(row.clip)
+        self:drawClip(cx, y, iw, ih, sides[1], clipPath(row.clip, "stock"), now, C_STOCK)
+        y = self:drawClip(cx + iw + gap, y, iw, ih, sides[2], clipPath(row.clip, "opt"), now, C_OPT) + 4
+        local same = sides == CLIP_SIDES.overlay and ". Same save, route and machine, a crop of the top-left corner at the Large overlay font."
+            or CLIP_NOTES[row.clip] or ". Same save, route and machine; the number is that run's live frame rate."
+        self:text(getTextManager():WrapText(self.fontS, (CLIP_TITLES[row.clip] or row.clip) .. same, w, 1, "..."), x, y, C_DIM)
+        y = y + self.hS + 8
+    end
     -- what it does, in a slot tall enough for the longest description
     self:drawWrapped(entry.tip, x, y, w, C_TEXT)
     y = y + self.descLines * self.hS + 8
@@ -2002,7 +2043,30 @@ local function addSearchRows(self, S, splitpoint, y, width)
     self.mainPanel:addChild(sort)
     self.mainPanel:insertNewLineOfButtons(sort)
     self.addY = self.addY + BUTTON_HGT + spacing
-    S.entry, S.status, S.sort = entry, status, sort
+    -- "Before / after clips": the preview's GIFs, off by default; one choice for all three tabs, saved at once
+    local clipsLabel = ISLabel:new(splitpoint, y + self.addY, BUTTON_HGT, "Before / after clips", 1, 1, 1, 1, UIFont.Small)
+    clipsLabel:initialise()
+    self.mainPanel:addChild(clipsLabel)
+    local clips = ISTickBox:new(splitpoint + 20, y + self.addY, BUTTON_HGT, BUTTON_HGT, "", S, function(target, index, selected)
+        setClipsOn(selected == true)
+    end)
+    clips.choicesColor = { r = 1, g = 1, b = 1, a = 1 }
+    clips:initialise()
+    clips:addOption("")
+    clips:setSelected(1, clipsOn())
+    clips.tooltip = "Plays a short clip of the stock game and one with the setting on, side by side, above the "
+        .. "description of the setting under the mouse. Off saves the memory the clips take (up to ~100 MB of video "
+        .. "memory while this screen is open). Applies at once, for every tab, and is remembered."
+    -- another tab's tick box may have changed it
+    clips.prerender = function(o)
+        if o:isSelected(1) ~= clipsOn() then o:setSelected(1, clipsOn()) end
+        ISTickBox.prerender(o)
+    end
+    clipsLabel:setHeight(clips:getHeight())
+    self.mainPanel:addChild(clips)
+    self.mainPanel:insertNewLineOfButtons(clips)
+    self.addY = self.addY + BUTTON_HGT + spacing
+    S.entry, S.status, S.sort, S.clips = entry, status, sort, clips
 end
 
 local function comboLabels(entry, default, saved)

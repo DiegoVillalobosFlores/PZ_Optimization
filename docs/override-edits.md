@@ -827,6 +827,11 @@ render thread, other cores, GPU, VRAM, RAM, disk, load time, chunk arrival, from
 a table in the Lua); the clips are `media/ui/pzopt/compare/<clip>-{stock,opt}.gif`
 (`harness/menu-gifs.py`). The two clips in use are the only textures held (96 x
 512x256 RGBA each at most); `MainOptions:setVisible(false)` releases them.
+Since 2026-09-26 the clips are off by default (`previewClips`, Config key read by
+the Lua only): a "Before / after clips" tick box under "Sort by" in every tab's
+header saves it at once through `setPzoptOption` (no Apply), switches all three
+tabs, and releases the decoded clips when unticked; with it off the preview drops
+the clip slot and never asks for a GIF.
 Verified in game on 2026-09-21 (queue job `menu-check4`: hover, scroll, wheel
 over the preview, clips playing, panel sized to its content).
 

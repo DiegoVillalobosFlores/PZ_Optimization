@@ -199,7 +199,8 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   Preview panel (2026-09-21 night): the whole page area right of the controls, fixed while the list scrolls, every
   element in a fixed slot (description slot = the longest description wrapped; the clips take the height left, spare
   height widens the bar rows) so nothing shifts between rows; for the setting under the mouse:
-  the stock and the optimized clip of the same route side by side (28 GIFs: 8 route pairs at 512x216, 24 fps, 4 s, plus 6 overlay-off / overlay-on crop pairs for the overlay keys from runs `ov-off` / `ov-full`; Workshop-preview encode, under
+  the stock and the optimized clip of the same route side by side (off by default since 2026-09-26: "Before / after clips"
+  tick box in each tab's header, key `previewClips`, saved at once; 28 GIFs: 8 route pairs at 512x216, 24 fps, 4 s, plus 6 overlay-off / overlay-on crop pairs for the overlay keys from runs `ov-off` / `ov-full`; Workshop-preview encode, under
   `src/media/ui/pzopt/compare/`, made by `harness/menu-gifs.py` from the show-*/bl-*/sbs-* recordings with the
   live fps burned in; decoded to textures by `pzopt.GifTextures`, at most two clips held, freed on close), the
   description, the value since boot / next launch, and effect bars per resource (`EFFECTS` in the Lua: game

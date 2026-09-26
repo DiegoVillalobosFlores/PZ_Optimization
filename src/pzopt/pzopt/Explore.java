@@ -35,6 +35,8 @@ import zombie.iso.objects.IsoThumpable;
  * <p>{@code explore=circle} (2026-09-25, the flip report: textures flicker at the top left of the screen while the player
  * walks in circles on a real save): the player walks round the square it loaded on, on foot through the same movement
  * keys, {@code circle_radius} tiles (1.5) away, clockwise ({@code circle_dir=ccw} the other way), until the route ends.
+ *
+ * <p>{@code explore=stairs} (2026-09-25, walls flicker on the stairs with every lighting key on): pzopt.StairsWalk.
  */
 public final class Explore {
    private Explore() {
@@ -45,7 +47,7 @@ public final class Explore {
    private static final String[] DIRS = {"E", "SE", "S", "SW", "W", "NW", "N", "NE"}; // k * 45 deg, 0 = east, +y = south
 
    private static boolean on, director, started, finished, restaurantLit;
-   private static boolean circle;
+   private static boolean circle, stairs;
    private static float circleX, circleY, circleRadius, circleSign, circleTurned, circleLastAngle;
    private static long circleLogNs;
    private static String command = "hold";
@@ -73,11 +75,17 @@ public final class Explore {
 
    /** The harness ends the route when the director (or the autopilot) says done. */
    public static boolean done() {
-      return finished;
+      return finished || stairs && StairsWalk.finished();
    }
 
    /** World-ready (game thread): out of harm's way, find the restaurant. */
    static void worldReady(IsoPlayer p) {
+      stairs = "stairs".equalsIgnoreCase(HarnessFlags.get("explore", "").trim());
+      if (stairs) {
+         on = true;
+         StairsWalk.worldReady(p); // explore=stairs: up to the top floor and down to the lowest level (the wall flicker report)
+         return;
+      }
       circle = "circle".equalsIgnoreCase(HarnessFlags.get("explore", "").trim());
       if (circle) {
          on = true;
@@ -147,6 +155,7 @@ public final class Explore {
          p.getVehicle().exit(p);
       }
       command = director ? "hold" : "go_to_restaurant";
+      if (stairs) StairsWalk.routeStart(p);
       circleLastAngle = (float)Math.atan2(p.getY() - circleY, p.getX() - circleX);
    }
 
@@ -155,6 +164,10 @@ public final class Explore {
       if (!on || !started || finished) return;
       if (circle) {
          walkCircle(p, nowNs);
+         return;
+      }
+      if (stairs) {
+         StairsWalk.tick(p, nowNs);
          return;
       }
       float dt = Math.min(0.1F, zombie.GameTime.getInstance().getRealworldSecondsSinceLastUpdate());

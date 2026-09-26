@@ -455,6 +455,12 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   depth), also against torches / headlights at night; characters dimmed in static shade (`SunShadow.characterFactor`).
   Desktop: capped drive tails at parity (+33 us GPU streaming), crowds +10-15 us; the flip's character pass ~125-200 us
   (open). Rigs: `harness/contact/kernel_rig.py` (offline kernel on EGL), `alt.py` + `devSunAlternate`, flag `crowd=N`.
+- Stairs wall flicker (2026-09-25, `docs/findings-wall-flicker-2026-09-25.md`): with every lighting key on the walls blinked
+  while walking between floors (flip). Cause: pixelLight's torch facing normal came from screen derivatives of a pixel-centre
+  position with a nearest DEPTH16 texel's depth, which flipped with the camera's sub-pixel offset. `pplTexelPos` (normal from
+  the chunk-depth texel and its neighbours 2 texels away, only where a light reaches; +52 us/frame on the flip) and
+  `bakeLevelChangeFrames` / `bakeLevelChangeRadius` (a floor change bakes the 3x3 chunks round the player at once) -> blink =
+  stock. Rig: `--flag explore=stairs --flag director=jev` + `harness/stairs-flicker.py` (harness/CLAUDE.md).
 - Open plans: `docs/plan-graphics-enhancements.md` (2026-09-25: visual features after AO, sun shadows and per-pixel lighting first), `docs/plan-game-load.md`, `docs/plan-vulkan-renderer.md`, `docs/plan-resource-use.md`,
   `docs/plan-zombie-multithread.md` (2026-09-22: the rest of the zombie simulation on all cores, phased).
   The game-thread optimization plans were dropped on 2026-09-21 at the maintainer's request.

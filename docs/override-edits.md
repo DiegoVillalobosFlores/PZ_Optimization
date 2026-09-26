@@ -3840,3 +3840,10 @@ Write-up: `docs/findings-reflections-2026-09-25.md`. Off by default (a change of
 
 ### pzopt.HdrGlint
 - `glintOnlyNow()`: the water / puddle draw of the glint-only pass skips the reflection lookups.
+
+## Stairs wall flicker (2026-09-25, `pplTexelPos`, `bakeLevelChangeFrames`; docs/findings-wall-flicker-2026-09-25.md)
+
+### zombie.iso.fboRenderChunk.FBORenderCell
+- `pzoptSchedulePlan` hands the camera character's level to `BakeScheduler.cameraLevel` before the offers: for
+  `bakeLevelChangeFrames` (3) frames after it changes, the scheduler grants every cutaway and never-textured level at once
+  (as stock bakes them), so the floor the player arrives on replaces the old one in one frame instead of chunk by chunk.

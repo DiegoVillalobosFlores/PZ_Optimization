@@ -178,8 +178,30 @@ public final class BakeScheduler {
    private final int[] slackHist = new int[1024];
    private long smoothSum;
 
+   private int burstLeft, lastLevel = Integer.MIN_VALUE;
+   private long burstFrames, burstGrants;
+
+   /**
+    * bakeLevelChangeFrames: the camera's level this frame. On a change (the player took the stairs) the next frames grant every
+    * cutaway and never-textured level at once: the floor the player arrives on replaces the old one in one frame, as in stock,
+    * instead of chunk by chunk with the old floor's textures in between (the stairs walk of 2026-09-25).
+    */
+   public void cameraLevel(int lvl) {
+      if (lvl != this.lastLevel) {
+         if (this.lastLevel != Integer.MIN_VALUE) {
+            this.burstLeft = Config.BAKE_LEVEL_CHANGE_FRAMES;
+         }
+         this.lastLevel = lvl;
+      }
+   }
+
    /** Grants this frame's bakes (see the class comment); {@code budget} is this frame's bakeFrameBudget. */
    public void plan(int budget) {
+      boolean burst = this.burstLeft > 0;
+      if (burst) {
+         this.burstLeft--;
+         this.burstFrames++;
+      }
       int given = 0;
       int arrivals = 0;
       boolean smooth = Config.BAKE_SMOOTH;
@@ -193,9 +215,12 @@ public final class BakeScheduler {
          int k = this.cls[i];
          long tier;
          long sub;
-         if (k == MUST) {
+         if (k == MUST || burst && (k == CUTAWAY || k == ARRIVAL) && (Config.BAKE_LEVEL_CHANGE_RADIUS < 0 || this.dist[i] <= Config.BAKE_LEVEL_CHANGE_RADIUS)) {
             tier = 0;
             sub = this.dist[i];
+            if (k != MUST) {
+               this.burstGrants++;
+            }
          } else if (k == ARRIVAL && Config.BAKE_ARRIVAL_QUOTA > 0) {
             tier = 1; // the arrival quota: ground level first (no upper floor floating over an unbaked ground), then the nearest
             sub = (long)(this.level[i] + 32) << 12 | Math.min(this.dist[i], 0xFFF);
@@ -315,7 +340,8 @@ public final class BakeScheduler {
          .append(" max/frame=").append(this.maxGranted).append(" grants used=").append(this.grantsUsed).append('/').append(this.grantsMade)
          .append(" budget avg=").append(this.frames == 0 ? 0 : String.format(java.util.Locale.ROOT, "%.1f", this.budgetSum / (double)this.frames))
          .append(" deadline holds=").append(this.deadlineFrames)
-         .append(" smooth avg=").append(this.frames == 0 ? 0 : String.format(java.util.Locale.ROOT, "%.2f", this.smoothSum / (double)this.frames));
+         .append(" smooth avg=").append(this.frames == 0 ? 0 : String.format(java.util.Locale.ROOT, "%.2f", this.smoothSum / (double)this.frames))
+         .append(" level-change frames=").append(this.burstFrames).append(" grants=").append(this.burstGrants);
       for (int k = 0; k < CLASSES; k++) {
          if (this.offered[k] == 0) {
             continue;

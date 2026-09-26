@@ -14,7 +14,8 @@ import org.lwjgl.opengl.GL30;
  * world is up for {@code seconds}, at most {@code fps} frames a second: the back buffer is blitted into a
  * {@code scalePct} % framebuffer and read back (synchronous, a dev rig: never for timing), a writer thread appends the
  * RGBA rows (bottom-up) to {@code ~/Zomboid/pzopt-capture/frames.rgba}; {@code index.txt} holds the size and one epoch ms
- * per frame. {@code harness/ppl/capture.py} turns it into PNGs and temporal metrics.
+ * per frame. {@code harness/ppl/capture.py} turns it into PNGs and temporal metrics. A fifth field {@code gray} writes
+ * one luma byte per pixel to {@code frames.gray} instead (a quarter of the bytes: minute-long walks on the laptops).
  */
 public final class FrameCapture {
    private FrameCapture() {
@@ -23,7 +24,7 @@ public final class FrameCapture {
    private static float start = -1F, seconds, fps, scale;
    private static long worldUpNs, lastNs;
    private static int fbo, tex, w, h, frames;
-   private static boolean done, failed;
+   private static boolean done, failed, gray;
    private static final ArrayBlockingQueue<Object[]> QUEUE = new ArrayBlockingQueue<>(64);
    private static Thread writer;
 
@@ -47,6 +48,7 @@ public final class FrameCapture {
          seconds = p.length > 1 ? Float.parseFloat(p[1].trim()) : 10F;
          fps = p.length > 2 ? Float.parseFloat(p[2].trim()) : 30F;
          scale = (p.length > 3 ? Float.parseFloat(p[3].trim()) : 50F) / 100F;
+         gray = p.length > 4 && "gray".equalsIgnoreCase(p[4].trim());
       }
       if (zombie.iso.IsoWorld.instance == null || zombie.iso.IsoWorld.instance.currentCell == null) {
          return;
@@ -83,7 +85,7 @@ public final class FrameCapture {
          GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, tex, 0);
          GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, prev);
          dir().mkdirs();
-         java.nio.file.Files.writeString(new File(dir(), "index.txt").toPath(), "w=" + w + " h=" + h + "\n");
+         java.nio.file.Files.writeString(new File(dir(), "index.txt").toPath(), "w=" + w + " h=" + h + (gray ? " fmt=gray" : "") + "\n");
          writer = new Thread(FrameCapture::write, "pzopt-capture");
          writer.setDaemon(true);
          writer.start();
@@ -114,7 +116,7 @@ public final class FrameCapture {
    }
 
    private static void write() {
-      try (FileOutputStream out = new FileOutputStream(new File(dir(), "frames.rgba")); java.io.FileWriter idx = new java.io.FileWriter(new File(dir(), "index.txt"), true)) {
+      try (FileOutputStream out = new FileOutputStream(new File(dir(), gray ? "frames.gray" : "frames.rgba")); java.io.FileWriter idx = new java.io.FileWriter(new File(dir(), "index.txt"), true)) {
          byte[] row = null;
          while (true) {
             Object[] e = QUEUE.take();
@@ -122,6 +124,19 @@ public final class FrameCapture {
                break;
             }
             ByteBuffer b = (ByteBuffer)e[0];
+            if (gray) {
+               int n = b.capacity() / 4;
+               if (row == null || row.length != n) {
+                  row = new byte[n];
+               }
+               for (int i = 0; i < n; i++) { // BT.601 luma, as region-flicker.py computes it
+                  int r = b.get(i * 4) & 255, g = b.get(i * 4 + 1) & 255, bl = b.get(i * 4 + 2) & 255;
+                  row[i] = (byte)((r * 77 + g * 150 + bl * 29) >> 8);
+               }
+               out.write(row);
+               idx.write(e[1] + "\n");
+               continue;
+            }
             if (row == null || row.length != b.capacity()) {
                row = new byte[b.capacity()];
             }

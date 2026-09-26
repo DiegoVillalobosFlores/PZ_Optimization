@@ -432,6 +432,8 @@ public final class Config {
    public static final int BAKE_FRAME_BUDGET_HARD = Math.max(1, integer("bakeFrameBudgetHard", 12));
    /** bakeScheduler: longest wait (frames) per class before a level jumps the queue. */
    public static final int BAKE_MAX_WAIT_CUTAWAY = Math.max(0, integer("bakeMaxWaitCutaway", 3));
+   public static final int BAKE_LEVEL_CHANGE_RADIUS = integer("bakeLevelChangeRadius", 1); // bakeLevelChangeFrames: only chunks at most this many chunks from the camera character bake at once (-1: all on screen; 1, the 3x3 around the player: as calm as all on the stairs walk, first arrival on a floor 80 ms instead of 170 ms on the flip)
+   public static final int BAKE_LEVEL_CHANGE_FRAMES = Math.max(0, integer("bakeLevelChangeFrames", 3)); // bakeScheduler: for this many frames after the camera's level changes (stairs), every cutaway and never-textured level is baked at once, like stock: the new floor appears whole instead of chunk by chunk over ~10 frames (0 = spread as any other cutaway)
    public static final int BAKE_MAX_WAIT_STRONG = Math.max(0, integer("bakeMaxWaitStrong", 6));
    public static final int BAKE_MAX_WAIT_ARRIVAL = Math.max(0, integer("bakeMaxWaitArrival", 8));
    public static final int BAKE_MAX_WAIT_REDRAW = Math.max(0, integer("bakeMaxWaitRedraw", 48));
@@ -845,6 +847,8 @@ public final class Config {
    public static final int PPL_WRAP_PCT = integer("pplWrapPct", 35); // pixelLight normals: wrap lighting, % (how far past 90 degrees a face still catches the light; softens the painted sprites' double shading)
    public static final boolean PPL_SHADOWS = bool("pplShadows", false); // pixelLight: the player's torch casts per-pixel shadows (a half-resolution mask marched in the scene depth after the composite, blurred, read by the next frame's composite reprojected)
    public static final float PPL_SHADOW_SQUARES = integer("pplShadowSquares", 4); // pixelLight shadows: how far towards the light the march looks, squares
+   public static final boolean PPL_TEXEL_POS = bool("pplTexelPos", true); // pixelLight: the torch's facing term takes its normal from the chunk-texture texel the pixel shows and its neighbours (false: screen derivatives, which moved with the camera's sub-pixel offset: the torch light blinked on walls while walking, 2026-09-25)
+   public static final int PPL_NORMAL_SPAN = Math.max(1, Math.min(4, integer("pplNormalSpan", 2))); // pplTexelPos: the texel normal's neighbours this many texels away (1: DEPTH16 rounding flipped the snapped plane texel by texel)
    public static final boolean PPL_SMOOTH = bool("pplSmooth", true); // pixelLight: smoothstep weights between square centres (C1 light, no Mach bands; still one texture fetch)
    public static final String DEV_PPL_COST_AT = string("devPplCostAt", ""); // dev: t:mask,... seconds after the world is up: parts of the per-pixel shader off (1 lights, 2 edge path, 4 normals, 8 all but the position, 16 all, 32 the texture uploads, 64 the light via its uniform, 128 all the frame's GL work, 256 the stock chunk program, 512 the light-free variant everywhere, 1024 no pass in pass mode, 8192 two identical light-free programs alternating per draw), the composite timer names the mask
    public static final String DEV_PPL_ALTERNATE = string("devPplAlternate", ""); // dev: start,periodSec,maskA,maskB: from start the cost mask flips between A and B every period (256 = the unpatched stock chunk program on the same unlit bakes), the composite timer sums each mask apart: same-scene, drift-cancelling A/B
@@ -854,6 +858,7 @@ public final class Config {
    public static final int PPL_SPEC_PCT = integer("pplSpecPct", 60); // pixelLight: strength of the wet glints, %
    public static final boolean PPL_VARIANTS = bool("pplVariants", true); // pixelLight: chunk textures no torch, headlight or lamp reaches are composited by a light-free variant of the shader (half the registers: twice the occupancy on RDNA iGPUs)
    public static final int DEV_PPL_VIEW = integer("devPplView", 0); // dev: 1 = the light alone, 2 = the unlit surfaces, 3 = the owner squares as a checkerboard, 4 = the reconstructed normals
+   public static final int DEV_PPL_PROBE = integer("devPplProbe", 0); // dev: per frame, the squares within this many of the player on its level: how many of their native corners / light / vision bits and packed lattice values changed and how many came back to the value of two frames before (A-B-A), one log line (pzopt.PixelLight), the stairs wall flicker rig
    public static final boolean DEV_PPL_TRACE = bool("devPplTrace", false); // dev: one log line per frame of pixelLight's lattice packs and camera mapping inputs (pzopt.PixelLight), for lining frames up with a devCapture sequence
    public static final boolean DEV_PPL_TIMING = bool("devPplTiming", false); // dev: GPU time of the pixel-light pass and the lattice uploads in the log every 1000 frames
    public static final String DEV_PPL_TOGGLE_AT = string("devPplToggleAt", ""); // dev: seconds after the world is up at which pixelLight flips on / off (every texture re-baked), for A/Bs of one scene in one run

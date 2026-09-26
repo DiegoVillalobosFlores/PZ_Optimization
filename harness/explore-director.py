@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Jev directs the explore=restaurant scene (2026-09-25, the flip HDR "north-facing bloom" report).
+"""Jev directs the explore=restaurant scene (2026-09-25, the flip HDR "north-facing bloom" report) and the
+explore=stairs scene (2026-09-25, walls flicker on the stairs: up to the top floor, down to the basement; the state
+says "scene": "stairs").
 
 The game (pzopt.Explore, flags explore=restaurant director=jev) writes the scene's facts every 0.3 s to
 ~/Zomboid/pzopt-explore-state.json; this loop asks TypeSafe's Jev what the character does next and writes
@@ -46,6 +48,28 @@ QUESTION = choice(
         "hold": "Stand still. Right only while nothing else applies.",
         "done": "Finish the visit. Right when no room is left to visit (rooms_left_to_visit is 0) and the current room is "
                 "finished (looked around and faced north for 4 seconds), or the character is outside with no room left.",
+    },
+)
+
+STAIRS = choice(
+    "You direct a character in Project Zomboid who inspects a building floor by floor, one decision at a time, from the "
+    "scene state. The visit goes in this order: on every level the character arrives at (and on the starting level), "
+    "first look around once (a full turn in place); then, while the top floor has not been reached, go up one level; once "
+    "the top floor has been reached, go down one level at a time until the lowest level (the basement); after looking "
+    "around on the lowest level again, finish. Pick the character's next action.",
+    {
+        "go_up": "Climb the nearest staircase one level up. Right when looked_around_on_this_level is true, "
+                 "top_floor_reached is false, the level is below top_level and no_stairs_up_from_this_level is false; also "
+                 "right to keep going while current_action is go_up and the character is on the stairs or has not arrived.",
+        "go_down": "Walk down the nearest staircase one level. Right when looked_around_on_this_level is true and either "
+                   "top_floor_reached is true or no stairs lead up, the level is above lowest_level and "
+                   "no_stairs_down_from_this_level is false; also right to keep going while current_action is go_down and "
+                   "the character is on the stairs or has not arrived.",
+        "look_around": "Turn once round in place. Right when the character is not on the stairs and "
+                       "looked_around_on_this_level is false.",
+        "hold": "Stand still. Right only while nothing else applies.",
+        "done": "Finish. Right when back_at_lowest_after_top is true and looked_around_on_this_level is true, or when "
+                "neither a staircase up nor down can be used.",
     },
 )
 
@@ -107,7 +131,7 @@ class Remote:
                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
         self.fd = self.p.stdout.fileno()
         os.set_blocking(self.fd, False)
-        self.buf, self.t0_ms = "", time.time() * 1000 - 60000  # a state older than a minute is a previous run's
+        self.buf, self.t0_ms = "", time.time() * 1000 - 2000  # a state from before this director started is a previous run's
 
     def read(self):
         latest = None
@@ -163,7 +187,7 @@ def main():
         last_t = st["t"]
         lat = []
         try:
-            ans = ask(st, {"action": QUESTION}, log=lat)["action"]
+            ans = ask(st, {"action": STAIRS if st.get("scene") == "stairs" else QUESTION}, log=lat)["action"]
         except Exception as e:  # keep the last command; the next state gets another try
             log.write(f"{st['seconds_since_start']:6.1f}s  jev error: {e}\n")
             time.sleep(0.5)
@@ -173,6 +197,12 @@ def main():
         decisions += 1
         io.send(f"{seq} {act}\n")
         probs = " ".join(f"{k}={v:.2f}" for k, v in sorted(ans.get("probabilities", {}).items(), key=lambda kv: -kv[1]))
+        if st.get("scene") == "stairs":
+            p, g = st["player"], st["progress"]
+            log.write(f"{st['seconds_since_start']:6.1f}s  {act:<12} conf {ans.get('confidence', 0):.2f}  {lat[0]['ms'] if lat else '?'} ms | "
+                      f"level {p['level']} stairs {p['on_stairs']} arrived {p['arrived_at_goal_level']} looked {g['looked_around_on_this_level']} "
+                      f"top {g['top_floor_reached']} back {g['back_at_lowest_after_top']} changes {g['level_changes']} | {probs}\n")
+            continue
         p, r, h = st["player"], st["restaurant"], st["this_room"]
         log.write(f"{st['seconds_since_start']:6.1f}s  {act:<17} conf {ans.get('confidence', 0):.2f}  {lat[0]['ms'] if lat else '?'} ms | "
                   f"room {p['current_room']} inside {p['inside_restaurant']} dist {p['distance_to_restaurant_tiles']:.0f} facing {p['facing']} "

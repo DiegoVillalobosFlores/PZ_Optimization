@@ -42,8 +42,9 @@ def capture(run, start, end):
     head = dict(kv.split("=") for kv in lines[0].split())
     w, h = int(head["w"]), int(head["h"])
     stamps = np.array([int(x) for x in lines[1:] if x.strip()])
-    raw = np.memmap(os.path.join(d, "frames.rgba"), dtype=np.uint8, mode="r")
-    n = min(len(stamps), raw.size // (w * h * 4))
+    gray = head.get("fmt") == "gray"  # devCapture=...,gray: one luma byte per pixel
+    raw = np.memmap(os.path.join(d, "frames.gray" if gray else "frames.rgba"), dtype=np.uint8, mode="r")
+    n = min(len(stamps), raw.size // (w * h * (1 if gray else 4)))
     t = (stamps[:n] - stamps[0]) / 1000.0
     sel = np.nonzero((t >= start) & (t < end))[0]
     dt = np.diff(stamps[sel])
@@ -52,6 +53,9 @@ def capture(run, start, end):
 
     def gen():
         for i in sel:
+            if gray:
+                yield raw[i * w * h:(i + 1) * w * h].reshape(h, w)[::-1, :].astype(np.int16)
+                continue
             f = raw[i * w * h * 4:(i + 1) * w * h * 4].reshape(h, w, 4)[::-1, :, :3].astype(np.float32)
             yield (f[..., 0] * 0.299 + f[..., 1] * 0.587 + f[..., 2] * 0.114).astype(np.int16)
     return w, h, fps, gen(), gaps

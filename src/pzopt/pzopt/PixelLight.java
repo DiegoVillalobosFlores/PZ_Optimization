@@ -6,6 +6,7 @@ import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashMap;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
@@ -262,6 +263,9 @@ public final class PixelLight {
          }
       }
       blocksUploaded += f.blocks;
+      if (Config.DEV_PPL_PROBE > 0) {
+         probe(playerIndex, f.blocks);
+      }
       ambientCommit();
       packNs += System.nanoTime() - packT0;
       // the camera: window px -> (x - y, x + y - 6z) and depth -> x + y + 2z, relative to the origin square
@@ -856,6 +860,10 @@ public final class PixelLight {
                if (sq.lighting[playerIndex] instanceof LightingJNI.JNILighting tj && (tj.pzoptVis() & 1) != 0) traceSeen++;
             }
             int cell8 = (y * 8 + x) * 4;
+            if (Config.DEV_PPL_PROBE > 0 && sq != null && !above) {
+               probePacked.put(probeKey(sq.x, sq.y, z), (long)(info & 0xFFFFFF | simple << 24) * 31L + (conn | tvis << 8 | grad << 16) * 17L
+                     + (grad == 0 ? 0x808080 : wallDelta(v0, v1, v2, v3, t0, t1, t2, t3)));
+            }
             b.putInt(base + cell8, info & 0xFFFFFF | simple << 24); // base light; a: a simple square (the shader's one-fetch path)
             int outdoor = sq != null && sq.isOutside() ? 255 : 0;
             b.putInt(base + 256 + cell8, conn | tvis << 8 | grad << 16 | outdoor << 24); // connectivity bits, torch visibility, vertical gradient, outdoors (wet in rain)
@@ -869,6 +877,77 @@ public final class PixelLight {
       f.by[f.blocks] = Math.floorMod(c.wy * 8, f.n);
       f.bl[f.blocks] = z & (LEVELS - 1);
       f.blocks++;
+   }
+
+   // ---- dev (devPplProbe): which values change and come back from frame to frame ----
+
+   private static final HashMap<Long, long[]> probePrev = new HashMap<>(); // square -> {corners, info, vis, packed} at t-2 and t-1
+   private static final HashMap<Long, Long> probePacked = new HashMap<>(); // this frame's packed squares (pack())
+   private static long probeFrames;
+
+   private static long probeKey(int x, int y, int z) {
+      return ((long)x << 36) ^ ((long)(y & 0xFFFFF) << 12) ^ (z & 0xFFF);
+   }
+
+   private static void probe(int playerIndex, int blocks) {
+      IsoPlayer p = IsoPlayer.players[playerIndex];
+      if (p == null) {
+         probePacked.clear();
+         return;
+      }
+      IsoCell cell = IsoWorld.instance.currentCell;
+      int r = Config.DEV_PPL_PROBE, px = (int)Math.floor(p.getX()), py = (int)Math.floor(p.getY()), pz = (int)Math.floor(p.getZ() + 0.05F);
+      int sqs = 0, packed = 0;
+      int[] ch = new int[4], aba = new int[4];
+      for (int y = py - r; y <= py + r; y++) {
+         for (int x = px - r; x <= px + r; x++) {
+            IsoGridSquare sq = cell.getGridSquare(x, y, pz);
+            if (sq == null || !(sq.lighting[playerIndex] instanceof LightingJNI.JNILighting jl)) {
+               continue;
+            }
+            sqs++;
+            long corners = 0L;
+            for (int i = 0; i < 8; i++) {
+               corners = corners * 1000003L + jl.pzoptVert(i);
+            }
+            zombie.core.textures.ColorInfo li = jl.pzoptInfo();
+            long info = (long)(li.r * 1000.0F) * 1000003L * 1000003L + (long)(li.g * 1000.0F) * 1000003L + (long)(li.b * 1000.0F);
+            long k = probeKey(x, y, pz);
+            long[] h = probePrev.get(k);
+            Long pk = probePacked.get(k);
+            long now3 = pk != null ? pk : h != null ? h[7] : 0L;
+            if (pk != null) packed++;
+            long[] v = {corners, info, jl.pzoptVis(), now3};
+            if (h == null) {
+               h = new long[8];
+               for (int i = 0; i < 4; i++) {
+                  h[i] = h[4 + i] = v[i];
+               }
+               probePrev.put(k, h);
+               continue;
+            }
+            for (int i = 0; i < 4; i++) {
+               if (v[i] != h[4 + i]) {
+                  ch[i]++;
+                  if (v[i] == h[i]) aba[i]++;
+               }
+               h[i] = h[4 + i];
+               h[4 + i] = v[i];
+            }
+         }
+      }
+      probePacked.clear();
+      probeFrames++;
+      StringBuilder t = new StringBuilder();
+      ArrayList<zombie.characters.IsoGameCharacter.TorchInfo> torches = LightingJNI.pzoptTorches();
+      for (int i = 0; i < torches.size(); i++) {
+         zombie.characters.IsoGameCharacter.TorchInfo ti = torches.get(i);
+         t.append(String.format(java.util.Locale.ROOT, " [id=%d at %.3f,%.3f,%.2f dir %.3f,%.3f dist %.1f str %.2f cone %b dot %.3f]", ti.id, ti.x, ti.y, ti.z, ti.angleX,
+               ti.angleY, ti.dist, ti.strength, ti.cone, ti.dot));
+      }
+      Log.info(String.format(java.util.Locale.ROOT, "ppl probe: f=%d ms=%d pos=%.3f,%.3f,%d cam=%.3f,%.3f sq=%d blocks=%d | corners ch=%d aba=%d | info ch=%d aba=%d | vis ch=%d aba=%d | packed n=%d ch=%d aba=%d | torches%s",
+            probeFrames, System.currentTimeMillis(), p.getX(), p.getY(), pz, IsoCamera.frameState.camCharacterX, IsoCamera.frameState.camCharacterY, sqs, blocks, ch[0], aba[0],
+            ch[1], aba[1], ch[2], aba[2], packed, ch[3], aba[3], t));
    }
 
    // the ambient under saturated torch light: the smallest light of a seen square without torch light, kept across frames
@@ -1899,9 +1978,12 @@ public final class PixelLight {
       "}",
       // the surface normal from the position's screen derivatives, in squares (a level is 2.449 squares tall), facing the
       // viewer; the sprites' depth textures make it a real normal on furniture too (call in uniform control flow)
+      "vec3 pplSnapNormal(vec3 P, vec3 nn);",
       "vec3 pplNormal(vec3 P) {",
       "   vec3 m = P * vec3(1.0, 1.0, PPL_LEVEL);",
-      "   vec3 nn = cross(dFdx(m), dFdy(m));",
+      "   return pplSnapNormal(P, cross(dFdx(m), dFdy(m)));",
+      "}",
+      "vec3 pplSnapNormal(vec3 P, vec3 nn) {",
       "   float l = length(nn);",
       "   nn = l > 1e-10 ? nn / l : vec3(0.0, 0.0, 1.0);",
       "   nn = dot(nn, vec3(3.0, 3.0, PPL_LEVEL)) < 0.0 ? -nn : nn;",
@@ -1952,6 +2034,10 @@ public final class PixelLight {
       "uniform vec4 pplWet;", // x: wet ground x specular strength, y: shininess
       "vec3 pplSpec = vec3(0.0);", // out of pplLight: the wet glints of the lights (added, not multiplied by the surface colour)
       "const vec3 PPL_VIEW = vec3(0.6428, 0.6428, 0.5162);", // towards the camera, in squares (the axis the screen does not see: (3, 3, 1) levels)
+      "#ifdef PPL_LAZY_NORMAL",
+      "bool pplNeedN = false;",
+      "vec3 pplLazyNormal(vec3 P);", // defined by the chunk composite (pplTexelPos)
+      "#endif",
       "vec3 pplLight(vec3 P, float dz, vec3 n) {", // n: the surface normal in squares (z up), towards the viewer
       "   int cost = int(pplOpt2.w + 0.5);", // dev: parts switched off (devPplCostAt)
       "   if ((cost & 8) != 0) return vec3(fract(P.x * 0.001) + 0.999);",
@@ -2031,6 +2117,9 @@ public final class PixelLight {
       "         if (abs(a.z - lz) > 1.5) continue;",
       "         float dd = length(P.xy - a.xy);",
       "         if (dd > a.w + 1.0) continue;",
+      "#ifdef PPL_LAZY_NORMAL",
+      "         if (pplNeedN) { n = pplLazyNormal(P); pplNeedN = false; }", // the chunk composite's texel normal: fetched for pixels a light reaches only
+      "#endif",
       "         vec3 lpos = vec3(a.xy, (a.z + (c.w > 0.5 ? 0.55 : 0.6)) * PPL_LEVEL);",
       "         float f = pplOpt.x > 0.5 ? pplFacing(P, n, lpos) : 1.0;",
       "         float glint = 0.0;",
@@ -2176,7 +2265,38 @@ public final class PixelLight {
       "in vec4 col;",
       "in vec2 texCoord;",
       "out vec4 fragColor;",
+      "#if defined(PPL_TEXEL) && !defined(PPL_BASE)",
+      "#define PPL_LAZY_NORMAL",
+      "vec2 pplTt, pplWpt;", // this pixel's position in chunk-texture texels and window px per texel, for pplLazyNormal
+      "#endif",
       LIGHT_GLSL,
+      "#if defined(PPL_TEXEL) && !defined(PPL_BASE)",
+      // pplTexelPos: the torch's facing term takes its normal from the chunk-texture texel the pixel shows, not from screen
+      // derivatives: those moved with the camera's sub-pixel offset (a continuous window position with a nearest texel's
+      // depth), straddled wall and floor edges differently on odd and even frames and flipped the snapped normal, and the
+      // torch light blinked on the walls while the player walked (stairs rig, devPplProbe: the native light never did).
+      // The texel's centre and its own depth (texelFetch: where pixel centres fall on texel edges the NEAREST sample can be
+      // the next texel), its neighbours PPL_NSPAN texels away (pplNormalSpan: one DEPTH16 texel step along a wall is 2-6 LSB,
+      // and the rounding flipped the snapped plane texel by texel, a checker), per axis the side with the smaller depth
+      // change (never across an edge), a cleared texel left out. Only for pixels a light reaches (pplLight asks once).
+      "vec3 pplLazyNormal(vec3 P) {",
+      "   ivec2 mx = textureSize(DEPTH, 0) - 1;",
+      "   ivec2 ti = clamp(ivec2(floor(pplTt)), ivec2(0), mx);",
+      "   vec2 fc = gl_FragCoord.xy + (floor(pplTt) + 0.5 - pplTt) * pplWpt;",
+      "   float d0 = texelFetch(DEPTH, ti, 0).r;",
+      "   const int K = PPL_NSPAN;",
+      "   float xp = texelFetch(DEPTH, min(ti + ivec2(K, 0), mx), 0).r, xm = texelFetch(DEPTH, max(ti - ivec2(K, 0), ivec2(0)), 0).r;",
+      "   float yp = texelFetch(DEPTH, min(ti + ivec2(0, K), mx), 0).r, ym = texelFetch(DEPTH, max(ti - ivec2(0, K), ivec2(0)), 0).r;",
+      "   if (xp >= 1.0 && xm >= 1.0 || yp >= 1.0 && ym >= 1.0) return vec3(0.0, 0.0, 1.0);",
+      "   float sx = xp < 1.0 && (xm >= 1.0 || abs(xp - d0) <= abs(d0 - xm)) ? 1.0 : -1.0;",
+      "   float sy = yp < 1.0 && (ym >= 1.0 || abs(yp - d0) <= abs(d0 - ym)) ? 1.0 : -1.0;",
+      "   vec3 P0 = pplPos(fc, chunkDepth + d0);",
+      "   vec3 px = pplPos(fc + vec2(sx * float(K) * pplWpt.x, 0.0), chunkDepth + (sx > 0.0 ? xp : xm));",
+      "   vec3 py = pplPos(fc + vec2(0.0, sy * float(K) * pplWpt.y), chunkDepth + (sy > 0.0 ? yp : ym));",
+      "   vec3 L = vec3(1.0, 1.0, PPL_LEVEL);",
+      "   return pplSnapNormal(P0, cross((px - P0) * L, (py - P0) * L));",
+      "}",
+      "#endif",
       "void main() {",
       "   vec4 c = vec4(1.0, 1.0, 1.0, 1.0);",
       "   if (useTexture == 1) c = texture(DIFFUSE, texCoord.st);",
@@ -2187,9 +2307,21 @@ public final class PixelLight {
       "   gl_FragDepth = d;",
       "   if (pplOn > 0.5 && (int(pplOpt2.w + 0.5) & 16) == 0) {",
       "      vec3 P = pplPos(gl_FragCoord.xy, d);",
-      "      float dz = max(abs(dFdx(P.z)), abs(dFdy(P.z)));",
+      "      float dz = 0.0;",
       "#ifdef PPL_BASE",
       "      vec3 n = vec3(0.0, 0.0, 1.0);",
+      "#elif defined(PPL_TEXEL)",
+      "      vec3 n = vec3(0.0, 0.0, 1.0);",
+      "      if (pplLn > 0 && pplOpt.x > 0.5 && (int(pplOpt2.w + 0.5) & 4) == 0) {", // uniform condition: the derivatives stay valid
+      "         if ((int(pplOpt2.w + 0.5) & 16384) == 0) {", // dev: cost bit 16384, the screen-derivative normal again (devPplAlternate A/B)
+      "            pplTt = texCoord.st * vec2(textureSize(DEPTH, 0));",
+      "            vec2 tdx = dFdx(pplTt), tdy = dFdy(pplTt);",
+      "            pplWpt = vec2(abs(tdx.x) > 1e-6 ? 1.0 / tdx.x : 0.0, abs(tdy.y) > 1e-6 ? 1.0 / tdy.y : 0.0);", // the chunk quad is axis-aligned
+      "            pplNeedN = true;",
+      "         } else {",
+      "            n = pplNormal(P);",
+      "         }",
+      "      }",
       "#else",
       "      vec3 n = pplLn > 0 && pplOpt.x > 0.5 && (int(pplOpt2.w + 0.5) & 4) == 0 ? pplNormal(P) : vec3(0.0, 0.0, 1.0);", // uniform condition: the derivatives stay valid
       "#endif",
@@ -2212,7 +2344,7 @@ public final class PixelLight {
       "}");
 
    /** The game's chunkShader.frag (DIFFUSE x vertex colour, depth = chunkDepth + the texture's depth) with the light multiplied in. */
-   private static final String TINT = Config.DEV_PPL_TINT ? "#define PPL_TINT\n" : "";
+   private static final String TINT = (Config.DEV_PPL_TINT ? "#define PPL_TINT\n" : "") + (Config.PPL_TEXEL_POS ? "#define PPL_TEXEL\n#define PPL_NSPAN " + Config.PPL_NORMAL_SPAN + "\n" : ""); // the defines every chunk program gets
    private static final String CHUNK_FRAG = "#version 420\n" + (Config.DEV_PPL_VIEW != 0 ? "#define PPL_DEV\n" : "") + TINT + CHUNK_FRAG_BODY; // dev views compiled in only when asked: they keep values alive to the end (registers)
    /** The same without the dynamic lights (chunk textures no light reaches): 32 registers, full occupancy on the 890M (64 with). */
    private static final String CHUNK_BASE_FRAG = "#version 420\n#define PPL_BASE\n" + CHUNK_FRAG_BODY;

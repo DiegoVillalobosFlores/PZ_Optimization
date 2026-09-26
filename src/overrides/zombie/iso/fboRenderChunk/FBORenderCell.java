@@ -4850,6 +4850,7 @@ public final class FBORenderCell {
       pzopt.BakeScheduler s = pzopt.BakeScheduler.get(playerIndex);
       int frameNo = IsoWorld.instance.getFrameNo();
       s.begin(frameNo);
+      s.cameraLevel(PZMath.fastfloor(IsoCamera.frameState.camCharacterZ)); // pzopt: bakeLevelChangeFrames, a floor change bakes at once
       float zoom = Core.getInstance().getZoom(playerIndex);
       int pcx = PZMath.fastfloor(IsoCamera.frameState.camCharacterX / 8.0F);
       int pcy = PZMath.fastfloor(IsoCamera.frameState.camCharacterY / 8.0F);

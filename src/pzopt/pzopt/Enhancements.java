@@ -15,6 +15,9 @@ package pzopt;
  *       chunk texture bakes again with the new AO, or without it); sunShadows the same, sunShadowStrengthPct and
  *       sunShadowSoftnessPct through {@link SunShadow#update} (the kept shadows compute again, no re-bake).</li>
  *   <li>reflections, reflectionStrengthPct, reflectionPuddles: read every frame by {@link Ssr}.</li>
+ *   <li>darknessFloorPct, darknessFloorBasements, memoryTint, memoryLightPct: {@link Darkness#reconfigure} (every loaded
+ *       square re-derives its light from the native's values, every chunk texture bakes again); memoryTintPct is read
+ *       every frame; colorGrading, colorGradingPct, colorGradingNightPct: {@link Grade#reconfigure} (a new LUT).</li>
  * </ul>
  */
 final class Enhancements {
@@ -24,7 +27,8 @@ final class Enhancements {
    /** Is this key one of the Enhancements tab's (as opposed to the Profiler tab's overlay keys)? */
    static boolean owns(String key) {
       return key.startsWith("upscaler") || key.startsWith("dlss") || key.startsWith("fsr") || key.startsWith("hdr")
-         || key.equals("ambientOcclusion") || key.startsWith("ao") || key.startsWith("sunShadow") || key.startsWith("reflection");
+         || key.equals("ambientOcclusion") || key.startsWith("ao") || key.startsWith("sunShadow") || key.startsWith("reflection")
+         || key.startsWith("darknessFloor") || key.startsWith("memory") || key.startsWith("colorGrading");
    }
 
    /** Game thread, after Config.reloadLive(key) returned true. */
@@ -37,6 +41,11 @@ final class Enhancements {
             RenderScale.reconfigure();
          case "ambientOcclusion", "aoScalePct", "aoRadiusPct", "aoStrengthFloorPct", "aoStrengthWallPct", "aoStrengthObjectPct",
                "aoStrengthVegetationPct", "sunShadows" -> ChunkAo.reconfigure();
+         case "darknessFloorPct", "darknessFloorBasements", "memoryTint", "memoryLightPct" -> Darkness.reconfigure();
+         case "memoryTintPct" -> {
+            // read every frame by the remembered-places pass
+         }
+         case "colorGrading", "colorGradingPct", "colorGradingNightPct" -> Grade.reconfigure();
          case "sunShadowStrengthPct", "sunShadowSoftnessPct", "sunShadowCharacters", "sunShadowVehicles", "sunShadowTorches" -> {
             // SunShadow.update sees the new strength / penumbra next frame and recomputes the kept shadows (no re-bake);
             // the capsule pass reads its three switches every frame

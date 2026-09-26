@@ -121,6 +121,17 @@ CLIPS['hdr'] = dict(stock='enh-sdr-night', opt='enh-hdr-night', align='route', a
                     crop='1360:760:2560:1080', title='Night, fires beside a police car: SDR vs HDR')
 CLIPS['hdrday'] = dict(stock='enh-sdr-day', opt='enh-hdr-day', align='route', after=3.0, counter=False, denoise=False,
                        crop='2900:80:1280:540', title='River shore at 15:00, the pier and the water: SDR vs HDR')
+# Darkness floor, remembered places, colour grading (2026-09-26, docs/findings-darkness-grading-2026-09-26.md): the
+# in-game captures of the showcase video (runs cap-*: pzopt.FrameCapture, the desktop recorder had a browser window over
+# the game), already SDR and on one route-start timeline per pair: harness/stitch-darkness.py writes <run>/pane.mkv
+# (1918x1400, 30 fps, cropped round the Rosewood house, both panes of a pair starting at the same route time). kind='pane'
+# cuts both GIFs `after` s into the pane, no tone-map; a 2.37:1 strip of the house and the yard behind it.
+PANE_CROP = '0:330:1918:810'
+for name, stock, opt, title in (
+        ('darkness', 'cap-night-off', 'cap-night-on', 'Rosewood house at 01:00: stock vs darkness floor 20 % + remembered places + colour grading'),
+        ('memory', 'cap-day-off', 'cap-day-on', 'Rosewood house at 13:00, turning in place: stock vs remembered places'),
+        ('grade', 'cap-rain-off', 'cap-rain-on', 'Rosewood house in the rain at 14:00: stock vs colour grading')):
+    CLIPS[name] = dict(stock=stock, opt=opt, kind='pane', after=2.0, counter=False, crop=PANE_CROP, title=title)
 CLIPS['ao'] = dict(stock='enh-ao-off', opt='enh-ao-on', after=1.0, counter=False, crop='1792:756:1536:648',
                    title='Rosewood houses at noon, zoom 1, walking: ambient occlusion off vs on')
 
@@ -206,7 +217,7 @@ TONEMAP = ('zscale=tin=smpte2084:pin=bt2020:min=bt2020nc:t=linear:npl=200,format
            'tonemap=hable,zscale=p=bt709:t=bt709:m=bt709,format=yuv420p')
 
 
-def gif(src, t0, dur, ass, out, fps=FPS, hold=0.0, extra='', crop=None, denoise=True):
+def gif(src, t0, dur, ass, out, fps=FPS, hold=0.0, extra='', crop=None, denoise=True, sdr=False):
     """Tone-map (+ crop) + scale + denoise + subtitles at the GIF's frame rate into a lossless temp, then a one-palette
     GIF (diff palette, no dither) recoded by gifsicle with lossy LZW and real-time per-frame delays. A crop
     ('x:y:w:h' of the 5120x2160 capture) is scaled to 512 wide with its own aspect; else the frame becomes 512x216.
@@ -214,11 +225,12 @@ def gif(src, t0, dur, ass, out, fps=FPS, hold=0.0, extra='', crop=None, denoise=
     it would erase."""
     dn = ',' + DENOISE if denoise else ''
     tmp = tempfile.mktemp(suffix='.mkv')
+    tm = 'format=yuv420p' if sdr else TONEMAP  # sdr: an SDR source (the in-game capture panes), nothing to tone-map
     if crop:
         cx, cy, cw, ch = (int(v) for v in crop.split(':'))
-        vf = f'fps={fps},{TONEMAP},crop={cw}:{ch}:{cx}:{cy},scale={W}:{max(2, round(ch * W / cw / 2) * 2)}:flags=lanczos{dn}'
+        vf = f'fps={fps},{tm},crop={cw}:{ch}:{cx}:{cy},scale={W}:{max(2, round(ch * W / cw / 2) * 2)}:flags=lanczos{dn}'
     else:
-        vf = f'fps={fps},{TONEMAP},scale={W}:{H}:flags=lanczos{dn}'
+        vf = f'fps={fps},{tm},scale={W}:{H}:flags=lanczos{dn}'
     if extra:
         vf += ',' + extra
     if ass:
@@ -300,6 +312,21 @@ def load_clip(name, c, work):
     return res
 
 
+def pane_clip(name, c, work):
+    """Both sides from the pair's in-game capture panes (<run>/pane.mkv, SDR, one timeline): no onset, no tone-map."""
+    res = {}
+    for side in ('stock', 'opt'):
+        d = st.run_dir(c[side])
+        src = os.path.join(d, 'pane.mkv')
+        if not os.path.exists(src):
+            raise SystemExit(f'{name}: {src} missing (harness/stitch-darkness.py writes it)')
+        out = os.path.join(OUT, f'{name}-{side}.gif')
+        res[side] = dict(run=os.path.basename(d), pane_t0=c['after'], file=os.path.basename(out),
+                         bytes=gif(src, c['after'], c.get('dur', DUR), None, out, fps=c.get('fps', FPS), crop=c.get('crop'),
+                                   denoise=c.get('denoise', True), sdr=True))
+    return res
+
+
 def main():
     names = sys.argv[1:] or list(CLIPS)
     os.makedirs(OUT, exist_ok=True)
@@ -312,7 +339,8 @@ def main():
         except IndexError:
             print(f'{name}: runs {c["stock"]} / {c["opt"]} not under harness/runs, skipped', file=sys.stderr)
             continue
-        report[name] = dict(title=c['title'], **(load_clip if c.get('kind') == 'load' else action_clip)(name, c, work))
+        fn = load_clip if c.get('kind') == 'load' else pane_clip if c.get('kind') == 'pane' else action_clip
+        report[name] = dict(title=c['title'], **fn(name, c, work))
     shutil.rmtree(work, ignore_errors=True)
     # which runs and cut points made the shipped GIFs; a partial run updates its clips and keeps the rest
     path = os.path.join(REPO, 'harness/menu-gifs.json')

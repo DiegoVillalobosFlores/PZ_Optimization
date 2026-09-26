@@ -3895,3 +3895,54 @@ Rig: `devDriveJitter` (pzopt.DriveJitter, `harness/drivejitter.py`, `harness/dri
 ### zombie.core.opengl.RenderThread, org.lwjglx.opengl.Display
 - `Ready`, `lockStepRenderStep`, `update`: `DriveJitter.pushed / acquired / swapped` (rig only: which game frame each
   swap showed, `pzopt-driveswap.out`).
+
+
+## Darkness floor, remembered places, colour grading (`darknessFloorPct`, `memoryTint*`, `colorGrading*`, 2026-09-26; pzopt.Darkness, pzopt.Grade, pzopt.GradeMath)
+
+Candidate B of `docs/plan-graphics-enhancements.md`; see `docs/findings-darkness-grading-2026-09-26.md`. All off by
+default, all live from the Enhancements tab.
+
+### zombie.iso.LightingJNI
+- `JNILighting` keeps the native's values of a square (`pzoptDarkRaw`: eight corner colours, the flat light, the fade
+  multiplier, then the derived copies and a settings + visibility key) while a square-level feature is on.
+  `updateFBORenderChunk` calls `pzoptDarkApply(settings, true)` right after it reads the eight corners: for a seen square
+  (above ground unless `darknessFloorBasements`) the corners and the flat light get the darkness floor (a soft maximum of
+  the luminance in a cool tint, `GradeMath.floorLight`), remembered squares (fade multiplier below 1) the higher
+  `memoryLightPct` floor, and the fade multiplier `darkMulti` is held at 0.5 at least (objects of other rooms keep
+  alpha 1 instead of fading out with the black room). Unseen squares are never touched. The stock change test that
+  follows compares the derived values, so no re-bake is added; when the native repeats a square exactly (most re-reads)
+  the derived values are copied back without arithmetic (`Darkness.repeated`); a per-thread colour cache
+  (`Darkness.Scratch`) serves the floor of a colour seen before. `pzoptDarkRestore` gives the native values back when
+  the features go off; `reset` drops the kept values (pooled squares). With `devDarkStats` the apply is timed
+  (`Darkness.applyNs`).
+
+### zombie.vispoly.VisibilityPolygon2
+- `renderToScreen`: before the stock blur shader starts, `pzopt.Darkness.memoryPass(...)` may draw the vision pass
+  itself (`memoryTint` on): the same full-screen quad, the same alpha from the 25 vision taps (or the visBlurReduce
+  sums) and the same `gl_FragDepth`, but the colour is the world pixel read after a texture barrier, desaturated,
+  dimmed and cooled, blended by that alpha x `memoryTintPct` (softened over the whole kernel); fragments with no shadow
+  are discarded. When it returns false (off this frame, no texture barrier, a failure) the stock pass runs unchanged.
+  The player index is passed for the optional fade pre-pass (`memoryFadeMs`), which reprojects its history by that
+  player's camera offset.
+
+### zombie.core.opengl.ShaderUnit
+- The shader source goes through `pzopt.Grade.patchShader` before `pzopt.Hdr.patchShader`: `screen.frag` gets its
+  `main` renamed and a new one (ARB_shading_language_420pack for the two `sampler3D` bindings 13 and 14; test-compiled,
+  stock on failure): grading off = the stock main; on, on the plain world path (no drunk / blur / search mode / goggles)
+  the bicubic sample, the stock `desaturate(DesaturationVal)` and one fetch of the fused table (the rest of the stock
+  world path and the grade; the stock 3D noise and its film grain of at most 0.0015 are not computed); otherwise the
+  stock main followed by the grade-only table (goggles ungraded). The HDR expansion sees the graded picture.
+
+### zombie.iso.weather.WeatherShader
+- `startRenderThread` calls `pzopt.Grade.worldUniforms(this.getID())` after the HDR uniforms: uploads a new LUT when the
+  worker baked one, binds it on unit 13, sets `pzGradeP` (on / dither / shaper scale). Off: one uniform.
+
+### zombie.iso.IsoWorld
+- `render` calls `pzopt.Darkness.frame()` first (game thread, once per frame): pending live settings (every loaded
+  square re-derived, every chunk texture re-baked), the grading weights from the climate, and a generic draw that
+  carries the frame's render-side switches in stream order.
+
+### zombie.core.textures.MultiTextureFBO2, zombie.iso.fboRenderChunk.FBORenderCell
+- The GPU section names `screen` and `vispoly` go through `pzopt.Darkness.section`: unchanged normally, suffixed
+  `.on` / `.off` with `devDarkAlternate` so the grade and the remembered-places pass are timed against the stock paths
+  in one run.

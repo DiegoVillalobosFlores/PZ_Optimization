@@ -702,6 +702,32 @@ local ENHANCEMENT_SECTIONS = {
         },
     },
     {
+        title = "Darkness, remembered places and colour grading", clip = "darkness",
+        entries = {
+            { key = "darknessFloorPct", label = "Darkness floor (% of full light)",
+              choices = { "0", "10", "15", "20", "30", "40" }, note = { ["0"] = "off (the game's own darkness)", ["20"] = "a dim moonlit floor" },
+              tip = "No place you have already seen gets darker than this: pitch-black rooms and nights keep a faint, cool light, so you can make out the floor, walls and furniture instead of a black void. Lamps, fires, torches and daylight are unchanged; places you have never seen stay black. Basements stay pitch black unless you tick the next box. Applied to the game's own light values, so it costs nothing per frame; the chunk pictures on screen are redrawn once when you change it." },
+            { key = "darknessFloorBasements", label = "Darkness floor: also in basements",
+              tip = "Basements and everything below ground get the darkness floor too. Off: below ground stays as dark as the game makes it." },
+            { key = "memoryTint", label = "Remembered places",
+              tip = "What you cannot see right now (behind walls, behind you) is drawn like a memory, desaturated, dimmer and cooler, with a soft edge, instead of darkened; rooms of a building you walked out of keep a dim remembered light and their furniture instead of going black. Zombies and other characters out of sight stay hidden as always. Replaces the view cone's own darkening in the same pass, so it costs nothing extra. Windows and Linux (not on macOS, OpenGL 2.1)." },
+            { key = "memoryTintPct", label = "Remembered places: strength (%)",
+              choices = { "40", "55", "70", "85", "100" }, note = { ["70"] = "default" },
+              tip = "How strongly what you cannot see is desaturated and dimmed. 100 turns it fully grey." },
+            { key = "memoryLightPct", label = "Remembered places: light of remembered rooms (% of full light)",
+              choices = { "5", "10", "15", "20" }, note = { ["10"] = "default" },
+              tip = "How bright rooms you have seen stay once they are out of sight (the game fades them to black)." },
+            { key = "colorGrading", label = "Colour grading",
+              tip = "The picture is colour graded by time of day and weather, like a film: nights shift towards the desaturated blue-green your eyes see in the dark (the Purkinje effect) while lamps and fires keep their colour, dawn is pink and cool in the shadows, the hour before dusk golden, overcast and rain greyer and cooler, storms dark and cold, fog soft and flat. Clear daylight is unchanged. The game's own screen filter and the grade become one colour lookup per pixel, which makes the screen pass cheaper than the game's own (its invisible film grain is left out); the lookup table is rebuilt in the background when the weather or the hour moves it. Custom looks: .cube files named base, night, dawn, dusk, overcast, rain, storm, fog or snow in Zomboid/pzopt/luts. Windows and Linux (not on macOS, OpenGL 2.1)." },
+            { key = "colorGradingPct", label = "Colour grading: strength (%)",
+              choices = { "25", "50", "75", "100", "130" }, note = { ["100"] = "default" },
+              tip = "How strong the grade is. 0 would be the game's own colours." },
+            { key = "colorGradingNightPct", label = "Colour grading: night vision shift (%)",
+              choices = { "0", "50", "100", "150" }, note = { ["100"] = "default" },
+              tip = "How much dark places at night lose their colour and turn blue-green, like human night vision. 0 keeps the night's colours." },
+        },
+    },
+    {
         title = "Per-pixel lighting (smooth light, torch and headlight beams drawn per pixel)", clip = "torch",
         entries = {
             { key = "pixelLight", label = "Per-pixel lighting",
@@ -942,6 +968,10 @@ local CLIP_TITLES = {
     hdr = "Night, fires beside a police car with its light bar: the HDR side is tone-mapped to fit this SDR preview, so its lights look brighter, not as bright as on an HDR screen",
     hdrday = "River shore at 15:00, clear sky, a crop of the pier and the water: the sun glitter on the water, tone-mapped to fit this SDR preview",
     ao = "Rosewood houses at noon, walking south at zoom 1: a crop around the player, ambient occlusion off vs on",
+    -- darkness floor, remembered places, colour grading (2026-09-26, runs cap-*: the game's own frames, the player turning in place)
+    darkness = "Rosewood house at 01:00, the player turning in place: darkness floor 20 %, remembered places and colour grading together",
+    memory = "Rosewood house at 13:00, the player turning in place: what is out of sight is drawn grey, dimmer and cooler",
+    grade = "Rosewood house in the rain at 14:00, the player turning in place: colour grading (cooler, greyer, softer in rain)",
 }
 -- Clips whose stock side is a shared GIF (one stock run for several group clips): <STOCK_FILE[clip]>-stock.gif.
 local STOCK_FILE = { zombies = "lou", player = "lou", upscale = "native", dlss = "native", fsrzoom = "nativezoom", dlsszoom = "nativezoom" }
@@ -959,6 +989,9 @@ local CLIP_SIDES = {
     hdr = { "SDR (HDR OFF)", "HDR ON" },
     hdrday = { "SDR (HDR OFF)", "HDR ON" },
     ao = { "AMBIENT OCCLUSION OFF", "AMBIENT OCCLUSION ON" },
+    darkness = { "STOCK DARKNESS", "FLOOR + REMEMBERED + GRADING" },
+    memory = { "REMEMBERED PLACES OFF", "REMEMBERED PLACES ON" },
+    grade = { "COLOUR GRADING OFF", "COLOUR GRADING ON" },
 }
 -- The line under the clips: what is the same in both, and what the burned-in number is (clips without one say so).
 local CLIP_NOTES = {
@@ -967,6 +1000,9 @@ local CLIP_NOTES = {
     hdr = ". Same save, spot and machine; no counter.",
     hdrday = ". Same save, spot and machine; no counter.",
     ao = ". Same save, route and machine; no counter.",
+    darkness = ". Same save, spot and hour, frames lined up; no counter.",
+    memory = ". Same save, spot and hour, frames lined up; no counter.",
+    grade = ". Same save, spot and hour, frames lined up; no counter.",
 }
 local function clipSides(clip)
     if CLIP_SIDES[clip] then return CLIP_SIDES[clip] end
@@ -976,6 +1012,7 @@ local function clipSides(clip)
     return CLIP_SIDES.default
 end
 local KEY_CLIP = {
+    memoryTint = "memory", memoryTintPct = "memory", memoryLightPct = "memory", colorGrading = "grade", colorGradingPct = "grade",
     rainTiles = "storm", puddleCache = "storm", rainSplashesFast = "storm", puddleEarlyZ = "storm", puddleVbo = "storm",
     puddleCacheFrames = "storm", weatherMaskIdleSkip = "storm", weatherFxScalePct = "storm", vboBatchKb = "storm",
     vboFastQuads = "storm", lightingRebakeBudget = "storm", lightingRebakeMaxFrames = "storm",
@@ -1139,6 +1176,9 @@ local EFFECTS = {
     ambientOcclusion = { gpu = 1, vram = 1 },
     sunShadows = { gpu = 1, vram = 1 },
     reflections = { gpu = 1, vram = 1 },
+    darknessFloorPct = {},
+    memoryTint = {},
+    colorGrading = { gpu = -1 },
     pixelLight = { cpu = -1, gpu = 1, vram = 1 },
     pplPointLights = { gpu = 1 },
     pplShadows = { gpu = 2 },

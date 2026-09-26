@@ -14,6 +14,21 @@
   },
   "title": "Rosewood houses at noon, zoom 1, walking: ambient occlusion off vs on"
  },
+ "darkness": {
+  "opt": {
+   "bytes": 361972,
+   "file": "darkness-opt.gif",
+   "pane_t0": 2.0,
+   "run": "cap-night-on-20260926-115405"
+  },
+  "stock": {
+   "bytes": 390239,
+   "file": "darkness-stock.gif",
+   "pane_t0": 2.0,
+   "run": "cap-night-off-20260926-115257"
+  },
+  "title": "Rosewood house at 01:00: stock vs darkness floor 20 % + remembered places + colour grading"
+ },
  "dlss": {
   "opt": {
    "bytes": 2080277,
@@ -84,6 +99,21 @@
    "video_t0": 18.02
   },
   "title": "Rosewood house, 1:1 crop: native vs FSR 1.0 quality"
+ },
+ "grade": {
+  "opt": {
+   "bytes": 761897,
+   "file": "grade-opt.gif",
+   "pane_t0": 2.0,
+   "run": "cap-rain-on-20260926-121434"
+  },
+  "stock": {
+   "bytes": 903194,
+   "file": "grade-stock.gif",
+   "pane_t0": 2.0,
+   "run": "cap-rain-off-20260926-115950"
+  },
+  "title": "Rosewood house in the rain at 14:00: stock vs colour grading"
  },
  "grid": {
   "opt": {
@@ -157,6 +187,21 @@
    "video_t0": 2.16
   },
   "title": "Launch to main menu, Continue to world"
+ },
+ "memory": {
+  "opt": {
+   "bytes": 226310,
+   "file": "memory-opt.gif",
+   "pane_t0": 2.0,
+   "run": "cap-day-on-20260926-115623"
+  },
+  "stock": {
+   "bytes": 328013,
+   "file": "memory-stock.gif",
+   "pane_t0": 2.0,
+   "run": "cap-day-off-20260926-115514"
+  },
+  "title": "Rosewood house at 13:00, turning in place: stock vs remembered places"
  },
  "nightdrive": {
   "opt": {

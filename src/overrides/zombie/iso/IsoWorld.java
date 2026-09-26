@@ -2769,6 +2769,7 @@ public final class IsoWorld {
       AbstractPerformanceProfileProbe var1 = IsoWorld.s_performance.isoWorldRender.profile();
 
       try {
+         pzopt.Darkness.frame(); // pzopt: darkness floor / remembered places / colour grading: live settings, grade weights, this frame's render switches
          pzopt.GpuSections.begin("world"); // pzopt: GPU section (the whole world pass, the part the render scale shrinks)
          this.renderInternal();
          pzopt.GpuSections.end("world"); // pzopt: GPU section

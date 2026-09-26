@@ -921,6 +921,23 @@ public final class Config {
    public static final int PHYSICS_STEP_HZ = integer("physicsStepHz", 100); // vehicle physics fixed step rate (stock 100 Hz); with physicsStepMode=frame the smallest rate a frame is split at
    public static final String PHYSICS_STEP_MODE = string("physicsStepMode", "fixed"); // fixed (stock: whole steps, remainder carried) | frame (each frame's time in equal steps, nothing carried)
    public static final boolean DEV_DRIVE_JITTER = bool("devDriveJitter", false); // measurement: per-frame vehicle / camera / physics-step log pzopt-drivejitter.out (pzopt.DriveJitter, harness/drivejitter.py)
+   // Candidate B (2026-09-26, pzopt.Darkness / pzopt.Grade): darkness floor, remembered places, colour grading. The
+   // tab keys are live (loadLive); these are the fixed / dev ones.
+   public static final boolean COLOR_GRADING_DITHER = bool("colorGradingDither", false); // triangular dither of one 8-bit step after the LUT; off: the world image is already 8-bit before the grade and the looks barely stretch the darks, and the hash cost ~12 us / frame at 5120x2160
+   public static final boolean COLOR_GRADING_FUSED = bool("colorGradingFused", true); // the plain world path of screen.frag as one 65³ table (stock tail + grade): cheaper than the stock shader; false = stock shader + the grade after it
+   public static final String DARKNESS_FLOOR_TINT = string("darknessFloorTint", "0.92,0.98,1.12"); // colour of the darkness floor's lift (normalised to luminance 1)
+   public static final int DEV_DARK_ALTERNATE = integer("devDarkAlternate", 0); // dev: every N frames the render-side part (grade + remembered-places pass) flips on / off; GPU sections screen.on/off, vispoly.on/off
+   public static final boolean DEV_DARK_STATS = bool("devDarkStats", false); // dev: a darkness / grading stats line every 10 s
+   public static final boolean DEV_GRADE_TRACE = bool("devGradeTrace", false); // dev: a console line per LUT bake (look + weights)
+   public static final int DEV_GRADE_ABLATE = integer("devGradeAblate", 0); // dev: cost ablation of the grade shader (0 full, 1 no shaper, 2 no LUT fetch, 3 wrapper only)
+   public static final int DEV_GRADE_REBAKE_MS = integer("devGradeRebakeMs", 0); // dev: force a LUT bake + upload this often (upload cost rig)
+   public static final String GRADE_TUNE = string("gradeTune", ""); // dev: a looks file re-read once a second (pzopt.Grade.Tune)
+   public static final int DEV_MEMORY_DESAT_PCT = integer("devMemoryDesatPct", 90); // remembered places: desaturation of what is out of sight
+   public static final int DEV_MEMORY_DIM_PCT = integer("devMemoryDimPct", 78); // remembered places: brightness kept
+   public static final int DEV_MEMORY_SOFT_PCT = integer("devMemorySoftPct", 100); // remembered places: edge softness (0 = the stock vision edge)
+   public static final int MEMORY_FADE_MS = integer("memoryFadeMs", 0); // remembered places: what goes out of sight turns grey over this long (0 = at once, no pre-pass; 250 costs ~13 us / frame at 5120x2160, run dk-cost4)
+   public static final int MEMORY_FADE_SCALE = integer("memoryFadeScale", 4); // remembered places: the fade pre-pass runs at 1/N of the vision texture per axis (1: +22 us / frame at 5120x2160)
+   public static final int DEV_MEMORY_RING_TEXELS = integer("devMemoryRingTexels", 6); // remembered places: how far inside the shadow the soft edge reaches, in vision texels
    public static final boolean DEV_FOG_NO_DRAW = bool("devFogNoDraw", false); // measurement: the fog pass does everything but the rectangle draw call
    public static final boolean DEV_FOG_FLAT = bool("devFogFlat", false);
    public static final int DEV_FOG_DEPTH_VIEW = integer("devFogDepthView", 0); // measurement: the composite shows 1 = the scene depth, 2 = the fog texel depth, 3 = the fog buffer alpha (R/G = depth * 255 integer / fraction)
@@ -929,6 +946,14 @@ public final class Config {
    // The Profiler tab's keys (the overlay and its game-thread profiler): they apply while the game runs. loadLive()
    // reads them at init and again from reloadLive() when the player changes one (UserOptions.set); pzopt.Overlay and
    // pzopt.GameThreadProfile read them per use or re-derive their state (Overlay.reconfigure). 2026-09-24.
+   public static volatile int DARKNESS_FLOOR_PCT; // luminance floor of seen squares, % of full light (0 = off)
+   public static volatile boolean DARKNESS_FLOOR_BASEMENTS; // the floor also below ground
+   public static volatile boolean MEMORY_TINT; // remembered places: out of sight desaturated / dimmed, remembered rooms kept
+   public static volatile int MEMORY_TINT_PCT; // strength of the remembered look
+   public static volatile int MEMORY_LIGHT_PCT; // light of remembered rooms the game fades to black, % of full light
+   public static volatile boolean COLOR_GRADING; // time-of-day / weather LUT
+   public static volatile int COLOR_GRADING_PCT; // strength of the grade
+   public static volatile int COLOR_GRADING_NIGHT_PCT; // strength of the night-vision (Purkinje) shift within it
    public static volatile boolean OVERLAY_SAMPLING; // measure at all (ring, GL timer queries, sampler thread); off by default since 2026-09-21
    public static volatile boolean OVERLAY;
    public static volatile boolean OVERLAY_LOG;
@@ -1003,6 +1028,14 @@ public final class Config {
       HDR_GLINT_PCT = integer("hdrGlintPct", 100);
       HDR_SUN_PCT = integer("hdrSunPct", 60);
       HDR_SATURATION_PCT = integer("hdrSaturationPct", 0);
+      DARKNESS_FLOOR_PCT = integer("darknessFloorPct", 0);
+      DARKNESS_FLOOR_BASEMENTS = bool("darknessFloorBasements", false);
+      MEMORY_TINT = bool("memoryTint", false);
+      MEMORY_TINT_PCT = integer("memoryTintPct", 70);
+      MEMORY_LIGHT_PCT = integer("memoryLightPct", 10);
+      COLOR_GRADING = bool("colorGrading", false);
+      COLOR_GRADING_PCT = integer("colorGradingPct", 100);
+      COLOR_GRADING_NIGHT_PCT = integer("colorGradingNightPct", 100);
       OVERLAY_SAMPLING = bool("overlaySampling", false);
       OVERLAY = bool("overlay", false);
       OVERLAY_LOG = bool("overlayLog", false);

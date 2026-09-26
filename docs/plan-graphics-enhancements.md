@@ -270,7 +270,11 @@ fractions of a pixel (d7samurai, left: the nearest version crawls and shimmers) 
 More: [Cole Cecil, scaling pixel art without destroying it](https://colececil.dev/blog/2017/scaling-pixel-art-without-destroying-it/) (distorted / good / blurry),
 [a live demo of shader-supersampled mips](https://gnikoloff.github.io/webgl-mipmaps-explainer/) for the zoomed-out case, the [gist itself](https://gist.github.com/d7samurai/9f17966ba6130a75d1bfb0f1894ed377).
 
-**B. Darkness floor, memory tint, night LUT (demand #1, #3, #7).** Three knobs in the composite, none needing new
+**B. Darkness floor, memory tint, night LUT (demand #1, #3, #7).** **Done 2026-09-26** (`darknessFloorPct`,
+`memoryTint`, `colorGrading`; pzopt.Darkness / pzopt.Grade): see `docs/findings-darkness-grading-2026-09-26.md` —
+the floor on the native's per-square light (no frame cost), the remembered look in place of the stock vision pass
+(no cost), and the grade fused with the stock composite's tail in one 65³ LUT (~37 us a frame *cheaper* than stock at
+5K). The text below is the original plan. Three knobs in the composite, none needing new
 data: (1) a minimum world luminance for seen squares (a sandbox-style "darkness floor", basements exempt), (2)
 squares the player has seen but cannot see now drawn desaturated and dimmed with a soft edge instead of the hard
 black (the stock "can see" gate already knows which), (3) LUT colour grading per time of day and weather, a few 3D

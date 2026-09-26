@@ -1400,6 +1400,9 @@ public final class VisibilityPolygon2 {
                Shader pzoptScreen = pzopt.VisBlur.reduce(blurTex); // pzopt: visBlurReduce, the 25-tap sum once per vision texel (null = the stock pass)
                Shader pzoptBlur = pzoptScreen != null ? pzoptScreen : blurShader; // pzopt: visBlurReduce
                GL11.glViewport(screenLeft, screenTop, screenWidth, screenHeight);
+               // pzopt: remembered places (pzopt.Darkness): the out-of-sight look instead of the stock black blend, same quad and depth test
+               if (!pzopt.Darkness.memoryPass(blurTex, blurDepthTex, pzoptScreen != null, screenWidth, screenHeight, screenLeft, screenTop, // pzopt
+                     pzopt.RenderScale.visBlurPx(offscreenWidth), pzopt.RenderScale.visBlurPx(offscreenHeight), this.playerIndex)) { // pzopt
                pzoptBlur.Start(); // pzopt: visBlurReduce
                ShaderProgram blurProgram = pzoptBlur.getProgram(); // pzopt: visBlurReduce
                if (pzoptScreen != null) { // pzopt: visBlurReduce
@@ -1440,6 +1443,7 @@ public final class VisibilityPolygon2 {
                }
 
                pzoptBlur.End(); // pzopt: visBlurReduce
+               } // pzopt: remembered places
             } catch (Throwable var21) {
                if (var2 != null) {
                   try {

@@ -1764,9 +1764,9 @@ public final class FBORenderCell {
             ProfileArea var36 = GameProfiler.getInstance().profile("Visibility");
 
             try {
-               pzopt.GpuSections.begin("vispoly"); // pzopt: GPU section (the vision cone: polygon + blur + screen pass)
+               pzopt.GpuSections.begin(pzopt.Darkness.section("vispoly")); // pzopt: GPU section (the vision cone: polygon + blur + screen pass; devDarkAlternate splits it by the remembered-places state)
                VisibilityPolygon2.getInstance().renderMain(playerIndex);
-               pzopt.GpuSections.end("vispoly"); // pzopt: GPU section
+               pzopt.GpuSections.end(pzopt.Darkness.section("vispoly")); // pzopt: GPU section
             } catch (Throwable var23) {
                if (var36 != null) {
                   try {

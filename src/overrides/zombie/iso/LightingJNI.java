@@ -1404,6 +1404,9 @@ public final class LightingJNI {
       // texture holds the unlit surfaces, the light is composed per pixel afterwards); the real values stay in pzoptReal.
       private boolean pzoptWhite; // pzopt
       private final ColorInfo pzoptReal = new ColorInfo(); // pzopt
+      // pzopt: darkness floor / remembered places (pzopt.Darkness). The native's values as read (8 corners, light info rgb
+      // packed, fade multiplier bits) while a square-level feature is on; the cached ones are derived from them.
+      private int[] pzoptDarkRaw; // pzopt
       public JNILighting(int playerIndex, IsoGridSquare square) {
          this.playerIndex = playerIndex;
          this.square = square;
@@ -1462,6 +1465,69 @@ public final class LightingJNI {
             sb.append(' ').append(l.id).append(',').append(l.x).append(',').append(l.y).append(',').append(l.z).append(',').append(l.radius) // pzopt
                .append(',').append(l.r).append(',').append(l.g).append(',').append(l.b).append(',').append(l.flags); // pzopt
          } // pzopt
+      } // pzopt
+
+      // pzopt: darkness floor / remembered places. fresh = the native's values were just read into the caches; otherwise
+      // (a settings change) the kept raw values are re-derived, or the caches are taken as raw when none were kept yet.
+      public void pzoptDarkApply(pzopt.Darkness.Settings ds, boolean fresh) { // pzopt
+         ColorInfo li = this.pzoptWhite ? this.pzoptReal : this.lightInfo; // pzopt: pixelLight holds the real values aside during a bake
+         int[] raw = this.pzoptDarkRaw; // pzopt: [0..7] corners, [8] info rgb, [9] fade bits (native); [10..19] the same derived; [20] settings + vis key
+         int key = ds.generation << 3 | this.vis & 7; // pzopt
+         if (raw == null || fresh) { // pzopt
+            int info = Math.round(li.r * 255.0F) | Math.round(li.g * 255.0F) << 8 | Math.round(li.b * 255.0F) << 16; // pzopt
+            int darkBits = Float.floatToRawIntBits(this.cacheDarkMulti); // pzopt
+            if (raw == null) { // pzopt
+               raw = this.pzoptDarkRaw = new int[21]; // pzopt
+               raw[20] = -1; // pzopt
+            } else if (raw[20] == key && raw[8] == info && raw[9] == darkBits && raw[0] == this.cacheVertLight[0] && raw[1] == this.cacheVertLight[1] // pzopt
+               && raw[2] == this.cacheVertLight[2] && raw[3] == this.cacheVertLight[3] && raw[4] == this.cacheVertLight[4] && raw[5] == this.cacheVertLight[5] // pzopt
+               && raw[6] == this.cacheVertLight[6] && raw[7] == this.cacheVertLight[7]) { // pzopt: the native repeated itself (most re-reads): the derived values again
+               System.arraycopy(raw, 10, this.cacheVertLight, 0, 8); // pzopt
+               li.r = (raw[18] & 0xFF) / 255.0F; // pzopt
+               li.g = (raw[18] >> 8 & 0xFF) / 255.0F; // pzopt
+               li.b = (raw[18] >> 16 & 0xFF) / 255.0F; // pzopt
+               this.cacheDarkMulti = Float.intBitsToFloat(raw[19]); // pzopt
+               pzopt.Darkness.repeated++; // pzopt
+               return; // pzopt
+            } // pzopt
+            System.arraycopy(this.cacheVertLight, 0, raw, 0, 8); // pzopt
+            raw[8] = info; // pzopt
+            raw[9] = darkBits; // pzopt
+         } // pzopt
+         float rawDark = Float.intBitsToFloat(raw[9]); // pzopt
+         float f = ds.floorFor(this.vis, this.square.z, rawDark); // pzopt
+         pzopt.Darkness.Scratch sc = pzopt.Darkness.scratch(); // pzopt
+         for (int i = 0; i < 8; i++) { // pzopt
+            this.cacheVertLight[i] = f > 0.0F ? sc.floorAbgr(raw[i], f, ds) : raw[i]; // pzopt
+         } // pzopt
+         int info = f > 0.0F ? sc.floorAbgr(raw[8] | 0xFF000000, f, ds) & 0xFFFFFF : raw[8]; // pzopt: the flat light, floored like a corner (8-bit, as the native gives it)
+         li.r = (info & 0xFF) / 255.0F; // pzopt
+         li.g = (info >> 8 & 0xFF) / 255.0F; // pzopt
+         li.b = (info >> 16 & 0xFF) / 255.0F; // pzopt
+         this.cacheDarkMulti = Math.max(rawDark, ds.minDark(this.vis, this.square.z)); // pzopt
+         System.arraycopy(this.cacheVertLight, 0, raw, 10, 8); // pzopt
+         raw[18] = info; // pzopt
+         raw[19] = Float.floatToRawIntBits(this.cacheDarkMulti); // pzopt
+         raw[20] = key; // pzopt
+         if (f > 0.0F) { // pzopt
+            pzopt.Darkness.floored++; // pzopt
+         } // pzopt
+         pzopt.Darkness.applied++; // pzopt
+      } // pzopt
+
+      // pzopt: the features went off: the native's values back
+      public void pzoptDarkRestore() { // pzopt
+         int[] raw = this.pzoptDarkRaw; // pzopt
+         if (raw == null) { // pzopt
+            return; // pzopt
+         } // pzopt
+         ColorInfo li = this.pzoptWhite ? this.pzoptReal : this.lightInfo; // pzopt
+         System.arraycopy(raw, 0, this.cacheVertLight, 0, 8); // pzopt
+         li.r = (raw[8] & 0xFF) / 255.0F; // pzopt
+         li.g = (raw[8] >> 8 & 0xFF) / 255.0F; // pzopt
+         li.b = (raw[8] >> 16 & 0xFF) / 255.0F; // pzopt
+         this.cacheDarkMulti = Float.intBitsToFloat(raw[9]); // pzopt
+         this.pzoptDarkRaw = null; // pzopt
       } // pzopt
 
       public float lampostTotalR() {
@@ -1561,6 +1627,7 @@ public final class LightingJNI {
          this.lightLevel = 0;
          this.lightsCount = 0;
          this.lightInfo.set(0.0F, 0.0F, 0.0F, 1.0F);
+         this.pzoptDarkRaw = null; // pzopt: darkness floor, a reused square starts from the native's values
       }
 
       private void update() {
@@ -1779,6 +1846,16 @@ public final class LightingJNI {
                         for (int i = 0; i < 8; i++) {
                            this.cacheVertLight[i] = lightInts[kk++];
                         }
+                        pzopt.Darkness.Settings pzoptDark = pzopt.Darkness.squares; // pzopt: darkness floor / remembered places, on the native's fresh values
+                        if (pzoptDark != null) { // pzopt
+                           long pzoptT0 = pzopt.Darkness.TIMING ? System.nanoTime() : 0L; // pzopt: devDarkStats
+                           this.pzoptDarkApply(pzoptDark, true); // pzopt
+                           if (pzopt.Darkness.TIMING) { // pzopt
+                              pzopt.Darkness.applyNs.add(System.nanoTime() - pzoptT0); // pzopt
+                           } // pzopt
+                        } else if (this.pzoptDarkRaw != null) { // pzopt
+                           this.pzoptDarkRaw = null; // pzopt: the fresh values are the native's own
+                        } // pzopt
 
                         int isLightInfoR = (int)(this.lightInfo.r * 255.0F);
                         int isLightInfoG = (int)(this.lightInfo.g * 255.0F);

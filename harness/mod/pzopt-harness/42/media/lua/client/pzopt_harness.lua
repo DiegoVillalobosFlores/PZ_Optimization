@@ -52,7 +52,23 @@ local quitAtMs = nil
 -- Options on that tab, log the tab names, 3 s later write Zomboid/Screenshots/pzopt-options.png, quit 2 s after.
 -- options_search=<text> (Optimizations tab): typed into the tab's search box 1 s after opening, so a section far down
 -- the page is on the screenshot (e.g. options_search=HDR).
+-- options_select=<key> (2026-09-26): the preview panel of every options page shows that setting (its clips, text, bars)
+-- instead of the page's first row, re-selected every tick until the screenshot (a mouse over the list would pick another).
 local optionsCheck = nil
+
+local function selectPreview(mo, key)
+    local n = 0
+    for _, field in ipairs({ "pzoptPreview", "pzoptEnhancementPreview", "pzoptProfilerPreview" }) do
+        local pv = mo[field]
+        for _, row in ipairs(pv and pv.rows or {}) do
+            if row.entry and row.entry.key == key then
+                pv:select(row)
+                n = n + 1
+            end
+        end
+    end
+    return n
+end
 
 local function findSearchBox(el, depth)
     if not el or depth > 8 then return nil end
@@ -83,6 +99,12 @@ local function optionsTick()
         local box = findSearchBox(ms.mainOptions, 0)
         if box then box:setText(c.search) end
         print("[pzopt-harness] options: search '" .. c.search .. "'" .. (box and " typed" or ": search box NOT FOUND"))
+    elseif c.select and not c.shotMs and now - c.openedMs >= 1000 and now - c.openedMs < 3000 then
+        local n = selectPreview(ms.mainOptions, c.select)
+        if not c.selectLogged then
+            c.selectLogged = true
+            print("[pzopt-harness] options: preview on '" .. c.select .. "' (" .. n .. " page(s))")
+        end
     elseif not c.shotMs and now - c.openedMs >= 3000 then
         getCore():TakeFullScreenshot("pzopt-options.png")
         print("[pzopt-harness] options: screenshot requested")
@@ -107,7 +129,8 @@ local function onMainMenuEnter()
     if flags.options_tab and flags.options_tab ~= "" then
         if optionsCheck == nil then
             appendFlag("consumed=1")
-            optionsCheck = { tab = flags.options_tab, search = flags.options_search ~= "" and flags.options_search or nil }
+            optionsCheck = { tab = flags.options_tab, search = flags.options_search ~= "" and flags.options_search or nil,
+                select = flags.options_select ~= "" and flags.options_select or nil }
         end
         return
     end

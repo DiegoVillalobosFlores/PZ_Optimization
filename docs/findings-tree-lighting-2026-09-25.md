@@ -41,7 +41,8 @@ pixelLight=true ambientOcclusion=true sunShadows=true`, the desktop tab file's A
   on each tree's card (the depth only has to match the card or be clamped), use the card's analytic normal, and the
   cards themselves no longer cast in the march. `sunShadowCanopyPct` (35) = sigma x 100.
 - `aoTreeCanopyPct` (25): the sky the crowns hide, straight up through every crown, at most half the sky, times the
-  surface's AO strength (the ground under a tree, a tree's lower crown).
+  vegetation AO strength (the ground under a tree, a tree's lower crown; until 2026-09-26 the receiving surface's
+  strength, so the dark patch under a tree only went away with the floor strength at 0, player report).
 - Identical per world position for every texture that holds a tree's copy: no seams from the tree terms.
 
 ## Rigs

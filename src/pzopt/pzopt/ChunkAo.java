@@ -2016,9 +2016,11 @@ public final class ChunkAo {
       "   float ao = clamp(1.0 - (1.0 - (wsum > 0.0 ? vis / wsum : 1.0)) * sk, 0.0, 1.0);",
       // the sky the crowns hide (aoTreeCanopyPct): straight up from the texel through every crown in reach; a tree's trunk and
       // lower crown under its own, the ground under a tree (the horizon kernel skips a card's own plane and sees no volume)
-      // (at most half the sky: light still comes in under and between the crowns)
+      // (at most half the sky: light still comes in under and between the crowns); shade the vegetation casts, so the
+      // vegetation strength wherever it lands (the floor strength made the ground's dark oval under a tree unremovable
+      // without losing every floor's AO, player report 2026-09-26)
       "#ifndef TREE_NO_SKY",
-      "   if (sunTree.y > 0.0 && sunTree.z > 0.5 && mode.x > 0.5) ao *= 1.0 - 0.5 * sk * (1.0 - exp(-sunTree.y * crownPath(P, vec3(0.0, 0.0, 1.0))));",
+      "   if (sunTree.y > 0.0 && sunTree.z > 0.5 && mode.x > 0.5) ao *= 1.0 - 0.5 * strength.w * (1.0 - exp(-sunTree.y * crownPath(P, vec3(0.0, 0.0, 1.0))));",
       "#endif",
       "   float sun = -1.0;", // -1: no sun term at this texel
       "#ifndef AO_PASS",

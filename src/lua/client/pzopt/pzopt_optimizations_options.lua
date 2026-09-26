@@ -661,7 +661,7 @@ local ENHANCEMENT_SECTIONS = {
               tip = "How dark the shading gets on everything that is neither floor nor wall nor vegetation: furniture, counters, fences, stairs, crates. 0 leaves them unshaded." },
             { key = "aoStrengthVegetationPct", label = "Ambient occlusion: strength on vegetation (%)",
               choices = { "0", "50", "75", "100", "150" }, note = { ["0"] = "no shading on trees, bushes and grass", ["100"] = "default" },
-              tip = "How dark the shading gets on trees, bushes, tall grass and flowers themselves (the ground under them follows the floor strength). 0 leaves them unshaded, which keeps foliage bright." },
+              tip = "How dark the shading gets on trees, bushes, tall grass and flowers, and the soft shade tree crowns cast on the ground straight below them. 0 leaves foliage bright and removes the dark patch under trees; the contact shading where a bush meets the floor follows the floor strength." },
             { key = "aoRadiusPct", label = "Ambient occlusion: reach (% of a tile)",
               choices = { "40", "60", "80", "100" }, note = { ["60"] = "default" },
               tip = "How far from a wall or an object the shading reaches, in tiles. Longer reach is softer and wider." },

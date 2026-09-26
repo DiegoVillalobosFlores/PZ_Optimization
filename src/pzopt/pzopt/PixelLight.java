@@ -147,8 +147,15 @@ public final class PixelLight {
    private static int n; // squares per side of the lattice (power of two, >= the chunk grid)
    private static IsoChunk[] slotChunk;
    private static int[] slotLevel; // per slot and level & 15: the level uploaded there
+   private static boolean[] slotAir; // per slot and level & 15: some squares of that level took their column's light from below (pplAirFill)
+   private static boolean[] slotLite; // per slot and level & 15: packed lite (a ring chunk: no connectivity), repacked in full once on screen
+   private static boolean packLite; // pack(): this chunk is only in the ring
+   private static boolean[] slotAirPending; // per slot: a light change waits for the next refresh of the borrowed levels
+   private static long[] slotAirFrame; // per slot: the frame its borrowed levels were last refreshed (pplAirFill carries a light change up at most every AIR_REFRESH_FRAMES)
+   private static final int AIR_REFRESH_FRAMES = 120;
+   private static int lastAboveBlock = -1; // this chunk's block of the level above its top, packed this frame (copied to the levels above it)
    private static final ArrayList<Frame> RING = new ArrayList<>();
-   private static long frames, blocksUploaded, framesFull, packNs, packSimple, packHidden, packSlow;
+   private static long frames, blocksUploaded, blocksCopied, framesFull, packNs, packSimple, packHidden, packSlow;
    private static int traceSq, traceSeen; // dev (devPplTrace): this frame's packed squares, the seen ones
    private static long traceLum; // and the sum of their packed light
    private static int logCountdown;
@@ -217,6 +224,10 @@ public final class PixelLight {
          int slots = (n / 8) * (n / 8);
          slotChunk = new IsoChunk[slots];
          slotLevel = new int[slots * LEVELS];
+         slotAir = new boolean[slots * LEVELS];
+         slotAirFrame = new long[slots];
+         slotAirPending = new boolean[slots];
+         slotLite = new boolean[slots * LEVELS];
          java.util.Arrays.fill(slotLevel, Integer.MIN_VALUE);
          Log.info("pixel light: " + n + "x" + n + " squares x " + LEVELS + " levels, 3 x " + n * n * LEVELS * 4 / 1048576 + " MB, chunk grid " + IsoChunkMap.chunkGridWidth
             + ", mode " + (compositeMode() ? "composite" : "pass"));
@@ -236,19 +247,33 @@ public final class PixelLight {
       ambB = Math.min(1.0F, ambB + 0.0005F);
       int s = n / 8;
       long packT0 = System.nanoTime();
-      for (int i = 0; i < onScreen.size(); i++) {
-         IsoChunk c = onScreen.get(i);
+      if (slotStamp == null || slotStamp.length != s * s) {
+         slotStamp = new long[s * s];
+         slotTop = new int[s * s];
+      }
+      ArrayList<IsoChunk> packList = Config.PPL_AIR_FILL || Config.PPL_PACK_RING ? withRing(onScreen, s) : onScreen;
+      for (int i = 0; i < packList.size(); i++) {
+         IsoChunk c = packList.get(i);
+         boolean ring = i >= onScreen.size(); // withRing lists the on-screen chunks first
          int slot = Math.floorMod(c.wx, s) + Math.floorMod(c.wy, s) * s;
          if (slotChunk[slot] != c) {
             slotChunk[slot] = c;
             java.util.Arrays.fill(slotLevel, slot * LEVELS, slot * LEVELS + LEVELS, Integer.MIN_VALUE);
          }
-         int zTop = Math.min(c.maxLevel + 1, c.minLevel + LEVELS - 1); // one level above the top: tall sprites (tree crowns) reach into it
+         // one level above the top: tall sprites (tree crowns) reach into it; with pplAirFill up to the tallest neighbour's top
+         // + 1 as well: a tree's copy in a neighbour's texture (TreeBake) reads this chunk's squares at that texture's levels,
+         // and an unpacked level holds the light of whichever chunk used the slot before
+         int zTop = Math.min(Config.PPL_AIR_FILL ? Math.max(c.maxLevel, neighbourTop(c, s)) + 1 : c.maxLevel + 1, c.minLevel + LEVELS - 1);
+         if (Config.PPL_AIR_FILL && slotAirPending[slot] && frames - slotAirFrame[slot] >= AIR_REFRESH_FRAMES) {
+            slotAirFrame[slot] = frames;
+            slotAirPending[slot] = false;
+            markAirDirty(c, slot, c.minLevel + 1, zTop);
+         }
          for (int z = c.minLevel; z <= zTop; z++) {
             int li = z + 32;
             int idx = slot * LEVELS + (z & (LEVELS - 1));
             boolean dirty = li >= 0 && li < 64 && c.pzoptPplDirty[li] != 0;
-            if (slotLevel[idx] == z && !dirty) {
+            if (slotLevel[idx] == z && !dirty && !(slotLite[idx] && !ring)) {
                continue;
             }
             if (!f.room()) {
@@ -259,8 +284,33 @@ public final class PixelLight {
                c.pzoptPplDirty[li] = 0;
             }
             slotLevel[idx] = z;
-            pack(f, c, z, playerIndex);
+            if (z > c.maxLevel + 1 && lastAboveBlock >= 0) {
+               copyBlock(f, lastAboveBlock, z); // every level above the top + 1 is the same: the columns' top corners
+               slotAir[idx] = true;
+               continue;
+            }
+            packLite = ring;
+            boolean air = pack(f, c, z, playerIndex);
+            packLite = false;
+            slotAir[idx] = air;
+            slotLite[idx] = ring;
+            if (z == c.maxLevel + 1) {
+               lastAboveBlock = f.blocks - 1;
+            }
+            if (Config.PPL_AIR_FILL && z <= c.maxLevel && !air) { // (a borrowed level's own repack does not propagate)
+               // the levels above lend this level's top corners to their empty squares: they follow its light, at most every
+               // AIR_REFRESH_FRAMES (they only light tree crowns and air; repacking them with every ground light change while
+               // driving doubled the lattice uploads: +130 us a frame on the game thread)
+               if (frames - slotAirFrame[slot] >= AIR_REFRESH_FRAMES) {
+                  slotAirFrame[slot] = frames;
+                  slotAirPending[slot] = false;
+                  markAirDirty(c, slot, z + 1, zTop);
+               } else {
+                  slotAirPending[slot] = true;
+               }
+            }
          }
+         lastAboveBlock = -1;
       }
       blocksUploaded += f.blocks;
       if (Config.DEV_PPL_PROBE > 0) {
@@ -726,7 +776,7 @@ public final class PixelLight {
    }
 
    public static String stats() {
-      return "ppl: frames=" + frames + " blocks=" + blocksUploaded + " fullFrames=" + framesFull + " bakes=" + bakes + " whitened=" + whitenedSquares
+      return "ppl: frames=" + frames + " blocks=" + blocksUploaded + " (copied " + blocksCopied + ")" + " fullFrames=" + framesFull + " bakes=" + bakes + " whitened=" + whitenedSquares
          + " chunk draws light-free=" + baseDraws + " with lights=" + fullDraws + String.format(" (%.1f lights each)", fullDraws > 0 ? (double)drawLights / fullDraws : 0.0) + " lights culled (saturated / hidden / cone)=" + culled + " point lights merged=" + mergedPoints
          + " squares simple=" + packSimple + " hidden=" + packHidden + " slow=" + packSlow
          + String.format(" pack=%.1fus/frame", frames > 0 ? packNs / 1e3 / frames : 0.0)
@@ -750,25 +800,117 @@ public final class PixelLight {
       return f;
    }
 
+   /** pplAirFill: the levels from..to of chunk {@code c} that borrow corners from below (or lie above its top) repack. */
+   private static void markAirDirty(IsoChunk c, int slot, int from, int to) {
+      for (int za = from; za <= to; za++) {
+         int la = za + 32;
+         if (la >= 0 && la < 64 && (za > c.maxLevel || slotAir[slot * LEVELS + (za & (LEVELS - 1))])) {
+            c.pzoptPplDirty[la] = 1;
+         }
+      }
+   }
+
+   private static final ArrayList<IsoChunk> ringList = new ArrayList<>();
+   private static long[] slotStamp; // per lattice slot: the frame a chunk in it joined this frame's pack list
+   private static int[] slotTop; // per lattice slot: that chunk's maxLevel (neighbourTop reads it: no cell lookups)
+
+   /**
+    * The on-screen chunks and the loaded chunks around them: a texture's pixels reach the squares of the chunks around its
+    * own (a tree's copy drawn into a neighbour's texture by TreeBake, the bilinear between square centres across the
+    * border), and an unpacked slot holds the light of whichever chunk used it before (a tree at the screen's edge drawn
+    * black, or lit by another place). The slot stamps replace a hash set and most cell lookups (~5,000 a frame at max zoom:
+    * ~75 us of the game thread while driving).
+    */
+   private static ArrayList<IsoChunk> withRing(ArrayList<IsoChunk> onScreen, int s) {
+      ringList.clear();
+      long stamp = frames + 1;
+      for (int i = 0, n0 = onScreen.size(); i < n0; i++) {
+         IsoChunk c = onScreen.get(i);
+         int slot = Math.floorMod(c.wx, s) + Math.floorMod(c.wy, s) * s;
+         slotStamp[slot] = stamp;
+         slotTop[slot] = c.maxLevel;
+         ringList.add(c);
+      }
+      if (!Config.PPL_PACK_RING) {
+         return ringList;
+      }
+      IsoCell cell = IsoWorld.instance.currentCell;
+      for (int i = 0, n0 = onScreen.size(); i < n0; i++) {
+         IsoChunk c = onScreen.get(i);
+         for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+               int slot = Math.floorMod(c.wx + dx, s) + Math.floorMod(c.wy + dy, s) * s;
+               if (slotStamp[slot] == stamp) {
+                  continue; // on screen, or already added
+               }
+               slotStamp[slot] = stamp;
+               IsoChunk o = cell.getChunk(c.wx + dx, c.wy + dy);
+               slotTop[slot] = o != null ? o.maxLevel : Integer.MIN_VALUE;
+               if (o != null) {
+                  ringList.add(o);
+               }
+            }
+         }
+      }
+      return ringList;
+   }
+
+   /** The highest level with squares among the eight chunks around {@code c} (their tree copies draw into its squares' light). */
+   private static int neighbourTop(IsoChunk c, int s) {
+      long stamp = frames + 1;
+      int top = c.maxLevel;
+      for (int dy = -1; dy <= 1; dy++) {
+         for (int dx = -1; dx <= 1; dx++) {
+            int slot = Math.floorMod(c.wx + dx, s) + Math.floorMod(c.wy + dy, s) * s;
+            if (slotStamp[slot] == stamp && slotTop[slot] > top) {
+               top = slotTop[slot];
+            }
+         }
+      }
+      return top;
+   }
+
+   /** A copy of block {@code from} of this frame as level {@code z} of the chunk the last pack() wrote. */
+   private static void copyBlock(Frame f, int from, int z) {
+      ByteBuffer b = f.buf();
+      b.put(f.blocks * BLOCK_BYTES, b, from * BLOCK_BYTES, BLOCK_BYTES);
+      f.bx[f.blocks] = f.bx[from];
+      f.by[f.blocks] = f.by[from];
+      f.bl[f.blocks] = z & (LEVELS - 1);
+      f.blocks++;
+      blocksCopied++;
+   }
+
    /**
     * One chunk level: two 16x16 RGBA8 corner blocks (bottom, top; corner c of square (x, y) at texel (2x + (c == 1 || c == 2),
     * 2y + (c >= 2))) and an 8x8 info block (rgb: the square's own light, the native's sample at its centre; a: which of the
     * eight neighbours it is connected to, i.e. shares its corner colours with: the native breaks them at walls between a lit
     * room and the dark outside).
+    *
+    * <p>Returns true when some of its squares took their column's light from below (pplAirFill).
     */
-   private static void pack(Frame f, IsoChunk c, int z, int playerIndex) {
+   private static boolean pack(Frame f, IsoChunk c, int z, int playerIndex) {
       ByteBuffer b = f.buf();
       int base = f.blocks * BLOCK_BYTES;
       IsoCell cell = IsoWorld.instance.currentCell;
       packChunk = c;
-      boolean allSat = true, allHidden = true;
+      boolean allSat = true, allHidden = true, air = false;
       for (int y = 0; y < 8; y++) {
          for (int x = 0; x < 8; x++) {
             IsoGridSquare sq = c.getGridSquare(x, y, z);
             boolean above = false;
-            if (sq == null && z > c.maxLevel) {
+            if (sq == null && z > c.maxLevel && !Config.PPL_AIR_FILL) {
                sq = c.getGridSquare(x, y, c.maxLevel); // above the top: the top corners of the level below, for both layers
                above = true;
+            } else if (sq == null && z > c.minLevel && Config.PPL_AIR_FILL) {
+               // no square here (air above the ground, beside a taller building, above the chunk's top): the column's highest
+               // square below lends its top corners, for both layers. Tall sprites (tree crowns) reach up here; a 0 drew
+               // them black
+               for (int zz = Math.min(z - 1, c.maxLevel); zz >= c.minLevel && sq == null; zz--) {
+                  sq = c.getGridSquare(x, y, zz);
+               }
+               above = sq != null;
+               air |= above;
             }
             int v0 = 0, v1 = 0, v2 = 0, v3 = 0, t0 = 0, t1 = 0, t2 = 0, t3 = 0;
             int info = 0, conn = 0, tvis = 255;
@@ -830,7 +972,9 @@ public final class PixelLight {
                      ambB = Math.min(ambB, li.b);
                   }
                   int wx = sq.x, wy = sq.y;
-                  // E, S, W, N, SE, SW, NW, NE: shared corners equal
+                  // E, S, W, N, SE, SW, NW, NE: shared corners equal (a ring chunk, off screen, lends only its light: every
+                  // neighbour counts as connected, no lookups; it packs in full once it comes on screen)
+                  if (packLite) conn = 255; else {
                   if (same(v1, corner(cell, wx + 1, wy, z, 0, playerIndex)) && same(v2, corner(cell, wx + 1, wy, z, 3, playerIndex))) conn |= 1;
                   if (same(v3, corner(cell, wx, wy + 1, z, 0, playerIndex)) && same(v2, corner(cell, wx, wy + 1, z, 1, playerIndex))) conn |= 2;
                   if (same(v0, corner(cell, wx - 1, wy, z, 1, playerIndex)) && same(v3, corner(cell, wx - 1, wy, z, 2, playerIndex))) conn |= 4;
@@ -839,6 +983,7 @@ public final class PixelLight {
                   if ((conn & 6) == 6 && same(v3, corner(cell, wx - 1, wy + 1, z, 1, playerIndex))) conn |= 32;
                   if ((conn & 12) == 12 && same(v0, corner(cell, wx - 1, wy - 1, z, 2, playerIndex))) conn |= 64;
                   if ((conn & 9) == 9 && same(v1, corner(cell, wx + 1, wy - 1, z, 3, playerIndex))) conn |= 128;
+                  }
                }
             }
             // the corners' vertical gradient (a ceiling brighter or darker than the floor): walls need the corner layers only then
@@ -877,6 +1022,7 @@ public final class PixelLight {
       f.by[f.blocks] = Math.floorMod(c.wy * 8, f.n);
       f.bl[f.blocks] = z & (LEVELS - 1);
       f.blocks++;
+      return air;
    }
 
    // ---- dev (devPplProbe): which values change and come back from frame to frame ----
@@ -2174,6 +2320,7 @@ public final class PixelLight {
       "   if (view == 10) L = B.a < 0.999 && B.a > 0.001 ? vec3(1.0, 0.2, 0.2) : vec3(0.2, 1.0, 0.2);", // dev: red where the edge path runs
       "   if (view == 11) L = B.rgb;", // dev: the base light between the centres
       "   if (view == 12) L = vec3(V, B.a, float(wet));", // dev: the torch visibility, the simple flag, wet
+      "   if (view == 13) L = vec3(P.z < -0.05 ? 1.0 : 0.0, clamp(P.z / 6.0, 0.0, 1.0), fract(P.z));", // dev: the reconstructed height (red below level 0, green up to 6 levels, blue the fraction)
       "#endif",
       "   return L;",
       "}");
@@ -2331,7 +2478,7 @@ public final class PixelLight {
       "      int view = int(pplMapC.w + 0.5);",
       "      if (c.a > 0.0 && view != 2) {",
       "         vec3 L = pplLight(P, dz, n);",
-      "         c.rgb = view == 1 || view == 3 ? L * c.a : c.rgb * L + pplSpec * c.a;", // premultiplied; the glints on top
+      "         c.rgb = view == 1 || view == 3 || view == 13 ? L * c.a : c.rgb * L + pplSpec * c.a;", // premultiplied; the glints on top
       "      }",
       "#else",
       "      if (c.a > 0.0) c.rgb = c.rgb * pplLight(P, dz, n) + pplSpec * c.a;", // premultiplied; the glints on top

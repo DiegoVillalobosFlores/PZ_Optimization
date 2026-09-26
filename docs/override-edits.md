@@ -3847,3 +3847,15 @@ Write-up: `docs/findings-reflections-2026-09-25.md`. Off by default (a change of
 - `pzoptSchedulePlan` hands the camera character's level to `BakeScheduler.cameraLevel` before the offers: for
   `bakeLevelChangeFrames` (3) frames after it changes, the scheduler grants every cutaway and never-textured level at once
   (as stock bakes them), so the floor the player arrives on replaces the old one in one frame instead of chunk by chunk.
+## Trees lit with every lighting feature on (`sunShadowTrees`, `aoTreeCanopyPct`, 2026-09-26; pzopt.TreeShade, crown proxies in pzopt.ChunkAo)
+
+See `docs/findings-tree-lighting-2026-09-25.md`.
+
+### zombie.iso.fboRenderChunk.FBORenderTrees (new override)
+- `renderTexture`: when `TreeShade.active()` (sun shadows with `sunShadowTrees`, or AO with `aoTreeCanopyPct`) and the
+  tree is drawn per frame (not into a chunk texture), the tree's quad is drawn as `TreeShade.STRIPS` horizontal strips
+  whose vertices carry the tree colour times `TreeShade.shade` at their point of the card: the same crown proxy as the
+  chunk kernel's baked trees (an ellipsoid on the card from the sprite's size; the path out of it towards the sun and
+  straight up), so a tree near the player (swaying in the wind, fading, translucent: never baked) keeps the shaded trunk
+  and lower crown its baked neighbours have. Everything else about the quad (corners, wind distortion, uv, depth, stencil
+  passes) is unchanged; with both keys off, or drawing into a chunk texture, the stock single quad is drawn.

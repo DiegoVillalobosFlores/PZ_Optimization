@@ -483,8 +483,17 @@ public final class ChunkAo {
       job.isoInvSA = 1.0F / (s * 32.0F * Core.tileScale);
       job.isoS = s;
       job.isoTop = FBORenderChunk.PIXELS_PER_LEVEL * (rc.getTopLevel() - minLevel + 1) + FBORenderLevels.extraHeightForJumboTrees(minLevel, rc.getTopLevel());
-      job.vegetation = Config.AO && vegetationMask(job.veg, c, minLevel, rc.getTopLevel());
       job.sun = SunShadow.enabled() && SunShadow.dir[3] > 0F;
+      job.vegetation = Config.AO && Config.AO_STRENGTH_VEGETATION_PCT != Config.AO_STRENGTH_OBJECT_PCT
+         && vegetationMask(job.veg, c, minLevel, rc.getTopLevel());
+      job.nTrees = job.sun && Config.SUN_SHADOW_TREES || Config.AO && Config.AO_TREE_CANOPY_PCT > 0 ? collectTrees(job, c, minLevel, rc.getTopLevel()) : 0;
+      job.trees = job.nTrees > 0;
+      System.arraycopy(SunShadow.world, 0, job.sunWorld, 0, 4);
+      job.treeDump = 0;
+      if (Config.DEV_AO_DUMP_TREE > 0 && treeComputes < Config.DEV_AO_DUMP_TREE && (hasTree(c, minLevel) || job.nTrees > 0)) {
+         job.treeDump = ++treeComputes;
+         job.dumpWhere = c.wx + "," + c.wy + "," + minLevel + "," + rc.getTopLevel();
+      }
       if (job.sun) {
          System.arraycopy(SunShadow.dir, 0, job.sunDir, 0, 4);
          System.arraycopy(SunShadow.perp, 0, job.sunPerp, 0, 4);
@@ -676,6 +685,21 @@ public final class ChunkAo {
       return mask;
    }
 
+   private static int treeComputes; // dev (devAoDumpTree)
+
+   /** Does a tree stand in this chunk on the texture's levels (dev: devAoDumpTree)? */
+   private static boolean hasTree(IsoChunk c, int minLevel) {
+      for (int y = 0; y < 8; y++) {
+         for (int x = 0; x < 8; x++) {
+            IsoGridSquare sq = c.getGridSquare(x, y, minLevel);
+            if (sq != null && sq.getTree() != null) {
+               return true;
+            }
+         }
+      }
+      return false;
+   }
+
    /** The vegetation mask covers the chunk and this many squares around it (neighbours' tree crowns reach in). */
    private static final int VEG_MARGIN = 4;
    private static final int VEG_SIDE = 8 + 2 * VEG_MARGIN; // 16: 256 bits, 8 ints a plane
@@ -690,9 +714,6 @@ public final class ChunkAo {
     */
    private static boolean vegetationMask(int[] veg, IsoChunk c, int minLevel, int topLevel) {
       java.util.Arrays.fill(veg, 0);
-      if (Config.AO_STRENGTH_VEGETATION_PCT == Config.AO_STRENGTH_OBJECT_PCT) {
-         return false;
-      }
       zombie.iso.IsoCell cell = IsoWorld.instance.currentCell;
       if (cell == null) {
          return false;
@@ -725,6 +746,119 @@ public final class ChunkAo {
          }
       }
       return any;
+   }
+
+   /** sunShadowTrees / aoTreeCanopyPct: a compute sees the trees of the chunks this far around its own (shadows ~2 chunks long at a low sun). */
+   private static final int TREE_CHUNK_REACH = 2;
+   static final int MAX_TREES = 16;
+   private static final java.util.HashMap<Long, Object[]> CHUNK_TREES = new java.util.HashMap<>(); // chunk (wx, wy) -> {frame, float[] x, y, z, levels per tree}
+   private static final float[] TREE_DIST = new float[MAX_TREES];
+
+   /**
+    * The trees round the texture as crown proxies for the kernel (nearest first, at most MAX_TREES): treeA = (centre x, y
+    * relative to the chunk's corner, crown centre height, horizontal radius), treeB = (vertical radius, top, foot height,
+    * card x + y), heights in squares above the texture's lowest level. A crown is an ellipsoid centred on the tree's card
+    * (TreeBake draws the sprite as a camera-facing card through the square's south corner, x + y = the square's + 2), sized
+    * from the sprite (IsoTree.renderInner's JUMBO sizes). Every texture a tree reaches gets the same proxy, so the copies of
+    * one tree in neighbouring textures shade alike (a march through the sampled depths differed per texture: seams). Returns
+    * the count.
+    */
+   private static int collectTrees(Job job, IsoChunk c, int minLevel, int topLevel) {
+      zombie.iso.IsoCell cell = IsoWorld.instance.currentCell;
+      if (cell == null) {
+         return 0;
+      }
+      float ccx = c.wx * 8 + 4F, ccy = c.wy * 8 + 4F;
+      int n = 0;
+      float[] dist = TREE_DIST;
+      for (int dy = -TREE_CHUNK_REACH; dy <= TREE_CHUNK_REACH; dy++) {
+         for (int dx = -TREE_CHUNK_REACH; dx <= TREE_CHUNK_REACH; dx++) {
+            IsoChunk nc = dx == 0 && dy == 0 ? c : cell.getChunk(c.wx + dx, c.wy + dy);
+            if (nc == null) {
+               continue;
+            }
+            float[] t = chunkTrees(nc);
+            for (int k = 0; k + 3 < t.length; k += 4) {
+               int z = (int)t[k + 2];
+               if (z < minLevel || z > topLevel) {
+                  continue;
+               }
+               float d = (float)Math.hypot(t[k] + 0.5F - ccx, t[k + 1] + 0.5F - ccy);
+               int at;
+               if (n < MAX_TREES) {
+                  at = n++;
+               } else {
+                  at = 0; // the farthest kept one makes room
+                  for (int q = 1; q < MAX_TREES; q++) {
+                     if (dist[q] > dist[at]) at = q;
+                  }
+                  if (d >= dist[at]) {
+                     continue;
+                  }
+               }
+               dist[at] = d;
+               float levels = t[k + 3];
+               float hSq = levels * 2.4494897F;
+               float foot = (z - minLevel) * 2.4494897F;
+               float rh = levels >= 4.5F ? 3.3F : levels >= 3.5F ? 2.4F : levels >= 2F ? 1.5F : 0.6F;
+               float sum = t[k] - c.wx * 8 + t[k + 1] - c.wy * 8 + 2F;
+               float lat = t[k] - c.wx * 8 - (t[k + 1] - c.wy * 8);
+               job.treeA[at * 4] = (sum + lat) * 0.5F;
+               job.treeA[at * 4 + 1] = (sum - lat) * 0.5F;
+               job.treeA[at * 4 + 2] = foot + 0.6F * hSq;
+               job.treeA[at * 4 + 3] = rh;
+               job.treeB[at * 4] = 0.4F * hSq;
+               job.treeB[at * 4 + 1] = foot + hSq;
+               job.treeB[at * 4 + 2] = foot;
+               job.treeB[at * 4 + 3] = sum;
+            }
+         }
+      }
+      return n;
+   }
+
+   /** A chunk's trees on any level: x, y, z, sprite height in levels per tree; cached 600 frames (trees are rarely felled). */
+   private static float[] chunkTrees(IsoChunk c) {
+      long key = ((long)c.wx << 32) ^ (c.wy & 0xFFFFFFFFL);
+      Object[] e = CHUNK_TREES.get(key);
+      if (e != null && frames - (Long)e[0] < 600L) {
+         return (float[])e[1];
+      }
+      float[] out = new float[16];
+      int n = 0;
+      for (int z = c.minLevel; z <= c.maxLevel; z++) {
+         for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
+               IsoGridSquare sq = c.getGridSquare(x, y, z);
+               IsoTree t = sq == null ? null : sq.getTree();
+               if (t == null) {
+                  continue;
+               }
+               if (n + 4 > out.length) {
+                  out = java.util.Arrays.copyOf(out, out.length * 2);
+               }
+               out[n] = sq.x;
+               out[n + 1] = sq.y;
+               out[n + 2] = z;
+               out[n + 3] = treeLevels(t);
+               n += 4;
+            }
+         }
+      }
+      out = java.util.Arrays.copyOf(out, n);
+      if (CHUNK_TREES.size() > 4096) {
+         CHUNK_TREES.clear();
+      }
+      CHUNK_TREES.put(key, new Object[] {frames, out});
+      return out;
+   }
+
+   /** A tree sprite's height above its foot in levels (IsoTree.renderInner's JUMBO sizes: 15, 11, 7 floor heights of 32 px, else 3). */
+   private static float treeLevels(IsoTree t) {
+      zombie.core.textures.Texture tex = t.getSprite() != null ? t.getSprite().getTextureForCurrentFrame(t.getDir(), t) : null;
+      String tn = tex != null && tex.getName() != null ? tex.getName() : t.getSprite() != null ? t.getSprite().name : null;
+      float floors = tn == null ? 3F : tn.contains("JUMBOXXL") ? 15F : tn.contains("JUMBOXL") ? 11F : tn.contains("JUMBO") ? 7F : 3F;
+      return floors / 3F;
    }
 
    /**
@@ -839,7 +973,13 @@ public final class ChunkAo {
       final int[] srcH = new int[9];
       final float[] srcDepth = new float[9]; // added to the source's depth to put it in this texture's depth
       final int[] veg = new int[32]; // vegetation squares, 4 planes of 16 x 16 bits (vegetationMask)
-      boolean vegetation; // the mask has a square set
+      boolean vegetation; // the mask has a square set (aoStrengthVegetationPct: the plant strength applies)
+      boolean trees; // sunShadowTrees / aoTreeCanopyPct: crown proxies in reach (collectTrees)
+      int nTrees;
+      final float[] treeA = new float[MAX_TREES * 4], treeB = new float[MAX_TREES * 4];
+      final float[] sunWorld = new float[4]; // the direction to the sun in world squares (x east, y south, z up)
+      int treeDump; // dev (devAoDumpTree): > 0 = this compute's texture holds a tree and is the Nth such: dump it
+      String dumpWhere = ""; // dev: the chunk wx, wy and the texture's levels
       boolean sun; // sun shadows: sunDir / sunPerp / ext are set
       final float[] sunDir = new float[4]; // SunShadow.dir: view-space direction to the sun, w = strength
       final float[] sunPerp = new float[4]; // SunShadow.perp: across it, w = tan of the penumbra angle
@@ -919,7 +1059,7 @@ public final class ChunkAo {
       private final HashMap<Integer, Entry> entries = new HashMap<>();
       private int aoProgram;
       private int aoOnlyProgram; // AO_PASS: no sun code (its registers)
-      private final int[] uAoOnly = new int[15];
+      private final int[] uAoOnly = new int[18];
       private int blurProgram;
       private int mulProgram;
       private int ratioProgram;
@@ -936,7 +1076,7 @@ public final class ChunkAo {
       private int rawW;
       private int rawH;
       private final int[] viewport = new int[4];
-      private final int[] uAo = new int[15];
+      private final int[] uAo = new int[18];
       private final int[] uBlur = new int[3];
       private final int[] uMul = new int[2];
       private final int[] uRatio = new int[4];
@@ -1070,11 +1210,22 @@ public final class ChunkAo {
             // height, at most sunShadowLengthPct; the steps shrink with it (a high sun: short shadows, fewer samples as dense)
             float maxLen = Math.max(0.5F, Config.SUN_SHADOW_LENGTH_PCT / 100.0F);
             float len = Math.max(1.0F, Math.min(maxLen, 2.0F * 2.4494897F / Math.max(0.05F, job.sunTanElev)));
-            int steps = Math.max(8, Math.min(32, Math.round(Math.max(1, Config.SUN_SHADOW_STEPS) * len / maxLen)));
+            int steps = Math.max(8, Math.min(32, Math.round(Math.max(1, Config.SUN_SHADOW_STEPS) * Math.min(len, maxLen) / maxLen)));
             GL20.glUniform4f(u[12], len * job.ppu, Math.max(0.05F, Config.SUN_SHADOW_THICKNESS_PCT / 100.0F), steps, 1.0F);
             GL30.glUniform1uiv(u[13], job.ext);
+            // sunShadowTrees: foliage optical depth per square of crown on the sun's path, the crown's half depth around its card
          } else {
             GL20.glUniform4f(u[10], 0.0F, 0.0F, 0.0F, 0.0F);
+         }
+         // the trees (sunShadowTrees / aoTreeCanopyPct): crown proxies; sunTree x the crowns' optical depth for the sun per square
+         // of crown crossed (0: no sun on trees), y for the sky above, z the proxies in use; sunWorld the sun in world squares
+         boolean sunTrees = job.trees && job.sun && Config.SUN_SHADOW_TREES;
+         GL20.glUniform4f(u[14], sunTrees ? Math.max(0, Config.SUN_SHADOW_CANOPY_PCT) / 100.0F : 0.0F,
+            job.trees && Config.AO ? Math.max(0, Config.AO_TREE_CANOPY_PCT) / 100.0F : 0.0F, job.nTrees, 0.0F);
+         if (job.trees) {
+            GL20.glUniform4fv(u[15], job.treeA);
+            GL20.glUniform4fv(u[16], job.treeB);
+            GL20.glUniform4f(u[17], job.sunWorld[0], job.sunWorld[1], job.sunWorld[2], 0.0F);
          }
          GL20.glUniform4f(u[8], 16.0F * Core.tileScale, 96.0F * Core.tileScale, SQUARE_DEPTH_HALF, job.vegetation ? 1.0F : 0.0F);
          // the strengths go into the kept AO (so the multiply / ratio passes run at 1); read per compute: the Enhancements tab changes them live
@@ -1152,9 +1303,14 @@ public final class ChunkAo {
          GL20.glUniform1f(this.uBlur[2], Config.DEV_SUN_VIEW > 0 ? 1.0F : 0.0F);
          GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.rawTex);
          GL11.glDrawArrays(GL11.GL_TRIANGLE_FAN, 0, 4);
-         if (Config.DEV_AO_DUMP_FRAME > 0 && computed == Config.DEV_AO_DUMP_FRAME) {
-            this.dump(job, aw, ah, sc);
-            this.dumpTerm(direct ? e.fbo : this.newFbo, aw, ah);
+         if (Config.DEV_AO_DUMP_FRAME > 0 && computed == Config.DEV_AO_DUMP_FRAME || job.treeDump > 0) {
+            java.io.File dumpDir = new java.io.File(zombie.ZomboidFileSystem.instance.getCacheDir());
+            if (job.treeDump > 0) {
+               dumpDir = new java.io.File(dumpDir, "pzopt-chunkao/" + job.treeDump); // devAoDumpTree: one directory per compute
+               dumpDir.mkdirs();
+            }
+            this.dump(job, aw, ah, sc, dumpDir);
+            this.dumpTerm(direct ? e.fbo : this.newFbo, aw, ah, dumpDir);
          }
          this.stamp(1);
          if (inBake) {
@@ -1317,13 +1473,15 @@ public final class ChunkAo {
       }
 
       /** Dev (devAoDumpFrame = the Nth computed texture): its raw AO (AO, depth) to ~/Zomboid/pzopt-chunkao-*. */
-      private void dump(Job job, int aw, int ah, float sc) {
+      private void dump(Job job, int aw, int ah, float sc, java.io.File dir) {
          try {
-            java.io.File dir = new java.io.File(zombie.ZomboidFileSystem.instance.getCacheDir());
             GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, this.rawFbo);
             FloatBuffer raw = BufferUtils.createFloatBuffer(aw * ah * 2);
             GL11.glReadPixels(0, 0, aw, ah, GL30.GL_RG, GL11.GL_FLOAT, raw);
             write(new java.io.File(dir, "pzopt-chunkao-raw.bin"), raw);
+            FloatBuffer raw4 = BufferUtils.createFloatBuffer(aw * ah * 4); // AO, depth, sun (-1: none), 1
+            GL11.glReadPixels(0, 0, aw, ah, GL11.GL_RGBA, GL11.GL_FLOAT, raw4);
+            write(new java.io.File(dir, "pzopt-chunkao-raw4.bin"), raw4);
             StringBuilder sb = new StringBuilder();
             sb.append("w=").append(job.w).append("\nh=").append(job.h).append("\naw=").append(aw).append("\nah=").append(ah).append("\nsc=").append(sc)
                .append("\nppu=").append(job.ppu).append('\n');
@@ -1331,6 +1489,25 @@ public final class ChunkAo {
                sb.append("src").append(i).append('=').append(job.srcX[i]).append(',').append(job.srcY[i]).append(',').append(job.srcW[i]).append(',')
                   .append(job.srcH[i]).append(',').append(job.srcDepth[i]).append('\n');
             }
+            // the kernel's inputs for harness/contact/kernel_rig.py --dump: the source depth textures at full size and the uniforms
+            sb.append("iso0=").append(job.isoHalfW).append(',').append(job.isoInvSA).append(',').append(job.isoS).append(',').append(job.isoTop).append('\n');
+            sb.append("iso1=").append(16.0F * Core.tileScale).append(',').append(96.0F * Core.tileScale).append(',').append(SQUARE_DEPTH_HALF).append(',').append(job.vegetation ? 1 : 0).append('\n');
+            sb.append("chunk=").append(job.dumpWhere).append('\n');
+            sb.append("nTrees=").append(job.nTrees).append("\ntreeA=").append(java.util.Arrays.toString(job.treeA).replaceAll("[\\[\\] ]", ""))
+               .append("\ntreeB=").append(java.util.Arrays.toString(job.treeB).replaceAll("[\\[\\] ]", ""))
+               .append("\nsunWorld=").append(job.sunWorld[0]).append(',').append(job.sunWorld[1]).append(',').append(job.sunWorld[2]).append('\n');
+            sb.append("veg=").append(java.util.Arrays.toString(job.veg).replaceAll("[\\[\\] ]", "")).append('\n');
+            sb.append("ext=").append(java.util.Arrays.toString(job.ext).replaceAll("[\\[\\] ]", "")).append('\n');
+            sb.append("sun=").append(job.sun ? 1 : 0).append("\nsunDir=").append(job.sunDir[0]).append(',').append(job.sunDir[1]).append(',').append(job.sunDir[2]).append(',').append(job.sunDir[3])
+               .append("\nsunPerp=").append(job.sunPerp[0]).append(',').append(job.sunPerp[1]).append(',').append(job.sunPerp[2]).append(',').append(job.sunPerp[3])
+               .append("\nsunTanElev=").append(job.sunTanElev).append('\n');
+            for (int i = 0; i < job.n; i++) {
+               GL11.glBindTexture(GL11.GL_TEXTURE_2D, job.srcTex[i]);
+               FloatBuffer db = BufferUtils.createFloatBuffer(job.srcW[i] * job.srcH[i]);
+               GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, db);
+               write(new java.io.File(dir, "pzopt-chunkao-src" + i + ".bin"), db);
+            }
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);
             java.nio.file.Files.writeString(new java.io.File(dir, "pzopt-chunkao-dump.txt").toPath(), sb.toString());
             Log.info("chunk ao: dumped texture " + job.index + " (" + job.n + " sources) to " + dir);
          } catch (Throwable t) {
@@ -1339,9 +1516,8 @@ public final class ChunkAo {
       }
 
       /** Dev (devAoDumpFrame): the blurred term (R8 as floats) next to the raw dump. */
-      private void dumpTerm(int outFbo, int aw, int ah) {
+      private void dumpTerm(int outFbo, int aw, int ah, java.io.File dir) {
          try {
-            java.io.File dir = new java.io.File(zombie.ZomboidFileSystem.instance.getCacheDir());
             int prev = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
             GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, outFbo);
             FloatBuffer o = BufferUtils.createFloatBuffer(aw * ah);
@@ -1436,7 +1612,7 @@ public final class ChunkAo {
 
       /** A kernel variant's uniform locations, in uAo's order (and its sources on units 0..8). */
       private static void locate(int program, int[] u) {
-         String[] names = {"rect", "off", "geo", "params", "nSrc", "strength", "veg", "iso0", "iso1", "mode", "sunDir", "sunPerp", "sunPar", "ext"};
+         String[] names = {"rect", "off", "geo", "params", "nSrc", "strength", "veg", "iso0", "iso1", "mode", "sunDir", "sunPerp", "sunPar", "ext", "sunTree", "treeA", "treeB", "sunWorld"};
          for (int i = 0; i < names.length; i++) {
             u[i] = GL20.glGetUniformLocation(program, names[i]);
          }
@@ -1478,6 +1654,10 @@ public final class ChunkAo {
          this.uAo[11] = GL20.glGetUniformLocation(this.aoProgram, "sunPerp");
          this.uAo[12] = GL20.glGetUniformLocation(this.aoProgram, "sunPar");
          this.uAo[13] = GL20.glGetUniformLocation(this.aoProgram, "ext");
+         this.uAo[14] = GL20.glGetUniformLocation(this.aoProgram, "sunTree");
+         this.uAo[15] = GL20.glGetUniformLocation(this.aoProgram, "treeA");
+         this.uAo[16] = GL20.glGetUniformLocation(this.aoProgram, "treeB");
+         this.uAo[17] = GL20.glGetUniformLocation(this.aoProgram, "sunWorld");
          GL20.glUseProgram(this.aoProgram);
          for (int i = 0; i < 9; i++) {
             GL20.glUniform1i(GL20.glGetUniformLocation(this.aoProgram, "Src" + i), i); // texture unit i = source i, fixed
@@ -1539,6 +1719,10 @@ public final class ChunkAo {
       "uniform vec4 sunPerp;", // across the sun and the view direction, w = tan of the sun's angular radius
       "uniform vec4 sunPar;", // march length in texture texels per unit of screen travel, thickness in squares, steps, 1 = exterior test
       "uniform uint ext[24];", // exterior squares: planes 0-1 = the texture's levels, plane 2 = roof columns; 16 x 16 bits from 4 squares before the chunk
+      "uniform vec4 treeA[16];", // crown proxies (collectTrees): centre x, y (squares from the chunk's corner), crown centre height, horizontal radius
+      "uniform vec4 treeB[16];", // vertical radius, top, foot height, the card's x + y (heights in squares above the texture's lowest level)
+      "uniform vec4 sunWorld;", // the direction to the sun in world squares (x east, y south, z up)
+      "uniform vec4 sunTree;", // trees: x the crowns' optical depth per square for the sun (0: none), y for the sky above (0: none), z the proxies in use
       "out vec4 result;",
       "const float HALF_PI = 1.5707963;",
       "const float BAYER[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);",
@@ -1588,6 +1772,60 @@ public final class ChunkAo {
       "   float sum = u - 2.0 * zl;",
       "   return vec3(floor(vec2(sum + p, sum - p) * 0.5) + 4.0, zl);",
       "}",
+      // the world position of a texel at this depth: x, y in squares from the chunk's corner, z in squares of height above the
+      // texture's lowest level (squareAt without the rounding)
+      "vec3 worldAt(vec2 c, float depth, float ys) {",
+      "   float u = 20.0 - depth / iso1.z;",
+      "   float p = (c.x - iso0.x) * iso0.y;",
+      "   float q = (ys < 0.0 ? c.y : rect[0].w - c.y) / iso0.z - iso0.w;",
+      "   float zl = (u * iso1.x - q) / (2.0 * iso1.x + iso1.y);",
+      "   float sum = u - 2.0 * zl;",
+      "   return vec3((sum + p) * 0.5, (sum - p) * 0.5, zl * 2.4494897);",
+      "}",
+      // the length of the ray o + t r (t >= 0, r a unit vector) inside crown i (an ellipsoid)
+      "float crownChord(int i, vec3 o, vec3 r) {",
+      "   vec3 k = vec3(treeA[i].w, treeA[i].w, treeB[i].x);",
+      "   vec3 oc = (o - treeA[i].xyz) / k, rd = r / k;",
+      "   float a = dot(rd, rd), b = dot(oc, rd), cc = dot(oc, oc) - 1.0;",
+      "   float disc = b * b - a * cc;",
+      "   if (disc <= 0.0) return 0.0;",
+      "   float sq = sqrt(disc);",
+      "   return max(0.0, (-b + sq) / a - max(0.0, (-b - sq) / a));",
+      "}",
+      // the crown path of a ray through every tree in reach (the sun, the sky)
+      "float crownPath(vec3 o, vec3 r) {",
+      "   float len = 0.0;",
+      "   int n = int(sunTree.z + 0.5);",
+      "   for (int i = 0; i < 16; i++) {",
+      "      if (i >= n) break;",
+      "      len += crownChord(i, o, r);",
+      "   }",
+      "   return len;",
+      "}",
+      // the tree whose card a texel shows (its trunk or crown, within the sprite's box), -1: none, and the texel's position on
+      // that card. From the texel's screen position, not its depth: a tall tree near its chunk's near edge needs depths below
+      // the texture's range, and GL clamps them (the upper crown baked flat at the nearest depth: its position read from
+      // the depth slid along the view ray). The depth only has to match the card, or be clamped (0 in its own texture).
+      // (slack: how far behind the card, in squares, a clamped texel may read; the march passes the fast depth, which cannot
+      // tell a clamped texel, and a small slack: at worst a sample just behind a card is skipped, which casts nothing anyway)
+      "int treeAtTexel(vec2 c, float depth, bool clamped, float slack, float ys, float kz, out vec3 P) {",
+      "   int n = int(sunTree.z + 0.5);",
+      "   float p = (c.x - iso0.x) * iso0.y;",
+      "   float q = (ys < 0.0 ? c.y : rect[0].w - c.y) / iso0.z - iso0.w;",
+      "   for (int i = 0; i < 16; i++) {",
+      "      if (i >= n) break;",
+      "      float S = treeB[i].w;",
+      "      float zl = (S * iso1.x - q) / iso1.y;",
+      "      float z = zl * 2.4494897;",
+      "      if (z < treeB[i].z - 0.3 || z > treeB[i].y + 0.6) continue;",
+      "      if (abs(p - (treeA[i].x - treeA[i].y)) * 0.70710678 > treeA[i].w * 1.5 + 0.5) continue;",
+      "      float de = (20.0 - (S + 2.0 * zl)) * iso1.z;",
+      "      if (abs(depth - de) * kz > 0.8 && !(clamped && de < depth && (depth - de) * kz < slack)) continue;",
+      "      P = vec3((S + p) * 0.5, (S - p) * 0.5, z);",
+      "      return i;",
+      "   }",
+      "   return -1;",
+      "}",
       // is the surface outdoors: its square, a quarter square off the surface along the normal (a wall belongs to the side it faces)
       "bool exteriorAt(vec2 c, float d, vec3 N, float ppu, float kz, float ys) {",
       "   vec3 s = squareAt(c + vec2(N.x, ys * N.y) * 0.25 * ppu, d + N.z * 0.25 / kz, ys);",
@@ -1636,7 +1874,10 @@ public final class ChunkAo {
       // [front, front + thickness] whose angles cover sectors of the disk (visibility bitmask), attached shadow from the normal
       // (facing only on the floor / wall planes: sprites' painted depth gives noisy normals; an object ignores casters closer
       // than a third of a square: a bush or a crown does not shadow itself, its neighbours do; roofs are out, see exteriorMask)
-      "float sunVisibility(vec2 c, float d, vec3 N, bool plane, float bayer, float jitter, float ppu, float kz, float ys) {",
+      // a tree's own texel (sunShadowTrees): the samples inside a crown (a tree's card at that point of the march, the sun ray
+      // within the crown's half depth of it) add the path length through foliage to an optical depth instead of blocking
+      // sectors: the lower crown and the trunk in the crown's shade, the sunward rim lit, gaps in the leaves let light through
+      "float sunVisibility(vec2 c, float d, vec3 N, bool plane, vec3 P, float bayer, float jitter, float ppu, float kz, float ys) {",
       "   float tanA = sunPerp.w;",
       "   float lat = ((bayer + 0.5) / 8.0 - 1.0) * tanA;",
       "   vec3 L = normalize(sunDir.xyz + sunPerp.xyz * lat);",
@@ -1653,6 +1894,7 @@ public final class ChunkAo {
       "   float lenPx = sunPar.x * lxy;",
       "   float steps = sunPar.z;",
       "   uint mask = 0u;",
+      "   bool trees = sunTree.z > 0.5;",
       "   for (int j = 0; j < 32; j++) {",
       "      if (float(j) >= steps) break;",
       "      float f = (float(j) + jitter) / steps;",
@@ -1663,13 +1905,25 @@ public final class ChunkAo {
       "      vec2 o = (floor(sp) + 0.5 - c) / ppu;",
       "      vec3 dF = vec3(o.x, ys * o.y, (sd - d) * kz);",
       "      if (dot(dF, N) < 0.06 || dot(dF, dF) < near2) continue;", // on or under the surface's own plane (tile edge rows, the neighbour overlap)
+      // a tree's card is not a caster: its crown proxy is (below); the flat card threw a line of shadow, or none, as the sun
+      // turned along it
+      "      vec3 Ps;",
+      "#ifndef TREE_NO_SKIP",
+      "      if (trees && treeAtTexel(sp, sd, true, 6.0, ys, kz, Ps) >= 0) continue;",
+      "#endif",
       "      vec2 fv = vec2(dot(dF.xy, D), -dF.z);",
       "      float uF = sunSector(fv, ls, sinA);",
       "      float uB = sunSector(fv - vec2(0.0, sunPar.y), ls, sinA);",
       "      mask |= sectors(min(uF, uB), max(uF, uB));",
       "      if (mask == 0xFFFFFFFFu) break;",
       "   }",
-      "   return facing * (1.0 - float(popc(mask)) / 32.0);",
+      // the crowns in reach (the texel's own included: from inside it, the way out towards the sun): foliage the sun crosses
+      "#ifdef TREE_NO_SUNPATH",
+      "   float crowns = 1.0;",
+      "#else",
+      "   float crowns = trees && sunTree.x > 0.0 ? exp(-sunTree.x * crownPath(P, sunWorld.xyz)) : 1.0;",
+      "#endif",
+      "   return facing * (1.0 - float(popc(mask)) / 32.0) * crowns;",
       "}",
       "void main() {",
       "   ivec2 t = ivec2(gl_FragCoord.xy);",
@@ -1701,18 +1955,33 @@ public final class ChunkAo {
       "   const vec3 NE = vec3(0.7071068, -0.3535534, -0.6123724);",
       "   const vec3 NS = vec3(-0.7071068, -0.3535534, -0.6123724);",
       "   float g = dot(N, NG), e = dot(N, NE), so = dot(N, NS);",
-      "   bool plane = g > 0.94 || e > 0.94 || so > 0.94;",
-      "   if (g > 0.94) N = NG; else if (e > 0.94) N = NE; else if (so > 0.94) N = NS;",
+      // a baked tree is a camera-facing card whose depth steps once per texel row (DEPTH16): its reconstructed normals are
+      // noise (the sun term came out in stripes); take the card's own normal, horizontal towards the camera
+      // (not the floors and walls in the crown's squares: a card's depth gets nearer upwards, a floor's farther, so a card
+      // never reads as one of the three planes, quantised or not)
+      "   vec3 P = worldAt(c, d, ys);",
+      "   float d0 = texelFetch(Src0, ivec2(c), 0).r;",
+      "   vec3 Pt;",
+      "#ifdef TREE_NO_CLASS",
+      "   bool tree = false;",
+      "#else",
+      "   bool tree = sunTree.z > 0.5 && !(g > 0.94 || e > 0.94 || so > 0.94) && treeAtTexel(c, d0, d0 < 1e-6, 100.0, ys, kz, Pt) >= 0;",
+      "#endif",
+      "   if (tree) P = Pt;",
+      "   bool plane = !tree && (g > 0.94 || e > 0.94 || so > 0.94);",
+      "   if (tree) N = vec3(0.0, -0.5, -0.8660254);",
+      "   else if (g > 0.94) N = NG; else if (e > 0.94) N = NE; else if (so > 0.94) N = NS;",
       "   float bayer = BAYER[(t.x & 3) + 4 * (t.y & 3)];",
       "   float jitter = fract(bayer * 0.618034 + 0.5 * float((t.x ^ t.y) & 1));",
-      "   float sk = g > 0.94 ? strength.x : (e > 0.94 || so > 0.94 ? strength.y : (iso1.w > 0.5 && vegetationAt(c, ys) ? strength.w : strength.z));", // floors, walls, vegetation, the rest
+      "   float sk = tree ? strength.w : g > 0.94 ? strength.x : (e > 0.94 || so > 0.94 ? strength.y : (iso1.w > 0.5 && vegetationAt(c, ys) ? strength.w : strength.z));", // floors, walls, vegetation, the rest
       "   const vec3 V = vec3(0.0, 0.0, -1.0);",
       "   float radiusPx = params.x;",
       "   float thickness = params.y;",
       "   float radius = params.w;",
       "   float vis = 0.0;",
       "   float wsum = 0.0;",
-      "   for (int i = 0; i < (mode.x > 0.5 ? 2 : 0); i++) {",
+      // (a tree's texel: its sky occlusion is the crown proxy's below; the horizon over a flat card only saw its own leaves)
+      "   for (int i = 0; i < (mode.x > 0.5 && !tree ? 2 : 0); i++) {",
       "      float phi = (float(i) + bayer / 16.0) * HALF_PI;",
       "      vec2 dir = vec2(cos(phi), sin(phi));", // in texels
       "      vec3 D = normalize(vec3(dir.x, ys * dir.y, 0.0));", // in view space
@@ -1745,13 +2014,19 @@ public final class ChunkAo {
       "      wsum += pnl;",
       "   }",
       "   float ao = clamp(1.0 - (1.0 - (wsum > 0.0 ? vis / wsum : 1.0)) * sk, 0.0, 1.0);",
+      // the sky the crowns hide (aoTreeCanopyPct): straight up from the texel through every crown in reach; a tree's trunk and
+      // lower crown under its own, the ground under a tree (the horizon kernel skips a card's own plane and sees no volume)
+      // (at most half the sky: light still comes in under and between the crowns)
+      "#ifndef TREE_NO_SKY",
+      "   if (sunTree.y > 0.0 && sunTree.z > 0.5 && mode.x > 0.5) ao *= 1.0 - 0.5 * sk * (1.0 - exp(-sunTree.y * crownPath(P, vec3(0.0, 0.0, 1.0))));",
+      "#endif",
       "   float sun = -1.0;", // -1: no sun term at this texel
       "#ifndef AO_PASS",
       "   if (sunHere) {",
       "      sun = 1.0;",
       "      bool outdoors = sunPar.w < 0.5 || exteriorAt(c, d, N, ppu, kz, ys);",
       "      if (mode.y > 1.5 && mode.y < 2.5) sun = outdoors ? 1.0 : 0.3;",
-      "      else if (outdoors) sun = 1.0 - sunDir.w * (1.0 - sunVisibility(c, d, N, plane, bayer, jitter, ppu, kz, ys));",
+      "      else if (outdoors) sun = 1.0 - sunDir.w * (1.0 - sunVisibility(c, d, N, plane, P, bayer, jitter, ppu, kz, ys));",
       "   }",
       "#endif",
       "   result = vec4(ao, d, sun, 1.0);",

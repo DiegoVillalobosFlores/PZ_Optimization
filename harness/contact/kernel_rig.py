@@ -37,7 +37,7 @@ WZ = np.array([0.0, 0.8660254, -0.5])
 KZ = 0.6123724356957945 / (0.0028867084 * 0.5)  # squares of view depth per unit of depth
 
 
-def depth_map(w, h, ppu, boxes):
+def depth_map(w, h, ppu, boxes, trees=()):
     """Front-most surface per texel (rows top-down): ground z = 0 and axis-aligned boxes. 1.0 = empty."""
     cx, cy = np.meshgrid(np.arange(w) + 0.5, np.arange(h) + 0.5)
     vx = (cx - w / 2) / ppu
@@ -55,6 +55,17 @@ def depth_map(w, h, ppu, boxes):
         tn = np.minimum(t0, t1).max(-1); tf = np.maximum(t0, t1).min(-1)
         hit = (tn <= tf)
         tbest = np.where(hit & (tn < tbest), tn, tbest)
+    for (tx, ty, hw, hz) in trees:
+        # a baked tree (pzopt.TreeBake): a camera-facing vertical card through its square's south corner, x + y = const
+        c = tx + ty
+        t = (c - (o[..., 0] + o[..., 1])) / (d[0] + d[1])
+        px, py, pz = o[..., 0] + t * d[0], o[..., 1] + t * d[1], o[..., 2] + t * d[2]
+        # a crown: an ellipse on the card from 0.25 of the height up, a trunk below it
+        u, v = (px - py) / 2.0 - (tx - ty) / 2.0, pz / hz
+        crown = (u / hw) ** 2 + ((v - 0.6) / 0.4) ** 2 < 1.0
+        trunk = (np.abs(u) < 0.08) & (v >= 0.0) & (v < 0.4)
+        hit = (crown | trunk) & (t < tbest)
+        tbest = np.where(hit, t, tbest)
     dep = np.where(np.isfinite(tbest), 0.5 + tbest / KZ, 1.0)
     return dep.astype(np.float32)
 
@@ -75,6 +86,9 @@ def main():
     ap.add_argument("--hour", type=float, default=16.0)
     ap.add_argument("--box", action="append", default=[])
     ap.add_argument("--steps", type=int, default=24)
+    ap.add_argument("--depth-bin", help="a devAoDumpTree / devAoDumpFrame pzopt-chunkao-raw4.bin (AO-scale depth in g), upsampled x2")
+    ap.add_argument("--sundir", help="view-space direction to the sun vx,vy,vz (the game's 'sun shadows: ... dir' log line)")
+    ap.add_argument("--tree", action="append", default=[], help="x,y,half_width,height (squares): a baked tree card")
     ap.add_argument("--time", type=int, default=0)
     ap.add_argument("--strength", type=float, default=0.45)
     a = ap.parse_args()
@@ -84,7 +98,10 @@ def main():
     sc = 0.5
     aw, ah = int(math.ceil(W * sc)), int(math.ceil(H * sc))
     ctx = moderngl.create_standalone_context(backend="egl", require=330)
-    dep = depth_map(W, H, ppu, boxes)
+    dep = depth_map(W, H, ppu, boxes, [tuple(map(float, t.split(","))) for t in a.tree])
+    if a.depth_bin:
+        raw = np.fromfile(a.depth_bin, "<f4").reshape(H // 2, W // 2, 4)[..., 1]
+        dep = np.ascontiguousarray(np.repeat(np.repeat(raw, 2, 0), 2, 1)).astype(np.float32)
     src0 = ctx.texture((W, H), 1, dep.tobytes(), dtype="f4")
     src0.filter = (moderngl.NEAREST, moderngl.NEAREST)
     quad = ctx.buffer(np.array([-1, -1, 1, -1, 1, 1, -1, 1], "f4").tobytes())
@@ -97,6 +114,11 @@ def main():
         return ctx.program(vertex_shader=vert, fragment_shader=f)
 
     v, perp = sun_view(a.hour)
+    if a.sundir:
+        v = np.array(list(map(float, a.sundir.split(","))))
+        v = v / np.linalg.norm(v)
+        pl = math.hypot(v[0], v[1])
+        perp = (-v[1] / pl, v[0] / pl, 0.0)
     tanA = math.tan(math.radians(3.0))
 
     def setu(p, geox):

@@ -3994,3 +3994,29 @@ baked world art. Off (`stock`) by default; every edit is a no-op then.
 - After the swap (next to `GlNames.refill`), `pzopt.SpriteFilter.afterSwap()`: when the configured sprite-filter settings
   change (boot, Apply), the variant programs they need are compiled there, outside the world frame (a program is ~0.8 s
   on first use: a hitch the first time the player zooms otherwise). No-op when the filter is off or nothing changed.
+## The real sky: sun, moon and cloud shadows (2026-09-26)
+
+Write-up: `docs/findings-sky-2026-09-26.md`. Classes: `pzopt.Sky` (sun and moon ephemeris), `pzopt.SunShadow` (the key
+light: the sun, or the moon at night), `pzopt.CloudShadow` (the cloud field, the composite and water patches), the
+direct-sun share and the wall fixes in `pzopt.ChunkAo`'s kernel.
+
+### zombie.core.opengl.ShaderUnit
+- The patch chain gets `CloudShadow.patchShader` between pixelLight's and the reflections': the chunk composite
+  (`chunkShader.frag`, pixelLight's `pzopt_chunkBase` / `pzopt_chunkStock`) multiplies each pixel under a cloud by
+  `1 - q (1 - T)`; the water shaders darken under a cloud. Only when `cloudShadows` is on at launch.
+
+### zombie.viewCone.ChunkRenderShader
+- `startRenderThread`: `CloudShadow.chunkDraw(texd)` after the reflections' uniforms: once per program per frame the
+  cloud uniforms, per draw the chunk texture's kept term (a bindless handle, or a bind) found by its depth texture.
+
+### zombie.iso.fboRenderChunk.FBORenderCell
+- Before the chunk composite `CloudShadow.beforeComposite` (the drift, the camera, the per-texture cull list); after it
+  `CloudShadow.afterComposite` (dev timing only).
+
+### zombie.iso.WaterShader
+- `updateWaterParams`: `CloudShadow.waterUniforms()` (the cloud field on unit 16 and the camera mapping on the bound
+  water program).
+
+### zombie.iso.weather.fx.WeatherFxMask
+- The stock screen-space cloud layer is skipped (and does not keep the weather mask awake) while
+  `CloudShadow.replaceStock` (`cloudReplaceStock`, off by default).

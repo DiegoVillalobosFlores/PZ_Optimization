@@ -221,7 +221,7 @@ public final class CapsuleShadow {
       }
       // a character standing in the static world's shade casts no sun shadow of its own (the shade is already there): its
       // sun share through the grid (SunShadow's cached march, the same that darkens its model) scales the sun shadow
-      float sunVis = f.sunOn && sq.isOutside() ? SunShadow.visibleAt(chr.getX(), chr.getY(), chr.getZ()) : 0F;
+      float sunVis = f.sunOn && sq.isOutside() ? SunShadow.visibleAt(chr.getX(), chr.getY(), chr.getZ()) * CloudShadow.transmittanceAt(chr.getX(), chr.getY(), chr.getZ()) : 0F;
       boolean sun = sunVis > 0.05F;
       if (!sun && f.nl == 0) {
          return; // indoors or in the shade in daylight without a torch around: nothing to cast
@@ -279,7 +279,7 @@ public final class CapsuleShadow {
       if (sq == null) {
          return;
       }
-      float sunVis = f.sunOn && sq.isOutside() ? SunShadow.visibleAt(chr.getX(), chr.getY(), chr.getZ()) : 0F;
+      float sunVis = f.sunOn && sq.isOutside() ? SunShadow.visibleAt(chr.getX(), chr.getY(), chr.getZ()) * CloudShadow.transmittanceAt(chr.getX(), chr.getY(), chr.getZ()) : 0F;
       if (sunVis <= 0.05F && f.nl == 0) {
          return;
       }
@@ -312,7 +312,7 @@ public final class CapsuleShadow {
       if (sq == null) {
          return;
       }
-      float sunVis = f.sunOn && sq.isOutside() ? SunShadow.visibleAt(v.getX(), v.getY(), v.getZ()) : 0F;
+      float sunVis = f.sunOn && sq.isOutside() ? SunShadow.visibleAt(v.getX(), v.getY(), v.getZ()) * CloudShadow.transmittanceAt(v.getX(), v.getY(), v.getZ()) : 0F;
       boolean sun = sunVis > 0.05F;
       if (!sun && f.nl == 0) {
          return;
@@ -467,7 +467,7 @@ public final class CapsuleShadow {
       private int lightProgram;
       private int dataTex;
       private int vao;
-      private final int[] u = new int[7];
+      private final int[] u = new int[8];
       private final int[] ul = new int[10];
       private int pairTex;
       private final float[] pairData = new float[MAX_PAIRS * 2];
@@ -589,6 +589,7 @@ public final class CapsuleShadow {
             GL20.glUniform4f(this.u[4], f.sun[0], f.sun[1], f.sun[2], 1.0F / tanA); // (both stages)
             GL20.glUniform4f(this.u[5], this.viewportF[0], this.viewportF[1], this.viewportF[2], this.viewportF[3]);
             GL20.glUniform1f(this.u[6], Config.SUN_SHADOW_MARCH ? 1.0F : 0.0F);
+            GL20.glUniform4f(this.u[7], Math.max(1, Config.SUN_SHADOW_CHARACTER_REACH), Config.SUN_SHADOW_CHARACTER_LOD_PCT / 100.0F, 0.0F, 0.0F);
             GL31.glDrawArraysInstanced(GL11.GL_TRIANGLE_FAN, 0, 4, f.n);
          }
          int pairs = f.nl > 0 ? this.pairs(f) : 0;
@@ -657,7 +658,7 @@ public final class CapsuleShadow {
          if (this.program == 0 || this.lightProgram == 0) {
             return false;
          }
-         String[] names = {"SceneDepth", "Data", "mapA", "mapC", "sun", "vp", "march"};
+         String[] names = {"SceneDepth", "Data", "mapA", "mapC", "sun", "vp", "march", "reach"};
          for (int i = 0; i < names.length; i++) {
             this.u[i] = GL20.glGetUniformLocation(this.program, names[i]);
          }
@@ -708,6 +709,7 @@ public final class CapsuleShadow {
       "uniform vec4 mapA;", // x - y = mapA.x * px + mapA.y, x + y - 6z = mapA.z * py + mapA.w (window px, relative to the origin square)
       "uniform vec4 vp;", // viewport x, y, w, h
       "uniform vec4 sun;", // direction to the sun (world, metric), 1 / tan of the penumbra angle
+      "uniform vec4 reach;", // x the longest shadow along the ground (squares, sunShadowCharacterReach), y where the bounding capsule alone takes over
       "flat out int inst;",
       "vec2 toPx(vec3 p) {",
       "   return vec2((p.x - p.y - mapA.y) / mapA.x, (p.x + p.y - 6.0 * p.z / 2.4494897 - mapA.w) / mapA.z);",
@@ -719,7 +721,9 @@ public final class CapsuleShadow {
       "   vec4 facts = texelFetch(Data, ivec2(3, gl_InstanceID), 0);", // floor z, kind, sun, alpha
       "   vec3 L = sun.xyz;",
       "   float lz = max(L.z, 0.05);",
-      "   float ta = max(0.0, a.z - facts.x) / lz, tb = max(0.0, b.z - facts.x) / lz;",
+      // a low sun: the shadow's quad ends at the reach (sun.w's companion, reach.x squares along the ground), faded in the fragment
+      "   float lxy = max(length(L.xy), 1e-3);",
+      "   float ta = min(max(0.0, a.z - facts.x) / lz, reach.x / lxy), tb = min(max(0.0, b.z - facts.x) / lz, reach.x / lxy);",
       "   vec3 a2 = vec3(a.xy - L.xy * ta, facts.x), b2 = vec3(b.xy - L.xy * tb, facts.x);",
       "   vec2 s0 = toPx(a.xyz), s1 = toPx(b.xyz), s2 = toPx(a2), s3 = toPx(b2);",
       "   vec2 du = toPx(-L) - toPx(vec3(0.0));", // the shadow's direction on screen
@@ -772,6 +776,7 @@ public final class CapsuleShadow {
       "uniform vec4 mapC;", // x + y + 2z = mapC.x * depth + mapC.y; dev view; strength
       "uniform vec4 sun;", // direction to the sun (world, metric), 1 / tan of the penumbra angle
       "uniform float march;", // sunShadowMarch: the per-pixel static-shade test
+      "uniform vec4 reach;", // x the longest shadow along the ground (squares), y where the bounding capsule alone takes over (squares)
       "flat in int inst;",
       "out vec4 fragColor;",
       "#include capsule",
@@ -785,13 +790,22 @@ public final class CapsuleShadow {
       "   vec4 bb0 = texelFetch(Data, ivec2(2, inst), 0);",
       "   if (capShadow(ro, sun.xyz, ba0.xyz, bb0.xyz, ba0.w, sun.w, 1e4) > 0.999) discard;", // outside the bounding capsule's shadow: full sun
       "   vec4 facts = texelFetch(Data, ivec2(3, inst), 0);", // floor z, kind, the caster's own sun share, alpha
-      "   float alpha = facts.w * facts.z;",
+      // how far along the ground from the caster: past reach.x nothing (a low sun's quad was capped), and past reach.y the
+      // bounding capsule alone (thinned to the body): the penumbra there is wider than a limb, ten tests bought nothing
+      "   float hd = length(P.xy - 0.5 * (ba0.xy + bb0.xy));",
+      "   float fade = 1.0 - smoothstep(0.7 * reach.x, reach.x, hd);",
+      "   if (fade <= 0.0) discard;",
+      "   float alpha = facts.w * facts.z * fade;",
+      "   float lod = smoothstep(reach.y, reach.y + 1.0, hd);",
       "   float vis = 1.0;",
-      "   for (int i = 0; i < 10; i++) {", // K
-      "      vec4 a = texelFetch(Data, ivec2(4 + 2 * i, inst), 0);",
-      "      vec4 b = texelFetch(Data, ivec2(5 + 2 * i, inst), 0);",
-      "      if (a.w > 0.0) vis *= capShadow(ro, sun.xyz, a.xyz, b.xyz, a.w, sun.w, 1e4);",
+      "   if (lod < 1.0) {",
+      "      for (int i = 0; i < 10; i++) {", // K
+      "         vec4 a = texelFetch(Data, ivec2(4 + 2 * i, inst), 0);",
+      "         vec4 b = texelFetch(Data, ivec2(5 + 2 * i, inst), 0);",
+      "         if (a.w > 0.0) vis *= capShadow(ro, sun.xyz, a.xyz, b.xyz, a.w, sun.w, 1e4);",
+      "      }",
       "   }",
+      "   if (lod > 0.0) vis = mix(vis, capShadow(ro, sun.xyz, ba0.xyz, bb0.xyz, ba0.w * 0.55, sun.w, 1e4), lod);",
       // dev (sunShadowMarch): a receiver the static world already hides from the sun takes no second shadow, per pixel:
       // march the scene depth towards the sun (8 steps, up to ~6 squares). Off by default: the caster's own sun share
       // (facts.z) does it per caster, for nothing

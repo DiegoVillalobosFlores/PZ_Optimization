@@ -1605,6 +1605,7 @@ public final class FBORenderCell {
       pzopt.Ssr.beforeComposite(playerIndex, this.perPlayerData[playerIndex].onScreenChunks); // pzopt: reflections, the water square map and the scatter's frame, ahead of the chunk composite
       pzopt.PixelLight.beforeComposite(playerIndex, this.perPlayerData[playerIndex].onScreenChunks); // pzopt: pixelLight, the lattice uploads and the camera, ahead of the chunk composite that lights each pixel
       pzopt.SpriteFilter.beforeComposite(playerIndex); // pzopt: sprite filter, this frame's composite program for the zoom
+      pzopt.CloudShadow.beforeComposite(playerIndex); // pzopt: cloudShadows, the drift and the camera of this frame, ahead of the chunk composite
       pzopt.GpuSections.begin(pzopt.SpriteFilter.section("composite")); /* pzopt: GPU section: chunk textures into the combined FBO and onto the screen */
       if (pzopt.Config.COMPOSITE_SHADER_RUN && pzopt.Overrides.enabled() && !DebugOptions.instance.fboRenderChunk.combinedFbo.getValue()
             && DebugOptions.instance.fboRenderChunk.renderChunkTextures.getValue()) { // pzopt: compositeShaderRun
@@ -1614,6 +1615,7 @@ public final class FBORenderCell {
       } // pzopt
       pzopt.GpuSections.end(pzopt.SpriteFilter.section("composite")); // pzopt: sprite filter, devSpriteFilterAlternate splits the section
       pzopt.Ssr.afterComposite(); // pzopt: reflections, dev timing of the composite with its scatter
+      pzopt.CloudShadow.afterComposite(); // pzopt: cloudShadows, dev timing of the composite
       pzopt.AmbientOcclusion.queue(playerIndex); // pzopt: ambient occlusion on the static world, before anything else is drawn over it
       pzopt.PixelLight.afterComposite(playerIndex); // pzopt: pixelLight, the per-pixel light pass (pass mode) and the dev dumps, before anything else is drawn over the static world
       pzopt.CapsuleShadow.queue(playerIndex); // pzopt: sunShadows, the characters' sun shadows onto the static world (they add themselves below)

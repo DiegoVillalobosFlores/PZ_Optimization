@@ -72,6 +72,23 @@ public final class HdrGlint {
       double ex = 0.894, ez = 0.447, sx = -0.894, sz = 0.447;
       double dx = ex * Math.cos(a) + sx * Math.sin(a), dz = ez * Math.cos(a) + sz * Math.sin(a);
       double lx = dx * Math.cos(elev), ly = Math.sin(elev), lz = dz * Math.cos(elev);
+      float moonGlint = 0F;
+      if (!"arc".equals(Config.SKY_PATH)) {
+         // the real sky (pzopt.Sky): the sun where it stands; under the horizon, the moon's glitter on the water at night
+         Sky.update(-1F);
+         double[] w = Sky.sun;
+         elev = Math.toRadians(Sky.sunElevDeg);
+         if (Sky.sunElevDeg <= 0.0 && Sky.moonElevDeg > 0.0) {
+            w = Sky.moon;
+            elev = Math.toRadians(Sky.moonElevDeg);
+            float dark = (float)Math.max(0.0, Math.min(1.0, (-Sky.sunElevDeg - 4.0) / 8.0));
+            moonGlint = dark * (float)Sky.moonBrightness * 0.35F; // a full moon's glint ~a third of the sun's (the HDR exposure is set for the night)
+         }
+         lx = w[0] * ex + w[1] * sx;
+         ly = w[2];
+         lz = w[0] * ez + w[1] * sz;
+         elev = Math.max(0.0, elev);
+      }
       // seen from above, a physical sun rarely mirrors into the camera; lean it toward the mirror direction of the view
       // (0, 0.62, -0.78) so the waves glitter, and let the hour move the glints
       double mx = 0.0, my = 0.62, mz = -0.78, k = t.sunLean;
@@ -82,7 +99,7 @@ public final class HdrGlint {
       sun[0] = (float)(gx / gl);
       sun[1] = (float)(gy / gl);
       sun[2] = (float)(gz / gl);
-      sun[3] = t.glint * t.sunGlint * day * clear * (float)Math.min(1.0, elev / Math.toRadians(8.0));
+      sun[3] = t.glint * t.sunGlint * (moonGlint > 0F ? moonGlint : day) * clear * (float)Math.min(1.0, elev / Math.toRadians(8.0));
       // sky: blue-white by day, warmer near the horizon hours, a deep blue at night; overcast greys it
       float low = (float)Math.max(0.0, 1.0 - elev / Math.toRadians(20.0)) * day;
       float r = 0.78F + 0.30F * low, g = 0.88F - 0.10F * low, b = 1.0F - 0.35F * low;

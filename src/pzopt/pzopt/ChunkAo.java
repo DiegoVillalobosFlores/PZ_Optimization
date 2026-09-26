@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL12;
 import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL14;
 import org.lwjgl.opengl.GL15;
@@ -148,7 +149,7 @@ public final class ChunkAo {
       String s = "chunk ao: computed=" + computed + " (in bakes " + computedInBake + ") multiplied=" + multiplied + " skipped (no occlusion)=" + skippedEmpty + " neighbour refreshes=" + refreshes + " (skipped, bare border " + refreshesSkipped + ") bare textures=" + bareSkipped + " slow frames without computes=" + heavyFrames + " zoom-out re-bakes=" + mipRebakes + " pending=" + PENDING.size()
          + " pending peak=" + deferredPeak + " first AO: " + firstAos + " (in bakes " + FIRST_AO_MS[0] + ", over budget " + arrivalsOverBudget + ", >100 ms "
          + (FIRST_AO_MS[4] + FIRST_AO_MS[5] + FIRST_AO_MS[6] + FIRST_AO_MS[7]) + String.format(java.util.Locale.ROOT, ", max %.0f ms)", firstAoMsMax)
-         + " shown without AO=" + shownWithoutAo + (SunShadow.enabled() ? " sun requeued=" + sunRequeued + " roof columns=" + roofColumnsFound + " | " + SunShadow.stats() : "") + (failed ? " FAILED" : "");
+         + " shown without AO=" + shownWithoutAo + (SunShadow.enabled() ? " sun requeued=" + sunRequeued + " far computes=" + farComputes + " column builds=" + columnBuilds + " roof columns=" + roofColumnsFound + " | " + SunShadow.stats() : "") + (CloudShadow.wanted() ? " | " + CloudShadow.stats() : "") + (failed ? " FAILED" : "");
       if (Config.DEV_AO_TIMING) {
          StringBuilder sb = new StringBuilder(s).append(" | geometry bakes by flag:");
          for (int b = 0; b < 15; b++) {
@@ -219,6 +220,9 @@ public final class ChunkAo {
       }
       int minLevel = rc.getMinLevel();
       long key = keyOf(c, minLevel, rc);
+      if (geometry) {
+         COLUMNS.remove(columnKey(c.wx, c.wy)); // its column heights for the far-field march
+      }
       Info info = INFOS.get(rc.index);
       if (info == null) {
          if (INFOS.size() > 8192) {
@@ -254,6 +258,15 @@ public final class ChunkAo {
          }
          info.landed = true;
          bareSkipped++;
+         if (CloudShadow.wanted()) {
+            Job job = obtain();
+            job.kind = Job.MARK_BARE;
+            job.index = rc.index;
+            job.key = key;
+            job.colorTex = rc.depth.getID(); // MARK_BARE: keyed by the depth texture like the kept terms
+            job.bareOutdoors = allOutdoors(c, minLevel, rc.getTopLevel());
+            SpriteRenderer.instance.drawGeneric(job);
+         }
          return;
       }
       // a texture's first AO goes into its first bake whatever the slack: queued, a new chunk showed its ground and grass
@@ -402,8 +415,8 @@ public final class ChunkAo {
             if (levels.isDirty(info.minLevel, info.zoom)) {
                continue; // it bakes again first; its bakeEnd keeps it queued
             }
-            if (info.sunStale && sunBudget <= 0) {
-               continue;
+            if (info.sunStale && (sunBudget <= 0 || pass == 1 && !Config.SUN_STALE_OFFSCREEN)) {
+               continue; // off screen a stale step waits until the texture shows again (1.5 deg: invisible for the frames it takes)
             }
             int fbo = FogPass.fboId(rc.fbo);
             if (fbo <= 0) {
@@ -500,6 +513,10 @@ public final class ChunkAo {
          float wz = SunShadow.world[2], wh = (float)Math.sqrt(SunShadow.world[0] * SunShadow.world[0] + SunShadow.world[1] * SunShadow.world[1]);
          job.sunTanElev = wz / Math.max(1e-3F, wh);
          exteriorMask(job.ext, c, minLevel);
+         wallMask(job.wall, c, minLevel);
+         job.far = Config.SUN_SHADOW_FAR && farGrid(job, c, minLevel);
+      } else {
+         job.far = false;
       }
       boolean sunReach = SunShadow.enabled(); // a shadow reaches a whole chunk: any caster here matters to every neighbour
       int casters = -1; // lazily: does anything but floor stand in this chunk (sun shadows)
@@ -615,6 +632,36 @@ public final class ChunkAo {
       return true;
    }
 
+   /** Is every square of these levels that has a floor outdoors (a bare texture under the cloud shadows)? */
+   private static boolean allOutdoors(IsoChunk c, int minLevel, int topLevel) {
+      for (int z = minLevel; z <= topLevel; z++) {
+         for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
+               zombie.iso.IsoGridSquare sq = c.getGridSquare(x, y, z);
+               if (sq != null && sq.getFloor() != null && !sq.isOutside()) {
+                  return false;
+               }
+            }
+         }
+      }
+      return true;
+   }
+
+   /** Render thread (CloudShadow, per composite draw): the kept term of a chunk texture by its depth texture, -1 bare open ground, -2 none. */
+   static int cloudTerm(int colourTex) {
+      return GL.cloudTerm(colourTex);
+   }
+
+   /** Render thread (CloudShadow with bindless textures): the kept term's resident handle, -1 bare open ground, -2 none. */
+   static long cloudHandle(int depthTex) {
+      return GL.cloudHandle(depthTex);
+   }
+
+   static long residentHandles;
+   static final int FAR_UNIT = 9; // the kernel's sources use units 0..8
+   static long farComputes;
+   static long keptMipBuilds;
+
    /** Does anything but floor stand in this chunk on these levels (grass and bushes hanging off floor objects count)? */
    private static boolean occluders(IsoChunk c, int minLevel, int topLevel) {
       for (int z = minLevel; z <= topLevel; z++) {
@@ -663,6 +710,142 @@ public final class ChunkAo {
             }
          }
       }
+   }
+
+   /**
+    * The squares with a wall on their west edge (its visible face looks east) or their north edge (it looks south), per
+    * level of the texture, 16 x 16 bits from 4 squares before the chunk. The sun term takes a wall pixel's normal from
+    * these instead of the depth: a wall's painted depth (DEPTH16 steps, brick relief, window recesses) often misses the
+    * plane snap, and an unsnapped east wall was then taken as facing a western sun, with cast shadows marched onto it.
+    */
+   private static void wallMask(int[] wall, IsoChunk c, int minLevel) {
+      java.util.Arrays.fill(wall, 0);
+      zombie.iso.IsoCell cell = IsoWorld.instance.currentCell;
+      if (cell == null) {
+         return;
+      }
+      int x0 = c.wx * 8 - VEG_MARGIN;
+      int y0 = c.wy * 8 - VEG_MARGIN;
+      for (int plane = 0; plane < 2; plane++) {
+         for (int y = 0; y < VEG_SIDE; y++) {
+            for (int x = 0; x < VEG_SIDE; x++) {
+               IsoGridSquare sq = cell.getGridSquare(x0 + x, y0 + y, minLevel + plane);
+               if (sq == null) {
+                  continue;
+               }
+               int bit = y * VEG_SIDE + x;
+               if (sq.has(IsoFlagType.cutW) || sq.has(IsoFlagType.WallW) || sq.has(IsoFlagType.WallNW) || sq.has(IsoFlagType.DoorWallW)
+                     || sq.has(IsoFlagType.WindowW) || sq.has(IsoFlagType.WallWTrans)) {
+                  wall[plane * 8 + (bit >> 5)] |= 1 << (bit & 31);
+               }
+               if (sq.has(IsoFlagType.cutN) || sq.has(IsoFlagType.WallN) || sq.has(IsoFlagType.WallNW) || sq.has(IsoFlagType.DoorWallN)
+                     || sq.has(IsoFlagType.WindowN) || sq.has(IsoFlagType.WallNTrans)) {
+                  wall[16 + plane * 8 + (bit >> 5)] |= 1 << (bit & 31);
+               }
+            }
+         }
+      }
+   }
+
+   // ------------------------------------------------------------------------------------------------ far field (sunShadowFar)
+
+   static final int FAR_MARGIN = 32, FAR_SIDE = 8 + 2 * FAR_MARGIN; // 72 x 72 squares round the chunk
+   private static final HashMap<Long, byte[]> COLUMNS = new HashMap<>();
+   private static final HashMap<Long, Long> COLUMN_MS = new HashMap<>();
+   private static long columnBuilds;
+
+   private static long columnKey(int wx, int wy) {
+      return (long)wx << 32 ^ wy & 0xFFFFFFFFL;
+   }
+
+   /**
+    * A chunk's 8 x 8 column tops (quarter levels above level 0): walls and solid objects to their level's top, upper floors and
+    * roof tiles just above their level. Not trees: the kernel's crown proxies already shade them out to two chunks (as columns
+    * they came out twice, as blocks: sky-low1 vs sky-low2). Cached per chunk; a geometry bake drops it, and it is
+    * rebuilt after a minute anyway (a chunk reloaded with changes).
+    */
+   private static byte[] columns(zombie.iso.IsoCell cell, int wx, int wy) {
+      long key = columnKey(wx, wy);
+      long now = System.currentTimeMillis();
+      byte[] b = COLUMNS.get(key);
+      Long t = COLUMN_MS.get(key);
+      if (b != null && t != null && now - t < 60_000L) {
+         return b;
+      }
+      IsoChunk c = cell.getChunk(wx, wy);
+      if (c == null) {
+         return null;
+      }
+      if (COLUMNS.size() > 4096) {
+         COLUMNS.clear();
+         COLUMN_MS.clear();
+      }
+      b = new byte[64];
+      for (int z = Math.max(0, c.minLevel); z <= Math.min(c.maxLevel, 60); z++) {
+         for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
+               IsoGridSquare sq = c.getGridSquare(x, y, z);
+               if (sq == null) {
+                  continue;
+               }
+               int top = 0;
+               if (sq.has(IsoFlagType.cutW) || sq.has(IsoFlagType.cutN) || sq.has(IsoFlagType.WallW) || sq.has(IsoFlagType.WallN)
+                     || sq.has(IsoFlagType.WallNW) || sq.has(IsoFlagType.solid) || sq.has(IsoFlagType.solidtrans)) {
+                  top = (z + 1) * 4;
+               } else if (roof(sq)) {
+                  top = z * 4 + 2;
+               } else if (z > 0 && sq.getFloor() != null) {
+                  top = z * 4 + 1;
+               }
+               if (top > (b[y * 8 + x] & 0xFF)) {
+                  b[y * 8 + x] = (byte)Math.min(255, top);
+               }
+            }
+         }
+      }
+      COLUMNS.put(key, b);
+      COLUMN_MS.put(key, now);
+      columnBuilds++;
+      return b;
+   }
+
+   /** The column heights round the chunk, above the texture's lowest level, into the job; false when nothing stands up. */
+   private static boolean farGrid(Job job, IsoChunk c, int minLevel) {
+      zombie.iso.IsoCell cell = IsoWorld.instance.currentCell;
+      if (cell == null) {
+         return false;
+      }
+      java.util.Arrays.fill(job.farH, (byte)0);
+      int x0 = c.wx * 8 - FAR_MARGIN, y0 = c.wy * 8 - FAR_MARGIN;
+      int base = minLevel * 4;
+      int max = 0;
+      for (int cy = Math.floorDiv(y0, 8); cy <= Math.floorDiv(y0 + FAR_SIDE - 1, 8); cy++) {
+         for (int cx = Math.floorDiv(x0, 8); cx <= Math.floorDiv(x0 + FAR_SIDE - 1, 8); cx++) {
+            byte[] col = columns(cell, cx, cy);
+            if (col == null) {
+               continue;
+            }
+            for (int y = 0; y < 8; y++) {
+               int gy = cy * 8 + y - y0;
+               if (gy < 0 || gy >= FAR_SIDE) {
+                  continue;
+               }
+               for (int x = 0; x < 8; x++) {
+                  int gx = cx * 8 + x - x0;
+                  if (gx < 0 || gx >= FAR_SIDE) {
+                     continue;
+                  }
+                  int h = (col[y * 8 + x] & 0xFF) - base;
+                  if (h > 0) {
+                     job.farH[gy * FAR_SIDE + gx] = (byte)h;
+                     max = Math.max(max, h);
+                  }
+               }
+            }
+         }
+      }
+      job.farMaxH = max * 0.25F * 2.4494897F;
+      return max > 0;
    }
 
    /** The neighbour slots whose texture of this level pair and zoom exists and is baked. */
@@ -953,7 +1136,9 @@ public final class ChunkAo {
       static final int MULTIPLY = 0;
       static final int COMPUTE = 1;
       static final int COMPUTE_IN_BAKE = 2; // inside the bake: the colour was just drawn, so compute and multiply, no ratio
+      static final int MARK_BARE = 3; // the texture was found bare (no compute): the composite's cloud shadows take it as open ground or not
       int kind;
+      boolean bareOutdoors; // MARK_BARE: every square of its levels is outdoors
       int generation; // ChunkAo.generation when it was queued: a job of older settings is skipped
       boolean fresh;
       int index;
@@ -984,6 +1169,10 @@ public final class ChunkAo {
       final float[] sunDir = new float[4]; // SunShadow.dir: view-space direction to the sun, w = strength
       final float[] sunPerp = new float[4]; // SunShadow.perp: across it, w = tan of the penumbra angle
       final int[] ext = new int[24]; // exterior squares, 2 planes of 16 x 16 bits, then the roof columns (exteriorMask)
+      final int[] wall = new int[32]; // wall edges (wallMask): W walls on levels 0, 1, then N walls on levels 0, 1; 16 x 16 bits each
+      boolean far; // sunShadowFar: farH holds the column heights around the chunk
+      final byte[] farH = new byte[FAR_SIDE * FAR_SIDE]; // column tops above the texture's lowest level, quarter levels, FAR_MARGIN squares before the chunk
+      float farMaxH; // the tallest column, squares
       float sunTanElev; // tan of the sun's elevation (the march length)
       float isoHalfW; // texels from the texture's left edge to the chunk corner's screen x
       float isoInvSA; // units of (x - y) per texel
@@ -1012,6 +1201,8 @@ public final class ChunkAo {
             }
             if (this.kind == MULTIPLY) {
                GL.multiply(this);
+            } else if (this.kind == MARK_BARE) {
+               GL.markBare(this);
             } else { // COMPUTE, COMPUTE_IN_BAKE
                GL.compute(this);
             }
@@ -1053,13 +1244,20 @@ public final class ChunkAo {
       int query;
       boolean queryPending;
       boolean empty; // that multiply changed no pixel: the texture has no occlusion, its bakes skip the multiply
+      int colorTex; // the chunk texture's depth it was computed for (the composite's draw carries it: looked up by that)
+      long handle; // cloudShadows with bindless textures: the kept term's resident handle (0: none yet)
+      boolean q; // G holds the direct-sun share (the compute had the sun term)
    }
 
    private static final class Gl {
       private final HashMap<Integer, Entry> entries = new HashMap<>();
+      /** Render thread: kept terms by the colour texture they were computed for (CloudShadow reads them per composite draw). */
+      private final HashMap<Integer, Entry> byColour = new HashMap<>();
+      /** Render thread: textures found bare (no compute): 1 = every square outdoors (fully sunlit), 0 = some indoors. */
+      private final HashMap<Integer, Integer> bareByColour = new HashMap<>();
       private int aoProgram;
       private int aoOnlyProgram; // AO_PASS: no sun code (its registers)
-      private final int[] uAoOnly = new int[18];
+      private final int[] uAoOnly = new int[20];
       private int blurProgram;
       private int mulProgram;
       private int ratioProgram;
@@ -1076,8 +1274,8 @@ public final class ChunkAo {
       private int rawW;
       private int rawH;
       private final int[] viewport = new int[4];
-      private final int[] uAo = new int[18];
-      private final int[] uBlur = new int[3];
+      private final int[] uAo = new int[20];
+      private final int[] uBlur = new int[4];
       private final int[] uMul = new int[2];
       private final int[] uRatio = new int[4];
       private final int[] uCopy = new int[2];
@@ -1098,10 +1296,11 @@ public final class ChunkAo {
          }
          if (e.aw != aw || e.ah != ah) {
             if (e.tex != 0) {
+               release(e);
                GL30.glDeleteFramebuffers(e.fbo);
                GL11.glDeleteTextures(e.tex);
             }
-            e.tex = texture(aw, ah, GL30.GL_R8, GL30.GL_RED, GL11.GL_UNSIGNED_BYTE, true);
+            e.tex = keptTexture(aw, ah); // R: AO x sun, G: the direct-sun share (cloud shadows); levels 1-2 for the composite's read
             e.fbo = fbo(e.tex);
             e.aw = aw;
             e.ah = ah;
@@ -1213,6 +1412,22 @@ public final class ChunkAo {
             int steps = Math.max(8, Math.min(32, Math.round(Math.max(1, Config.SUN_SHADOW_STEPS) * Math.min(len, maxLen) / maxLen)));
             GL20.glUniform4f(u[12], len * job.ppu, Math.max(0.05F, Config.SUN_SHADOW_THICKNESS_PCT / 100.0F), steps, 1.0F);
             GL30.glUniform1uiv(u[13], job.ext);
+            if (u[18] >= 0) {
+               GL30.glUniform1uiv(u[18], job.wall);
+            }
+            // the far field: from where the near march stops to where the tallest column's shadow ends (low sun only)
+            float farEnd = Math.min(Math.max(0, Math.min(FAR_MARGIN, Config.SUN_SHADOW_FAR_SQUARES)), (job.farMaxH + 0.5F) / Math.max(0.02F, job.sunTanElev));
+            // (also inside the near range when a column stands above the texture's two levels: the near march only sees them)
+            boolean tall = job.farMaxH > 2.0F * 2.4494897F + 0.25F;
+            boolean far = job.far && (farEnd > len + 0.5F || tall) && u[19] >= 0;
+            if (u[19] >= 0) {
+               GL20.glUniform4f(u[19], far ? 1.0F : 0.0F, len, farEnd, Math.max(1, Math.min(FAR_MARGIN, Config.SUN_SHADOW_FAR_SQUARES)));
+            }
+            if (far) {
+               this.uploadFar(job);
+               farComputes++;
+            }
+            GL20.glUniform4f(u[17], job.sunWorld[0], job.sunWorld[1], job.sunWorld[2], 0.0F);
             // sunShadowTrees: foliage optical depth per square of crown on the sun's path, the crown's half depth around its card
          } else {
             GL20.glUniform4f(u[10], 0.0F, 0.0F, 0.0F, 0.0F);
@@ -1287,6 +1502,12 @@ public final class ChunkAo {
          this.offs.flip();
          this.kernelUniforms(uK, job, 1.0F / sc);
          GL11.glDrawArrays(GL11.GL_TRIANGLE_FAN, 0, 4);
+         if (this.farPrev >= 0) {
+            GL13.glActiveTexture(GL13.GL_TEXTURE0 + FAR_UNIT);
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.farPrev);
+            GL13.glActiveTexture(GL13.GL_TEXTURE0);
+            this.farPrev = -1;
+         }
          for (int i = 8; i >= 1; i--) {
             GL13.glActiveTexture(GL13.GL_TEXTURE0 + i);
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);
@@ -1301,6 +1522,7 @@ public final class ChunkAo {
          GL20.glUniform1i(this.uBlur[0], 0);
          GL20.glUniform4f(this.uBlur[1], AmbientOcclusion.UNITS_PER_DEPTH, 1.0F / ppuAo, aw - 1, ah - 1);
          GL20.glUniform1f(this.uBlur[2], Config.DEV_SUN_VIEW > 0 ? 1.0F : 0.0F);
+         GL20.glUniform1f(this.uBlur[3], job.sun ? job.sunDir[3] : 0.0F);
          GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.rawTex);
          GL11.glDrawArrays(GL11.GL_TRIANGLE_FAN, 0, 4);
          if (Config.DEV_AO_DUMP_FRAME > 0 && computed == Config.DEV_AO_DUMP_FRAME || job.treeDump > 0) {
@@ -1320,6 +1542,8 @@ public final class ChunkAo {
             e.checked = false;
             e.queryPending = false;
             e.empty = false;
+            this.keep(e, job);
+            this.keptMips(e, job);
             GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, previousFbo);
             this.stamp(2);
             this.drawMultiply(job, e, sc, aw, ah);
@@ -1385,6 +1609,8 @@ public final class ChunkAo {
          e.checked = false;
          e.queryPending = false;
          e.empty = false;
+         this.keep(e, job);
+         this.keptMips(e, job);
          this.stamp(3);
          this.collect(true);
          if (!this.logged) {
@@ -1560,11 +1786,75 @@ public final class ChunkAo {
       private void clear() {
          for (Entry e : this.entries.values()) {
             if (e.tex != 0) {
+               release(e);
                GL30.glDeleteFramebuffers(e.fbo);
                GL11.glDeleteTextures(e.tex);
             }
          }
          this.entries.clear();
+         this.byColour.clear();
+         this.bareByColour.clear();
+      }
+
+      /** A compute kept its term for this colour texture (the composite's cloud shadows find it by that). */
+      private void keep(Entry e, Job job) {
+         int depth = job.srcTex[0]; // the texture's own depth: the composite's draw carries it (texd.tex1)
+         if (e.colorTex != depth && e.colorTex > 0 && this.byColour.get(e.colorTex) == e) {
+            this.byColour.remove(e.colorTex);
+         }
+         e.colorTex = depth;
+         e.q = job.sun;
+         if (depth > 0) {
+            this.byColour.put(depth, e);
+            this.bareByColour.remove(depth);
+         }
+      }
+
+      private void markBare(Job job) {
+         if (job.colorTex > 0) {
+            Entry e = this.byColour.remove(job.colorTex);
+            if (e != null) {
+               e.valid = false; // its colour holds no AO now
+            }
+            this.bareByColour.put(job.colorTex, job.bareOutdoors ? 1 : 0);
+         }
+      }
+
+      /** Render thread: the kept term's GL texture for a chunk texture (by its depth), -1 bare and all outdoors, -2 nothing known / no sun share. */
+      int cloudTerm(int depthTex) {
+         Entry e = this.byColour.get(depthTex);
+         if (e != null && e.valid && e.q && e.colorTex == depthTex) {
+            return e.tex;
+         }
+         Integer b = this.bareByColour.get(depthTex);
+         return b != null && b == 1 ? -1 : -2;
+      }
+
+      /** The same as a bindless handle (made resident on first use; > 0), or -1 / -2 like cloudTerm. */
+      long cloudHandle(int depthTex) {
+         Entry e = this.byColour.get(depthTex);
+         if (e != null && e.valid && e.q && e.colorTex == depthTex) {
+            if (e.handle == 0L) {
+               e.handle = org.lwjgl.opengl.ARBBindlessTexture.glGetTextureHandleARB(e.tex);
+               if (e.handle != 0L) {
+                  org.lwjgl.opengl.ARBBindlessTexture.glMakeTextureHandleResidentARB(e.handle);
+                  residentHandles++;
+               }
+            }
+            return e.handle != 0L ? e.handle : -2L;
+         }
+         Integer b = this.bareByColour.get(depthTex);
+         return b != null && b == 1 ? -1L : -2L;
+      }
+
+      /** Before a kept texture is deleted: its bindless handle out of residency. */
+      private static void release(Entry e) {
+         if (e.handle != 0L) {
+            CloudShadow.handleReleased(e.handle); // no program keeps sampling it
+            org.lwjgl.opengl.ARBBindlessTexture.glMakeTextureHandleNonResidentARB(e.handle);
+            e.handle = 0L;
+            residentHandles--;
+         }
       }
 
       private boolean ensureScratch(int aw, int ah) {
@@ -1581,7 +1871,7 @@ public final class ChunkAo {
             this.rawTex = texture(this.rawW, this.rawH, GL30.GL_RGBA32F, GL11.GL_RGBA, GL11.GL_FLOAT, false); // AO, depth, sun (-1: none), -
             this.rawFbo = fbo(this.rawTex);
             ok &= GL30.glCheckFramebufferStatus(GL30.GL_FRAMEBUFFER) == GL30.GL_FRAMEBUFFER_COMPLETE;
-            this.newTex = texture(this.rawW, this.rawH, GL30.GL_R8, GL30.GL_RED, GL11.GL_UNSIGNED_BYTE, true);
+            this.newTex = texture(this.rawW, this.rawH, GL30.GL_RG8, GL30.GL_RG, GL11.GL_UNSIGNED_BYTE, true);
             this.newFbo = fbo(this.newTex);
             ok &= GL30.glCheckFramebufferStatus(GL30.GL_FRAMEBUFFER) == GL30.GL_FRAMEBUFFER_COMPLETE;
          }
@@ -1602,6 +1892,66 @@ public final class ChunkAo {
          return tex;
       }
 
+      private int farTex;
+      private final ByteBuffer farBuf = BufferUtils.createByteBuffer(FAR_SIDE * FAR_SIDE);
+
+      /** The job's column heights into the far-field texture on FAR_UNIT (R8, FAR_SIDE squares a side, bilinear). */
+      private int farPrev = -1; // the texture FAR_UNIT held before a far-field compute (pixelLight's torch mask lives there)
+
+      private void uploadFar(Job job) {
+         GL13.glActiveTexture(GL13.GL_TEXTURE0 + FAR_UNIT);
+         this.farPrev = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+         if (this.farTex == 0) {
+            this.farTex = GL11.glGenTextures();
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.farTex);
+            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL30.GL_R8, FAR_SIDE, FAR_SIDE, 0, GL11.GL_RED, GL11.GL_UNSIGNED_BYTE, (ByteBuffer)null);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, 33071);
+            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, 33071);
+         } else {
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.farTex);
+         }
+         this.farBuf.clear();
+         this.farBuf.put(job.farH).flip();
+         GL11.glPixelStorei(GL11.GL_UNPACK_ALIGNMENT, 1);
+         GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, FAR_SIDE, FAR_SIDE, GL11.GL_RED, GL11.GL_UNSIGNED_BYTE, this.farBuf);
+         GL11.glPixelStorei(GL11.GL_UNPACK_ALIGNMENT, 4);
+         GL13.glActiveTexture(GL13.GL_TEXTURE0);
+      }
+
+      /**
+       * A kept term: RG8, levels 0-2 (the composite reads the share a level or two down: a chunk texture's full-size term
+       * per pixel was ~50 MB of texture reads a frame at 5K; the bake passes read level 0 with textureLod).
+       */
+      private static int keptTexture(int w, int h) {
+         int previous = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+         int tex = GL11.glGenTextures();
+         GL11.glBindTexture(GL11.GL_TEXTURE_2D, tex);
+         for (int k = 0; k <= 2; k++) {
+            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, k, GL30.GL_RG8, Math.max(1, w >> k), Math.max(1, h >> k), 0, GL30.GL_RG, GL11.GL_UNSIGNED_BYTE, (ByteBuffer)null);
+         }
+         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_BASE_LEVEL, 0);
+         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_MAX_LEVEL, 2);
+         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR_MIPMAP_NEAREST);
+         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, 33071);
+         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, 33071);
+         GL11.glBindTexture(GL11.GL_TEXTURE_2D, previous);
+         return tex;
+      }
+
+      /** After a kept term with the sun share was written: its levels 1-2 for the composite's cloud read. */
+      private void keptMips(Entry e, Job job) {
+         if (!job.sun || !CloudShadow.supported() || !Config.CLOUD_TERM_MIPS) {
+            return;
+         }
+         GL13.glActiveTexture(GL13.GL_TEXTURE0);
+         GL11.glBindTexture(GL11.GL_TEXTURE_2D, e.tex);
+         GL30.glGenerateMipmap(GL11.GL_TEXTURE_2D);
+         keptMipBuilds++;
+      }
+
       private static int fbo(int tex) {
          int fbo = GL30.glGenFramebuffers();
          GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, fbo);
@@ -1612,11 +1962,12 @@ public final class ChunkAo {
 
       /** A kernel variant's uniform locations, in uAo's order (and its sources on units 0..8). */
       private static void locate(int program, int[] u) {
-         String[] names = {"rect", "off", "geo", "params", "nSrc", "strength", "veg", "iso0", "iso1", "mode", "sunDir", "sunPerp", "sunPar", "ext", "sunTree", "treeA", "treeB", "sunWorld"};
+         String[] names = {"rect", "off", "geo", "params", "nSrc", "strength", "veg", "iso0", "iso1", "mode", "sunDir", "sunPerp", "sunPar", "ext", "sunTree", "treeA", "treeB", "sunWorld", "wallm", "farPar"};
          for (int i = 0; i < names.length; i++) {
             u[i] = GL20.glGetUniformLocation(program, names[i]);
          }
          GL20.glUseProgram(program);
+         GL20.glUniform1i(GL20.glGetUniformLocation(program, "farH"), FAR_UNIT);
          for (int i = 0; i < 9; i++) {
             GL20.glUniform1i(GL20.glGetUniformLocation(program, "Src" + i), i);
          }
@@ -1658,6 +2009,10 @@ public final class ChunkAo {
          this.uAo[15] = GL20.glGetUniformLocation(this.aoProgram, "treeA");
          this.uAo[16] = GL20.glGetUniformLocation(this.aoProgram, "treeB");
          this.uAo[17] = GL20.glGetUniformLocation(this.aoProgram, "sunWorld");
+         this.uAo[18] = GL20.glGetUniformLocation(this.aoProgram, "wallm");
+         this.uAo[19] = GL20.glGetUniformLocation(this.aoProgram, "farPar");
+         GL20.glUseProgram(this.aoProgram);
+         GL20.glUniform1i(GL20.glGetUniformLocation(this.aoProgram, "farH"), FAR_UNIT);
          GL20.glUseProgram(this.aoProgram);
          for (int i = 0; i < 9; i++) {
             GL20.glUniform1i(GL20.glGetUniformLocation(this.aoProgram, "Src" + i), i); // texture unit i = source i, fixed
@@ -1668,6 +2023,7 @@ public final class ChunkAo {
          this.uBlur[0] = GL20.glGetUniformLocation(this.blurProgram, "Ao");
          this.uBlur[1] = GL20.glGetUniformLocation(this.blurProgram, "params");
          this.uBlur[2] = GL20.glGetUniformLocation(this.blurProgram, "sunOnly");
+         this.uBlur[3] = GL20.glGetUniformLocation(this.blurProgram, "sunS");
          this.uMul[0] = GL20.glGetUniformLocation(this.mulProgram, "Ao");
          this.uMul[1] = GL20.glGetUniformLocation(this.mulProgram, "m");
          this.uRatio[0] = GL20.glGetUniformLocation(this.ratioProgram, "NewAo");
@@ -1719,6 +2075,9 @@ public final class ChunkAo {
       "uniform vec4 sunPerp;", // across the sun and the view direction, w = tan of the sun's angular radius
       "uniform vec4 sunPar;", // march length in texture texels per unit of screen travel, thickness in squares, steps, 1 = exterior test
       "uniform uint ext[24];", // exterior squares: planes 0-1 = the texture's levels, plane 2 = roof columns; 16 x 16 bits from 4 squares before the chunk
+      "uniform uint wallm[32];",
+      "uniform sampler2D farH;", // FAR_UNIT: column tops round the chunk above the texture's lowest level (x 255 quarter levels), 20 squares before its corner
+      "uniform vec4 farPar;", // x on, y the first t (where the near march stops, squares), z the last t, w the reach (the fade's end) // wall edges: W walls (face east) on levels 0-1, then N walls (face south); 16 x 16 bits from 4 squares before the chunk
       "uniform vec4 treeA[16];", // crown proxies (collectTrees): centre x, y (squares from the chunk's corner), crown centre height, horizontal radius
       "uniform vec4 treeB[16];", // vertical radius, top, foot height, the card's x + y (heights in squares above the texture's lowest level)
       "uniform vec4 sunWorld;", // the direction to the sun in world squares (x east, y south, z up)
@@ -1827,22 +2186,110 @@ public final class ChunkAo {
       "   return -1;",
       "}",
       // is the surface outdoors: its square, a quarter square off the surface along the normal (a wall belongs to the side it faces)
-      "bool exteriorAt(vec2 c, float d, vec3 N, float ppu, float kz, float ys) {",
+      // a wall face from the grid: 1 = the east face of a wall on the west edge of its square, 2 = the south face of a north-edge
+      // wall, 0 none; P in squares from the chunk's corner, height in squares above the texture's lowest level (worldAt)
+      "bool wallBit(int plane, ivec2 sq) {",
+      "   sq += 4;",
+      "   if (sq.x < 0 || sq.y < 0 || sq.x >= 16 || sq.y >= 16) return false;",
+      "   int bit = sq.y * 16 + sq.x;",
+      "   return ((wallm[plane * 8 + (bit >> 5)] >> uint(bit & 31)) & 1u) != 0u;",
+      "}",
+      // floorLike: the depth's normal snapped to a floor. A wall texel is any other texel on a wall's edge line of its level (down
+      // to the level line: an upper storey's wall base sits on it). A floor texel just above the level line and within a
+      // third of a square inside a wall of the level below is the upper floor's slab edge showing over that wall (an indoor
+      // square: no sun term, a light seam between the storeys): it takes the wall's face. out: the square the face looks
+      // into is outdoors
+      "int wallFaceAt(vec3 P, bool floorLike, out bool outdoor) {",
+      "   outdoor = true;",
+      "   float lz = P.z / 2.4494897;",
+      // a texture's bottom rows reach a little under its lowest level (depth rounding, a wall base or ledge sprite overlapping
+      // the level line): they belong to level 0; where two textures of a tall wall meet, that line is the storey seam
+      "   int lvl = lz > -0.15 && lz < 0.0 ? 0 : int(floor(lz + 0.02));",
+      "   float line = floor(lz + 0.5);",
+      "   bool near = abs(lz - line) < 0.1 && line >= 0.0 && line <= 2.0;", // the texture's top line (2) included
+      "   if (!near && (lvl < 0 || lvl > 1)) return 0;",
+      "   float fx = P.x - floor(P.x + 0.5), fy = P.y - floor(P.y + 0.5);",
+      "   ivec2 qe = ivec2(int(floor(P.x + 0.5)), int(floor(P.y))), qs = ivec2(int(floor(P.x)), int(floor(P.y + 0.5)));",
+      "   int le = lvl, ls = lvl;",
+      "   bool ew, sw;",
+      // the storey line: a slab edge (just inside the wall) or a ledge / trim (sticking out of it, its top snapped to a floor or
+      // not) within 0.4 of a square of a wall edge, within 0.1 of a level line: the wall's face (else a lit seam between the
+      // storeys: the texel missed the wall test and the roof test took it)
+      "   if (near) {",
+      "      int L0 = int(line) - 1, L1 = int(line);", // the wall below the line (none under the texture's own bottom), above it
+      "      bool e0 = abs(fx) < 0.4 && L0 >= 0 && wallBit(L0, qe), e1 = abs(fx) < 0.4 && L1 <= 1 && wallBit(L1, qe);",
+      "      bool s0 = abs(fy) < 0.4 && L0 >= 0 && wallBit(2 + L0, qs), s1 = abs(fy) < 0.4 && L1 <= 1 && wallBit(2 + L1, qs);",
+      "      ew = e0 || e1; sw = s0 || s1;",
+      "      le = e0 ? L0 : L1; ls = s0 ? L0 : L1;",
+      "   } else if (floorLike) {",
+      "      ew = false; sw = false;",
+      "   } else {",
+      "      ew = fx > -0.06 && fx < 0.3 && wallBit(lvl, qe);",
+      "      sw = fy > -0.06 && fy < 0.3 && wallBit(2 + lvl, qs);",
+      "   }",
+      "   int face = ew && sw ? (abs(fx) <= abs(fy) ? 1 : 2) : ew ? 1 : sw ? 2 : 0;",
+      "   if (face != 0) {",
+      "      ivec2 e = (face == 1 ? qe : qs) + 4;",
+      "      int L = face == 1 ? le : ls;",
+      "      int bit = e.y * 16 + e.x;",
+      "      outdoor = e.x < 0 || e.y < 0 || e.x >= 16 || e.y >= 16 || ((ext[L * 8 + (bit >> 5)] >> uint(bit & 31)) & 1u) != 0u;",
+      "   }",
+      "   return face;",
+      "}",
+      // a texel whose depth is clamped (0: a tall sprite, e.g. the Rosewood church's multi-storey walls, reaching above the
+      // texture's two levels in front of its depth range) has neither a normal nor a position; on a wall plane the screen
+      // alone gives them: at x = X0 the column (p = x - y) gives y, the row (q = (x + y) A - z B) the height. Candidates are
+      // the grid's walls (a W wall: its east face; an N wall: its south face) whose solution lies in front of the depth
+      // range (the clamp itself says so) and above the wall's own level; the nearest one wins. 1 = east face, 2 = south
+      // face, 0 = none; P the world position, outdoor whether the square it faces is
+      "int clampedWall(vec2 c, float ys, out vec3 Pw, out bool outdoor) {",
+      "   float p = (c.x - iso0.x) * iso0.y;",
+      "   float q = (ys < 0.0 ? c.y : rect[0].w - c.y) / iso0.z - iso0.w;",
+      "   float A = iso1.x, B = iso1.y;",
+      "   int best = 0; float bestU = -1e9;",
+      "   Pw = vec3(0.0); outdoor = true;",
+      "   for (int k = -4; k < 12; k++) {",
+      "      float K = float(k);",
+      "      for (int face = 1; face <= 2; face++) {",
+      "         float sum = face == 1 ? 2.0 * K - p : 2.0 * K + p;",
+      "         float zl = (sum * A - q) / B;",
+      "         float u = sum + 2.0 * zl;",
+      "         if (u < 19.5 || u <= bestU) continue;",
+      "         float x = face == 1 ? K : 0.5 * (sum + p), y = face == 1 ? 0.5 * (sum - p) : K;",
+      "         ivec2 sq = face == 1 ? ivec2(k, int(floor(y))) : ivec2(int(floor(x)), k);",
+      "         for (int L = 1; L >= 0; L--) {",
+      "            if (zl < float(L) + 0.04 || zl > float(L) + 4.0 || !wallBit((face - 1) * 2 + L, sq)) continue;",
+      "            best = face; bestU = u; Pw = vec3(x, y, zl * 2.4494897);",
+      "            ivec2 e = sq + 4;",
+      "            int bit = e.y * 16 + e.x;",
+      "            outdoor = e.x < 0 || e.y < 0 || e.x >= 16 || e.y >= 16 || ((ext[L * 8 + (bit >> 5)] >> uint(bit & 31)) & 1u) != 0u;",
+      "            break;",
+      "         }",
+      "      }",
+      "   }",
+      "   return best;",
+      "}",
+      // wall: the texel is on a wall face of the grid (wallFaceAt): never a roof (the roof test's 3 x 3 columns reach the
+      // squares beside a building, and took the upper half of every wall under an eave for roof: no sun term, lit)
+      "int exteriorKind(vec2 c, float d, vec3 N, float ppu, float kz, float ys, bool wall) {", // 0 indoors, 1 outdoors, 2 a roof (sunlit, no sun term)
       "   vec3 s = squareAt(c + vec2(N.x, ys * N.y) * 0.25 * ppu, d + N.z * 0.25 / kz, ys);",
       "   ivec2 sq = ivec2(s.xy);",
-      "   if (sq.x < 0 || sq.y < 0 || sq.x >= 16 || sq.y >= 16) return true;",
+      "   if (sq.x < 0 || sq.y < 0 || sq.x >= 16 || sq.y >= 16) return 1;",
       "   int bit = sq.y * 16 + sq.x;",
       "   int lvl = clamp(int(floor(s.z + 0.05)), 0, 1);",
       "   vec3 s0 = squareAt(c, d, ys);", // the roof test on the pixel's own column and the 8 around it (the stepped roof depth reconstructs loosely)
-      "   for (int ry = -1; ry <= 1; ry++) {",
+      "   for (int ry = wall ? 2 : -1; ry <= 1; ry++) {",
       "      for (int rx = -1; rx <= 1; rx++) {",
       "         ivec2 q0 = ivec2(s0.xy) + ivec2(rx, ry);",
       "         if (q0.x < 0 || q0.y < 0 || q0.x >= 16 || q0.y >= 16) continue;",
       "         int b0 = q0.y * 16 + q0.x;",
-      "         if (((ext[16 + (b0 >> 5)] >> uint(b0 & 31)) & 1u) != 0u && s0.z > 0.5) return false;",
+      "         if (((ext[16 + (b0 >> 5)] >> uint(b0 & 31)) & 1u) != 0u && s0.z > 0.5) return 2;",
       "      }",
       "   }",
-      "   return ((ext[lvl * 8 + (bit >> 5)] >> uint(bit & 31)) & 1u) != 0u;",
+      "   return ((ext[lvl * 8 + (bit >> 5)] >> uint(bit & 31)) & 1u) != 0u ? 1 : 0;",
+      "}",
+      "bool exteriorAt(vec2 c, float d, vec3 N, float ppu, float kz, float ys) {",
+      "   return exteriorKind(c, d, N, ppu, kz, ys, false) == 1;",
       "}",
       "uint popc(uint v) {",
       "   v = v - ((v >> 1u) & 0x55555555u);",
@@ -1923,7 +2370,42 @@ public final class ChunkAo {
       "#else",
       "   float crowns = trees && sunTree.x > 0.0 ? exp(-sunTree.x * crownPath(P, sunWorld.xyz)) : 1.0;",
       "#endif",
-      "   return facing * (1.0 - float(popc(mask)) / 32.0) * crowns;",
+      // the far field: past the near march, the ray over the columns' tops (a heightfield), a penumbra growing with the distance
+      "   float farVis = 1.0;",
+      "   if (farPar.x > 0.5) {",
+      "      float wl = length(sunWorld.xy);",
+      "      if (wl > 1e-3) {",
+      "         vec2 dw = sunWorld.xy / wl;",
+      "         float tanE = sunWorld.z / wl;",
+      "         float occ = 0.0;",
+      // steps of 0.75 square growing with the distance (the penumbra widens with it); the last quarter of the reach fades
+      // (a shadow longer than the reach ends softly instead of on a line)
+      // inside the near range (t < farPar.y) only what stands above the texture's two levels (4.9 squares) counts: the near
+      // march sees the rest in the depth, and the upper storeys of a tall building are in the level pair above
+      "         float t = 0.0;",
+      "         for (int i = 0; i < 48; i++) {",
+      "            t += 0.5 * (1.0 + float(i) / 12.0) * (i == 0 ? jitter + 0.5 : 1.0);",
+      "            if (t > farPar.z && t > farPar.y) break;",
+      "            vec2 q = P.xy + dw * t;",
+      // three taps across the ray (the columns have hard sides: one tap drew their squares as a sawtooth along the shadow's
+      // edge), half a square apart or the sun disk's width at that distance
+      "            vec2 side = vec2(-dw.y, dw.x) * max(0.5, t * sunPerp.w);",
+      "            float ray = P.z + t * tanE;",
+      "            float pen = 0.3 + t * sunPerp.w;",
+      "            float fade = 1.0 - smoothstep(0.75 * farPar.w, farPar.w, t);",
+      "            float o = 0.0;",
+      "            for (int k = -1; k <= 1; k++) {",
+      "               float h = texture(farH, (q + side * float(k) + " + FAR_MARGIN + ".0) / " + FAR_SIDE + ".0).r * 255.0 * 0.25 * 2.4494897;",
+      "               o += smoothstep(-pen, pen, h - ray) * (k == 0 ? 0.5 : 0.25);",
+      "            }",
+      "            if (t < farPar.y) o *= smoothstep(4.9 - pen, 4.9 + pen, ray);",
+      "            occ = max(occ, fade * o);",
+      "            if (occ > 0.99) break;",
+      "         }",
+      "         farVis = 1.0 - occ;",
+      "      }",
+      "   }",
+      "   return facing * (1.0 - float(popc(mask)) / 32.0) * crowns * farVis;",
       "}",
       "void main() {",
       "   ivec2 t = ivec2(gl_FragCoord.xy);",
@@ -2023,15 +2505,32 @@ public final class ChunkAo {
       "   if (sunTree.y > 0.0 && sunTree.z > 0.5 && mode.x > 0.5) ao *= 1.0 - 0.5 * strength.w * (1.0 - exp(-sunTree.y * crownPath(P, vec3(0.0, 0.0, 1.0))));",
       "#endif",
       "   float sun = -1.0;", // -1: no sun term at this texel
+      "   float lit = -1.0;", // the sun's visibility for the cloud shadows: -1 indoors / no sun term, a roof 1
       "#ifndef AO_PASS",
       "   if (sunHere) {",
       "      sun = 1.0;",
-      "      bool outdoors = sunPar.w < 0.5 || exteriorAt(c, d, N, ppu, kz, ys);",
-      "      if (mode.y > 1.5 && mode.y < 2.5) sun = outdoors ? 1.0 : 0.3;",
-      "      else if (outdoors) sun = 1.0 - sunDir.w * (1.0 - sunVisibility(c, d, N, plane, P, bayer, jitter, ppu, kz, ys));",
+      // walls from the grid (wallFaceAt): the exact normal of the face, whatever the depth's own normal snapped to
+      "      vec3 Ns = N; bool planeS = plane;",
+      "      int cw = 0; vec3 Pc; bool cOut = true;",
+      "      if (!tree && d0 < 1e-6) cw = clampedWall(c, ys, Pc, cOut);",
+      "      if (cw != 0) { Ns = cw == 1 ? NE : NS; planeS = true; }",
+      "      int wf = 0; bool wOut = true;",
+      "      if (cw == 0 && !tree) { wf = wallFaceAt(P, g > 0.94, wOut); if (wf == 1) { Ns = NE; planeS = true; } else if (wf == 2) { Ns = NS; planeS = true; } }",
+      "      int kind = cw != 0 ? (cOut ? 1 : 0) : wf != 0 && sunPar.w > 0.5 ? (wOut ? 1 : 0) : sunPar.w < 0.5 ? 1 : exteriorKind(c, d, Ns, ppu, kz, ys, false);",
+      "      if (mode.y > 1.5 && mode.y < 2.5) sun = kind == 1 ? 1.0 : 0.3;",
+      // dev view 4 (devSunView=4, with devAoView=1): which branch: indoors 0, roof 0.2, clamped wall 0.4, grid wall 0.6,
+      // depth-snapped plane 0.8, unsnapped 1.0 (x 0.5 + 0.5 facing on the outdoor ones)
+      // dev views 5 / 6 / 7: the reconstructed height (levels / 2), x - round(x) + 0.5, y - round(y) + 0.5
+      "      else if (mode.y > 4.5) { sun = mode.y < 5.5 ? clamp(P.z / 2.4494897 * 0.5, 0.0, 1.0) : mode.y < 6.5 ? clamp(P.x - floor(P.x + 0.5) + 0.5, 0.0, 1.0) : clamp(P.y - floor(P.y + 0.5) + 0.5, 0.0, 1.0); }",
+      "      else if (mode.y > 3.5) { float br = kind == 0 ? 0.0 : kind == 2 ? 0.2 : cw != 0 ? 0.4 : (planeS && !plane) ? 0.6 : plane ? 0.8 : 1.0;",
+      "         float fc = kind == 1 && planeS ? smoothstep(0.0, 0.25, dot(Ns, sunDir.xyz)) : 1.0; sun = kind == 1 ? br * (0.5 + 0.5 * fc) : br; }",
+      // a clamped wall texel: the attached term only (its depth cannot march for cast shadows)
+      "      else if (kind == 1 && cw != 0) { lit = smoothstep(0.0, 0.25, dot(Ns, sunDir.xyz)); sun = 1.0 - sunDir.w * (1.0 - lit); }",
+      "      else if (kind == 1) { lit = sunVisibility(c, d, Ns, planeS, P, bayer, jitter, ppu, kz, ys); sun = 1.0 - sunDir.w * (1.0 - lit); }",
+      "      else if (kind == 2) lit = 1.0;",
       "   }",
       "#endif",
-      "   result = vec4(ao, d, sun, 1.0);",
+      "   result = vec4(ao, d, sun, lit);",
       "}");
 
    /**
@@ -2043,15 +2542,30 @@ public final class ChunkAo {
       "uniform sampler2D Ao;",
       "uniform vec4 params;", // squares per unit depth, squares per AO texel, last texel x, y
       "uniform float sunOnly;", // dev (devSunView): the sun term alone
+      "uniform float sunS;", // the sun term's strength (0: no sun term): the direct-sun share of the baked light
       "out vec4 result;",
       "void main() {",
       "   ivec2 t = ivec2(gl_FragCoord.xy);",
       "   vec4 c = texelFetch(Ao, t, 0);",
       "   if (c.g >= 0.99999) {",
-      "      result = vec4(1.0);",
+      // an empty texel (nothing drawn): its drawn neighbours' terms, so the bilinear reads of the multiply and the
+      // composite along a drawn edge (a chunk's diamond border) do not pull in "no AO / no sun share" (light grid lines)
+      "      float n = 0.0, rs = 0.0, qs = 0.0;",
+      "      for (int y = -1; y <= 1; y++) {",
+      "         for (int x = -1; x <= 1; x++) {",
+      "            vec4 a = texelFetch(Ao, clamp(t + ivec2(x, y), ivec2(0), ivec2(params.zw)), 0);",
+      "            if (a.g >= 0.99999) continue;",
+      "            float sn = a.b >= 0.0 ? a.b : 1.0;",
+      "            float o = a.a >= 0.0 ? 1.0 : 0.0, l = max(a.a, 0.0);",
+      "            rs += sunOnly > 0.5 ? sn : a.r * sn;",
+      "            qs += sunS > 0.0 ? sunS * l / max(1.0 - sunS * o + sunS * l, 0.05) : 0.0;",
+      "            n += 1.0;",
+      "         }",
+      "      }",
+      "      result = n > 0.0 ? vec4(rs / n, clamp(qs / n, 0.0, 1.0), 0.0, 1.0) : vec4(1.0, 0.0, 0.0, 1.0);",
       "      return;",
       "   }",
-      "   float sum = 0.0, wsum = 0.0, ssum = 0.0, swsum = 0.0;",
+      "   float sum = 0.0, wsum = 0.0, ssum = 0.0, swsum = 0.0, osum = 0.0, lsum = 0.0, twsum = 0.0;",
       // AO: the 4 x 4 box over one Bayer period; sun: a 5 x 5 tent (the 16 lateral leans, a little smoother at the edges)
       "   for (int y = -2; y <= 2; y++) {",
       "      for (int x = -2; x <= 2; x++) {",
@@ -2061,12 +2575,17 @@ public final class ChunkAo {
       "         float dz = (a.g - c.g) * params.x / tol;",
       "         float w = exp(-dz * dz);",
       "         if (x >= -1 && y >= -1) { sum += a.r * w; wsum += w; }",
-      "         if (a.b >= 0.0) { float tw = w * (2.5 - abs(float(x))) * (2.5 - abs(float(y))); ssum += a.b * tw; swsum += tw; }",
+      "         float tw = w * (2.5 - abs(float(x))) * (2.5 - abs(float(y)));",
+      "         if (a.b >= 0.0) { ssum += a.b * tw; swsum += tw; }",
+      "         twsum += tw; if (a.a >= 0.0) { osum += tw; lsum += a.a * tw; }",
       "      }",
       "   }",
       "   float ao = wsum > 0.0 ? sum / wsum : c.r;",
       "   float sun = swsum > 1e-4 ? ssum / swsum : (c.b >= 0.0 ? c.b : 1.0);",
-      "   result = vec4(sunOnly > 0.5 ? sun : ao * sun);",
+      // the direct sun's share of the light the texture is baked with (x the transmittance of a cloud: the cloud shadow)
+      "   float o = twsum > 1e-4 ? osum / twsum : 0.0, l = twsum > 1e-4 ? lsum / twsum : 0.0;",
+      "   float q = sunS > 0.0 ? sunS * l / max(1.0 - sunS * o + sunS * l, 0.05) : 0.0;",
+      "   result = vec4(sunOnly > 0.5 ? sun : ao * sun, clamp(q, 0.0, 1.0), 0.0, 1.0);",
       "}");
 
    /** The texture's colour times its AO (bilinear from the R8 AO); no occlusion: no blend. */
@@ -2076,7 +2595,7 @@ public final class ChunkAo {
       "uniform vec4 m;", // AO uv per texture texel x, y; strength; dev view
       "out vec4 fragColor;",
       "void main() {",
-      "   float ao = texture(Ao, gl_FragCoord.xy * m.xy).r;",
+      "   float ao = textureLod(Ao, gl_FragCoord.xy * m.xy, 0.0).r;",
       "   ao = clamp(1.0 - (1.0 - ao) * m.z, 0.0, 1.0);",
       "   if (m.w < 0.5 && ao > 0.996) discard;",
       "   fragColor = vec4(vec3(ao), 1.0);",
@@ -2095,9 +2614,9 @@ public final class ChunkAo {
       "out vec4 fragColor;",
       "void main() {",
       "   vec2 uv = gl_FragCoord.xy * m.xy;",
-      "   float a = clamp(1.0 - (1.0 - texture(NewAo, uv * n.xy).r) * m.z, 0.0, 1.0);",
+      "   float a = clamp(1.0 - (1.0 - textureLod(NewAo, uv * n.xy, 0.0).r) * m.z, 0.0, 1.0);",
       "   if (n.z > 0.5) { fragColor = vec4(vec3(a), 1.0); return; }",
-      "   float b = m.w > 0.5 ? clamp(1.0 - (1.0 - texture(OldAo, uv).r) * m.z, 0.0, 1.0) : 1.0;",
+      "   float b = m.w > 0.5 ? clamp(1.0 - (1.0 - textureLod(OldAo, uv, 0.0).r) * m.z, 0.0, 1.0) : 1.0;",
       "   float r = a / max(b, 0.02);",
       "   if (abs(r - 1.0) < 0.004) discard;",
       "   fragColor = vec4(vec3(clamp(r, 0.0, 2.0) * 0.5), 1.0);",
@@ -2109,6 +2628,6 @@ public final class ChunkAo {
       "uniform sampler2D Src;",
       "out vec4 fragColor;",
       "void main() {",
-      "   fragColor = vec4(texelFetch(Src, ivec2(gl_FragCoord.xy), 0).r);",
+      "   fragColor = vec4(texelFetch(Src, ivec2(gl_FragCoord.xy), 0).rg, 0.0, 1.0);",
       "}");
 }

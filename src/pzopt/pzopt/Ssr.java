@@ -869,7 +869,7 @@ public final class Ssr {
    }
 
    /** The program bound through ShaderHelper (the game binds every program through it), else asked from GL. */
-   private static int boundProgram() {
+   static int boundProgram() {
       int p = BOUND != null ? (int)BOUND.get() : -1;
       return p > 0 ? p : GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
    }

@@ -28,7 +28,8 @@ final class Enhancements {
    static boolean owns(String key) {
       return key.startsWith("upscaler") || key.startsWith("dlss") || key.startsWith("fsr") || key.startsWith("hdr")
          || key.equals("ambientOcclusion") || key.startsWith("ao") || key.startsWith("sunShadow") || key.startsWith("reflection")
-         || key.startsWith("darknessFloor") || key.startsWith("memory") || key.startsWith("colorGrading");
+         || key.startsWith("darknessFloor") || key.startsWith("memory") || key.startsWith("colorGrading")
+         || key.startsWith("moonShadow") || key.startsWith("cloud");
    }
 
    /** Game thread, after Config.reloadLive(key) returned true. */
@@ -46,9 +47,10 @@ final class Enhancements {
             // read every frame by the remembered-places pass
          }
          case "colorGrading", "colorGradingPct", "colorGradingNightPct" -> Grade.reconfigure();
-         case "sunShadowStrengthPct", "sunShadowSoftnessPct", "sunShadowCharacters", "sunShadowVehicles", "sunShadowTorches" -> {
+         case "sunShadowStrengthPct", "sunShadowSoftnessPct", "sunShadowCharacters", "sunShadowVehicles", "sunShadowTorches",
+               "moonShadows", "moonShadowPct", "cloudShadows", "cloudOpacityPct", "cloudSpeedPct", "cloudScalePct" -> {
             // SunShadow.update sees the new strength / penumbra next frame and recomputes the kept shadows (no re-bake);
-            // the capsule pass reads its three switches every frame
+            // the capsule pass reads its three switches every frame; the moon and the clouds are read every frame too
          }
          default -> {
             if (key.startsWith("hdr")) {

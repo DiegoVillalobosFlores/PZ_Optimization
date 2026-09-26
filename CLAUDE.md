@@ -498,6 +498,13 @@ update) re-run `scripts/decompile.sh` and `scripts/regen-overrides.sh`.
   1.75 / 2.5 -59 / -147 us); drive tails = stock. Dropped: Golus's RGSS as published (+203 us), level-0 taps past 2x (seams +
   bandwidth), Lanczos level 1 (+96 us composite on NVIDIA). Rigs: `devSpriteFilterCycle` / `ShotModes` / `ShotAb`,
   `harness/spritefilter/`.
+- The real sky (2026-09-26, `docs/findings-sky-2026-09-26.md`, with `sunShadows`, off by default): `pzopt.Sky` puts the sun
+  and the moon where they stand for the game's date and hour (season latitude / high noon; `skyPath=arc` is the old path);
+  the key light is the moon at night (`moonShadows`, phase and height); cloud shadows (`cloudShadows`, `pzopt.CloudShadow`:
+  a drifting Perlin-Worley field, the chunk composite reads each texture's kept direct-sun share through bindless handles,
+  water patched too) cost 0 us median at 5K; a low sun's long shadows come from a far-field column-height march
+  (`sunShadowFar`, `sunMinElevationDeg` 2); wall faces come from a grid wall mask (walls under eaves were taken for roofs).
+  Rigs: `devCloudTiming` + `devCloudAlternate`, `devCloudView`, `devSunView` 4-7, `devSkyDate`, `devCloudCover`.
 - Open plans: `docs/plan-drive-game-thread.md` (2026-09-26: late frames while driving through town), `docs/plan-graphics-enhancements.md` (2026-09-25: visual features; items 1, 2, 4 and candidate B shipped by 2026-09-26), `docs/plan-game-load.md`, `docs/plan-vulkan-renderer.md`, `docs/plan-resource-use.md`,
   `docs/plan-zombie-multithread.md` (2026-09-22: the rest of the zombie simulation on all cores, phased).
   The game-thread optimization plans were dropped on 2026-09-21 at the maintainer's request.

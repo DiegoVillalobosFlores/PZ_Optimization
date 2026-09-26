@@ -736,7 +736,7 @@ public class WeatherFxMask {
          return false;
       }
       IsoWeatherFX fx = IsoWeatherFX.instance;
-      if (fx.hasCloudsToRender()) {
+      if (fx.hasCloudsToRender() && !pzopt.CloudShadow.replaceStock) { // pzopt: cloudReplaceStock, the stock cloud layer is not drawn
          return false;
       }
       if (fx.hasFogToRender() && PerformanceSettings.fogQuality == 2) {
@@ -836,7 +836,7 @@ public class WeatherFxMask {
                                     drawFxLayered(nPlayer, false, false, false);
                                  }
 
-                                 if (IsoWeatherFX.instance.hasCloudsToRender()) {
+                                 if (IsoWeatherFX.instance.hasCloudsToRender() && !pzopt.CloudShadow.replaceStock) { // pzopt: cloudReplaceStock
                                     drawFxLayered(nPlayer, true, false, false);
                                  }
 

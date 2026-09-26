@@ -77,6 +77,8 @@ fi
 if [[ -d "$SRC/lua" ]]; then
   # the Optimizations tab's search index of which Java classes read each Config key
   python3 "$REPO/scripts/option-classes.py"
+  # ...and the release date of each key (the "Release date" sort), from the win-* release tags
+  python3 "$REPO/scripts/option-dates.py"
   mkdir -p "$OUT/media/lua"
   cp -r "$SRC/lua/." "$OUT/media/lua/"
 fi
